@@ -1,0 +1,33 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Gonzaga,1,93,Georgia State,16,72,Gonzaga,True
+Boise State,8,53,Memphis,9,64,Memphis,False
+Connecticut,5,63,New Mexico State,12,70,New Mexico State,False
+Arkansas,4,75,Vermont,13,71,Arkansas,True
+Alabama,6,64,Notre Dame,11,78,Notre Dame,False
+Texas Tech,3,97,Montana State,14,62,Texas Tech,True
+Michigan State,7,74,Davidson,10,73,Michigan State,True
+Duke,2,78,Cal State Fullerton,15,61,Duke,True
+Baylor,1,85,Norfolk State,16,49,Baylor,True
+North Carolina,8,95,Marquette,9,63,North Carolina,True
+Saint Mary's,5,82,Indiana,12,53,Saint Mary's,True
+UCLA,4,57,Akron,13,53,UCLA,True
+Texas,6,81,Virginia Tech,11,73,Texas,True
+Purdue,3,78,Yale,14,56,Purdue,True
+Murray State,7,92,San Francisco,10,87,Murray State,True
+Kentucky,2,79,Saint Peter's,15,85,Saint Peter's,False
+Arizona,1,87,Wright State,16,70,Arizona,True
+Seton Hall,8,42,TCU,9,69,TCU,False
+Houston,5,82,UAB,12,68,Houston,True
+Illinois,4,54,Chattanooga,13,53,Illinois,True
+Colorado State,6,63,Michigan,11,75,Michigan,False
+Tennessee,3,88,Longwood,14,56,Tennessee,True
+Ohio State,7,54,Loyola Chicago,10,41,Ohio State,True
+Villanova,2,80,Delaware,15,60,Villanova,True
+Kansas,1,83,Texas Southern,16,56,Kansas,True
+San Diego State,8,69,Creighton,9,72,Creighton,False
+Iowa,5,63,Richmond,12,67,Richmond,False
+Providence,4,66,South Dakota State,13,57,Providence,True
+LSU,6,54,Iowa State,11,59,Iowa State,False
+Wisconsin,3,67,Colgate,14,60,Wisconsin,True
+USC,7,66,Miami (FL),10,68,Miami (FL),False
+Auburn,2,80,Jacksonville State,15,61,Auburn,True
