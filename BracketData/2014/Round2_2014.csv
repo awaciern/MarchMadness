@@ -1,0 +1,17 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Arizona,1,84,Gonzaga,8,61,Arizona,True
+North Dakota State,12,44,San Diego State,4,63,San Diego State,False
+Baylor,6,85,Creighton,3,55,Baylor,True
+Oregon,7,77,Wisconsin,2,85,Wisconsin,False
+Virginia,1,78,Memphis,8,60,Virginia,True
+Harvard,12,73,Michigan State,4,80,Michigan State,False
+North Carolina,6,83,Iowa State,3,85,Iowa State,False
+UConn,7,77,Villanova,2,65,UConn,True
+Florida,1,61,Pittsburgh,9,45,Florida,True
+Stephen F. Austin,12,60,UCLA,4,77,UCLA,False
+Dayton,11,55,Syracuse,3,53,Dayton,True
+Stanford,10,60,Kansas,2,57,Stanford,True
+Wichita State,1,76,Kentucky,8,78,Kentucky,False
+Saint Louis,5,51,Louisville,4,66,Louisville,False
+Tennessee,11,83,Mercer,14,63,Tennessee,True
+Texas,7,65,Michigan,2,79,Michigan,False

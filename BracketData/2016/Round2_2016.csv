@@ -1,0 +1,17 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Oregon,1,69,Saint Joseph's,8,64,Oregon,True
+Yale,12,64,Duke,4,71,Duke,False
+Northern Iowa,11,88,Texas A&M,3,92,Texas A&M,False
+VCU,10,81,Oklahoma,2,85,Oklahoma,False
+North Carolina,1,85,Providence,9,66,North Carolina,True
+Indiana,5,73,Kentucky,4,67,Indiana,True
+Notre Dame,6,76,Stephen F. Austin,14,75,Notre Dame,True
+Wisconsin,7,66,Xavier,2,63,Wisconsin,True
+Kansas,1,73,UConn,9,61,Kansas,True
+Maryland,5,73,Hawaii,13,60,Maryland,True
+Wichita State,11,57,Miami (FL),3,65,Miami (FL),False
+Iowa,7,68,Villanova,2,87,Villanova,False
+Virginia,1,77,Butler,9,69,Virginia,True
+Little Rock,12,61,Iowa State,4,78,Iowa State,False
+Gonzaga,11,82,Utah,3,59,Gonzaga,True
+Syracuse,10,75,Middle Tennessee,15,50,Syracuse,True

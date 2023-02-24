@@ -1,0 +1,17 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Gonzaga,1,87,Oklahoma,8,71,Gonzaga,True
+Creighton,5,72,Ohio,13,58,Creighton,True
+USC,6,85,Kansas,3,51,USC,True
+Iowa,2,86,Grand Canyon,15,74,Iowa,True
+Michigan,1,86,LSU,8,78,Michigan,True
+Colorado,5,53,Florida State,4,71,Florida State,False
+UCLA,11,67,Abilene Christian,14,47,UCLA,True
+Maryland,10,77,Alabama,2,96,Alabama,False
+Baylor,1,76,Wisconsin,9,63,Baylor,True
+Villanova,5,84,North Texas,13,61,Villanova,True
+Texas Tech,6,66,Arkansas,3,68,Arkansas,False
+Florida,7,78,Oral Roberts,15,81,Oral Roberts,False
+Illinois,1,58,Loyola Chicago,8,71,Loyola Chicago,False
+Oregon State,12,80,Oklahoma State,4,70,Oregon State,True
+Syracuse,11,75,West Virginia,3,72,Syracuse,True
+Rutgers,10,60,Houston,2,63,Houston,False

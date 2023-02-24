@@ -1,0 +1,9 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Arizona,1,70,San Diego State,4,64,Arizona,True
+Baylor,6,52,Wisconsin,2,69,Wisconsin,False
+Virginia,1,59,Michigan State,4,61,Michigan State,False
+Iowa State,3,76,UConn,7,81,UConn,False
+Florida,1,79,UCLA,4,68,Florida,True
+Dayton,11,82,Stanford,10,72,Dayton,True
+Kentucky,8,74,Louisville,4,69,Kentucky,True
+Tennessee,11,71,Michigan,2,73,Michigan,False

@@ -1,0 +1,9 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Gonzaga,1,61,West Virginia,4,58,Gonzaga,True
+Xavier,11,73,Arizona,2,71,Xavier,True
+Wisconsin,8,83,Florida,4,84,Florida,False
+Baylor,3,50,South Carolina,7,70,South Carolina,False
+North Carolina,1,92,Butler,4,80,North Carolina,True
+UCLA,3,75,Kentucky,2,86,Kentucky,False
+Kansas,1,98,Purdue,4,66,Kansas,True
+Oregon,3,69,Michigan,7,68,Oregon,True

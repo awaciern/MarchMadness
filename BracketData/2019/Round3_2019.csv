@@ -1,0 +1,9 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Gonzaga,1,72,Florida State,4,58,Gonzaga,True
+Texas Tech,3,63,Michigan,2,44,Texas Tech,True
+Duke,1,75,Virginia Tech,4,73,Duke,True
+LSU,3,63,Michigan State,2,80,Michigan State,False
+Virginia,1,53,Oregon,12,49,Virginia,True
+Purdue,3,99,Tennessee,2,94,Purdue,True
+North Carolina,1,80,Auburn,5,97,Auburn,False
+Houston,3,58,Kentucky,2,62,Kentucky,False

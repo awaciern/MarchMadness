@@ -1,0 +1,33 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Gonzaga,1,64,Southern,16,58,Gonzaga,True
+Pittsburgh,8,55,Wichita State,9,73,Wichita State,False
+Wisconsin,5,46,Ole Miss,12,57,Ole Miss,False
+Kansas State,4,61,La Salle,13,63,La Salle,False
+Arizona,6,81,Belmont,11,64,Arizona,True
+New Mexico,3,62,Harvard,14,68,Harvard,False
+Notre Dame,7,58,Iowa State,10,76,Iowa State,False
+Ohio State,2,95,Iona,15,70,Ohio State,True
+Indiana,1,83,James Madison,16,62,Indiana,True
+NC State,8,72,Temple,9,76,Temple,False
+UNLV,5,61,California,12,64,California,False
+Syracuse,4,81,Montana,13,34,Syracuse,True
+Butler,6,68,Bucknell,11,56,Butler,True
+Marquette,3,59,Davidson,14,58,Marquette,True
+Illinois,7,57,Colorado,10,49,Illinois,True
+Miami (FL),2,78,Pacific,15,49,Miami (FL),True
+Kansas,1,64,Western Kentucky,16,57,Kansas,True
+North Carolina,8,78,Villanova,9,71,North Carolina,True
+VCU,5,88,Akron,12,42,VCU,True
+Michigan,4,71,South Dakota State,13,56,Michigan,True
+UCLA,6,63,Minnesota,11,83,Minnesota,False
+Florida,3,79,Northwestern State,14,47,Florida,True
+San Diego State,7,70,Oklahoma,10,55,San Diego State,True
+Georgetown,2,68,Florida Gulf Coast,15,78,Florida Gulf Coast,False
+Louisville,1,79,North Carolina A&T,16,48,Louisville,True
+Colorado State,8,84,Missouri,9,72,Colorado State,True
+Oklahoma State,5,55,Oregon,12,68,Oregon,False
+Saint Louis,4,64,New Mexico State,13,44,Saint Louis,True
+Memphis,6,54,Saint Mary's,11,52,Memphis,True
+Michigan State,3,65,Valparaiso,14,54,Michigan State,True
+Creighton,7,67,Cincinnati,10,63,Creighton,True
+Duke,2,73,Albany,15,61,Duke,True

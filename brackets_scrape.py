@@ -36,25 +36,27 @@ def scrape_bracket_region(region_regex, round_snake):
             nums_unbold = re.findall('>\d+\**\\s*</td>', row_str)
             for i in range(0, len(nums_unbold)):
                 nums_unbold[i] = nums_unbold[i].replace('>', '').replace('</td', '').replace('*', '').strip()
-            num_bold = re.findall('<b>\d+\**\s*</b>', row_str)
-            if num_bold:
-                num_bold = num_bold[0].replace('<b>', '').replace('</b>', '').replace('*', '').strip()
-            if len(nums_unbold) == 2 and not num_bold:
+            nums_bold = re.findall('<b>\d+\**\s*</b>', row_str)
+            for i in range(0, len(nums_bold)):
+                nums_bold[i] = nums_bold[i].replace('<b>', '').replace('</b>', '').replace('*', '').strip()
+            if len(nums_unbold) == 2 and not nums_bold:
                 seed = nums_unbold[0]
                 score = nums_unbold[1]
-            elif len(nums_unbold) == 1 and num_bold:
+            elif len(nums_unbold) == 1 and len(nums_bold) == 1:
                 seed = nums_unbold[0]
-                score = num_bold
+                score = nums_bold[0]
+                winner = True
+            elif len(nums_bold) == 2 and not nums_unbold:
+                seed = nums_bold[0]
+                score = nums_bold[1]
                 winner = True
             else:
                 continue
 
-        name = re.findall('>[a-zA-z\'\(\)]+\s*[a-zA-z\'\(\)]*\s*[a-zA-z\'\(\)]*\s*<', row_str)
-        # name = re.findall('>(\D|\S)+\s*(\D|\S)*<', row_str)
-        # name = re.findall('>\w+(\s*\w+)*<', row_str)
-        # print(name)
+        cg = '[a-zA-z\'\(\)\.&;–]' # regex capture group for team names
+        name = re.findall('>' + cg + '+\s*-*'+ cg + '*\s*' + cg + '*\s*<', row_str)
         if name:
-            name = name[0].replace('>', '').replace('<', '').strip()
+            name = name[0].replace('>', '').replace('<', '').replace('&amp;', '&').strip()
         else:
             print(row_str)
             print('ERROR: No team name found!')
@@ -93,19 +95,23 @@ def scrape_bracket_region(region_regex, round_snake):
             teams_played = 0
             game_id += 1
 
-URL = 'https://en.wikipedia.org/wiki/2022_NCAA_Division_I_men%27s_basketball_tournament'
-ROUND1_FILE_PATH = 'BracketData\\2022\\Round1_2022.csv'
-ROUND2_FILE_PATH = 'BracketData\\2022\\Round2_2022.csv'
-ROUND3_FILE_PATH = 'BracketData\\2022\\Round3_2022.csv'
-ROUND4_FILE_PATH = 'BracketData\\2022\\Round4_2022.csv'
-ROUND5_FILE_PATH = 'BracketData\\2022\\Round5_2022.csv'
-ROUND6_FILE_PATH = 'BracketData\\2022\\Round6_2022.csv'
-FILE_PATH_START = 'BracketData\\2022\\Round'
-FILE_PATH_END = '_2022.csv'
+YEAR = '2012'
+URL = 'https://en.wikipedia.org/wiki/' + YEAR + '_NCAA_Division_I_men%27s_basketball_tournament'
+ROUND1_FILE_PATH = 'BracketData\\'+ YEAR +'\\Round1_' + YEAR + '.csv'
+ROUND2_FILE_PATH = 'BracketData\\'+ YEAR +'\\Round2_' + YEAR + '.csv'
+ROUND3_FILE_PATH = 'BracketData\\'+ YEAR +'\\Round3_' + YEAR + '.csv'
+ROUND4_FILE_PATH = 'BracketData\\'+ YEAR +'\\Round4_' + YEAR + '.csv'
+ROUND5_FILE_PATH = 'BracketData\\'+ YEAR +'\\Round5_' + YEAR + '.csv'
+ROUND3_FILE_PATH = 'BracketData\\'+ YEAR +'\\Round6_' + YEAR + '.csv'
+FILE_PATH_START = 'BracketData\\'+ YEAR +'\\Round'
+FILE_PATH_END = '_' + YEAR + '.csv'
 
 headings = ['Team1', 'Team1_Seed', 'Team1_Score',
             'Team2', 'Team2_Seed', 'Team2_Score',
             'WinningTeam', 'Team1_Win']
+
+if not os.path.exists('BracketData\\'+ YEAR):
+    os.mkdir('BracketData\\'+ YEAR)
 
 for i in range(1, 7):
     with open(FILE_PATH_START + str(i) + FILE_PATH_END, 'w', newline='') as csv_file:

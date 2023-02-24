@@ -1,0 +1,33 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Wisconsin,1,86,Coastal Carolina,16,72,Wisconsin,True
+Oregon,8,79,Oklahoma State,9,73,Oregon,True
+Arkansas,5,56,Wofford,12,53,Arkansas,True
+North Carolina,4,67,Harvard,13,65,North Carolina,True
+Xavier,6,76,Ole Miss,11,57,Xavier,True
+Baylor,3,56,Georgia State,14,57,Georgia State,False
+Virginia Commonwealth,7,72,Ohio State,10,75,Ohio State,False
+Arizona,2,93,Texas Southern,15,72,Arizona,True
+Villanova,1,93,Lafayette,16,52,Villanova,True
+North Carolina State,8,66,LSU,9,65,North Carolina State,True
+Northern Iowa,5,71,Wyoming,12,54,Northern Iowa,True
+Louisville,4,57,California-Irvine,13,55,Louisville,True
+Providence,6,53,Dayton,11,66,Dayton,False
+Oklahoma,3,69,Albany,14,60,Oklahoma,True
+Michigan State,7,70,Georgia,10,63,Michigan State,True
+Virginia,2,79,Belmont,15,67,Virginia,True
+Duke,1,85,Robert Morris,16,56,Duke,True
+San Diego State,8,76,St. John's,9,64,San Diego State,True
+Utah,5,57,Stephen F. Austin,12,50,Utah,True
+Georgetown,4,84,Eastern Washington,13,74,Georgetown,True
+Southern Methodist,6,59,UCLA,11,60,UCLA,False
+Iowa State,3,59,UAB,14,60,UAB,False
+Iowa,7,83,Davidson,10,52,Iowa,True
+Gonzaga,2,86,North Dakota State,15,76,Gonzaga,True
+Kentucky,1,79,Hampton,16,56,Kentucky,True
+Cincinnati,8,66,Purdue,9,65,Cincinnati,True
+West Virginia,5,68,Buffalo,12,62,West Virginia,True
+Maryland,4,65,Valparaiso,13,62,Maryland,True
+Butler,6,56,Texas,11,48,Butler,True
+Notre Dame,3,69,Northeastern,14,65,Notre Dame,True
+Wichita State,7,81,Indiana,10,76,Wichita State,True
+Kansas,2,75,New Mexico State,15,56,Kansas,True
