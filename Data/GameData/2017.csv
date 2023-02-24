@@ -1,0 +1,64 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Gonzaga,1,66,South Dakota State,16,46,Gonzaga,True
+Northwestern,8,68,Vanderbilt,9,66,Northwestern,True
+Notre Dame,5,60,Princeton,12,58,Notre Dame,True
+West Virginia,4,86,Bucknell,13,80,West Virginia,True
+Maryland,6,65,Xavier,11,76,Xavier,False
+Florida State,3,86,Florida Gulf Coast,14,80,Florida State,True
+Saint Mary's,7,85,VCU,10,77,Saint Mary's,True
+Arizona,2,100,North Dakota,15,82,Arizona,True
+Villanova,1,76,Mount St. Mary's,16,56,Villanova,True
+Wisconsin,8,84,Virginia Tech,9,74,Wisconsin,True
+Virginia,5,76,UNC Wilmington,12,71,Virginia,True
+Florida,4,80,East Tennessee State,13,65,Florida,True
+SMU,6,65,USC,11,66,USC,False
+Baylor,3,91,New Mexico State,14,73,Baylor,True
+South Carolina,7,93,Marquette,10,73,South Carolina,True
+Duke,2,87,Troy,15,65,Duke,True
+North Carolina,1,103,Texas Southern,16,64,North Carolina,True
+Arkansas,8,77,Seton Hall,9,71,Arkansas,True
+Minnesota,5,72,Middle Tennessee,12,81,Middle Tennessee,False
+Butler,4,76,Winthrop,13,64,Butler,True
+Cincinnati,6,75,Kansas State,11,61,Cincinnati,True
+UCLA,3,97,Kent State,14,80,UCLA,True
+Dayton,7,58,Wichita State,10,64,Wichita State,False
+Kentucky,2,79,Northern Kentucky,15,70,Kentucky,True
+Kansas,1,100,UC Davis,16,62,Kansas,True
+Miami (FL),8,58,Michigan State,9,78,Michigan State,False
+Iowa State,5,84,Nevada,12,73,Iowa State,True
+Purdue,4,80,Vermont,13,70,Purdue,True
+Creighton,6,72,Rhode Island,11,84,Rhode Island,False
+Oregon,3,93,Iona,14,77,Oregon,True
+Michigan,7,92,Oklahoma State,10,91,Michigan,True
+Louisville,2,78,Jacksonville State,15,63,Louisville,True
+Gonzaga,1,79,Northwestern,8,73,Gonzaga,True
+Notre Dame,5,71,West Virginia,4,83,West Virginia,False
+Xavier,11,91,Florida State,3,66,Xavier,True
+Saint Mary's,7,60,Arizona,2,69,Arizona,False
+Villanova,1,62,Wisconsin,8,65,Wisconsin,False
+Virginia,5,39,Florida,4,65,Florida,False
+USC,11,78,Baylor,3,82,Baylor,False
+South Carolina,7,88,Duke,2,81,South Carolina,True
+North Carolina,1,72,Arkansas,8,65,North Carolina,True
+Middle Tennessee,12,65,Butler,4,74,Butler,False
+Cincinnati,6,67,UCLA,3,79,UCLA,False
+Wichita State,10,62,Kentucky,2,65,Kentucky,False
+Kansas,1,90,Michigan State,9,70,Kansas,True
+Iowa State,5,76,Purdue,4,80,Purdue,False
+Rhode Island,11,72,Oregon,3,75,Oregon,False
+Michigan,7,73,Louisville,2,69,Michigan,True
+Gonzaga,1,61,West Virginia,4,58,Gonzaga,True
+Xavier,11,73,Arizona,2,71,Xavier,True
+Wisconsin,8,83,Florida,4,84,Florida,False
+Baylor,3,50,South Carolina,7,70,South Carolina,False
+North Carolina,1,92,Butler,4,80,North Carolina,True
+UCLA,3,75,Kentucky,2,86,Kentucky,False
+Kansas,1,98,Purdue,4,66,Kansas,True
+Oregon,3,69,Michigan,7,68,Oregon,True
+Gonzaga,1,83,Xavier,11,59,Gonzaga,True
+Florida,4,70,South Carolina,7,77,South Carolina,False
+North Carolina,1,75,Kentucky,2,73,North Carolina,True
+Kansas,1,60,Oregon,3,74,Oregon,False
+South Carolina,7,73,Gonzaga,1,77,Gonzaga,False
+Oregon,3,76,North Carolina,1,77,North Carolina,False
+Gonzaga,1,65,North Carolina,1,71,North Carolina,False

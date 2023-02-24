@@ -1,0 +1,64 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Gonzaga,1,64,Southern,16,58,Gonzaga,True
+Pittsburgh,8,55,Wichita State,9,73,Wichita State,False
+Wisconsin,5,46,Ole Miss,12,57,Ole Miss,False
+Kansas State,4,61,La Salle,13,63,La Salle,False
+Arizona,6,81,Belmont,11,64,Arizona,True
+New Mexico,3,62,Harvard,14,68,Harvard,False
+Notre Dame,7,58,Iowa State,10,76,Iowa State,False
+Ohio State,2,95,Iona,15,70,Ohio State,True
+Indiana,1,83,James Madison,16,62,Indiana,True
+NC State,8,72,Temple,9,76,Temple,False
+UNLV,5,61,California,12,64,California,False
+Syracuse,4,81,Montana,13,34,Syracuse,True
+Butler,6,68,Bucknell,11,56,Butler,True
+Marquette,3,59,Davidson,14,58,Marquette,True
+Illinois,7,57,Colorado,10,49,Illinois,True
+Miami (FL),2,78,Pacific,15,49,Miami (FL),True
+Kansas,1,64,Western Kentucky,16,57,Kansas,True
+North Carolina,8,78,Villanova,9,71,North Carolina,True
+VCU,5,88,Akron,12,42,VCU,True
+Michigan,4,71,South Dakota State,13,56,Michigan,True
+UCLA,6,63,Minnesota,11,83,Minnesota,False
+Florida,3,79,Northwestern State,14,47,Florida,True
+San Diego State,7,70,Oklahoma,10,55,San Diego State,True
+Georgetown,2,68,Florida Gulf Coast,15,78,Florida Gulf Coast,False
+Louisville,1,79,North Carolina A&T,16,48,Louisville,True
+Colorado State,8,84,Missouri,9,72,Colorado State,True
+Oklahoma State,5,55,Oregon,12,68,Oregon,False
+Saint Louis,4,64,New Mexico State,13,44,Saint Louis,True
+Memphis,6,54,Saint Mary's,11,52,Memphis,True
+Michigan State,3,65,Valparaiso,14,54,Michigan State,True
+Creighton,7,67,Cincinnati,10,63,Creighton,True
+Duke,2,73,Albany,15,61,Duke,True
+Gonzaga,1,70,Wichita State,9,76,Wichita State,False
+Ole Miss,12,74,La Salle,13,76,La Salle,False
+Arizona,6,74,Harvard,14,51,Arizona,True
+Iowa State,10,75,Ohio State,2,78,Ohio State,False
+Indiana,1,58,Temple,9,52,Indiana,True
+California,12,60,Syracuse,4,66,Syracuse,False
+Butler,6,72,Marquette,3,74,Marquette,False
+Illinois,7,59,Miami (FL),2,63,Miami (FL),False
+Kansas,1,70,North Carolina,8,58,Kansas,True
+VCU,5,53,Michigan,4,78,Michigan,False
+Minnesota,11,64,Florida,3,78,Florida,False
+San Diego State,7,71,Florida Gulf Coast,15,81,Florida Gulf Coast,False
+Louisville,1,82,Colorado State,8,56,Louisville,True
+Oregon,12,74,Saint Louis,4,57,Oregon,True
+Memphis,6,48,Michigan State,3,70,Michigan State,False
+Creighton,7,50,Duke,2,66,Duke,False
+Wichita State,9,72,La Salle,13,58,Wichita State,True
+Arizona,6,70,Ohio State,2,73,Ohio State,False
+Indiana,1,50,Syracuse,4,61,Syracuse,False
+Marquette,3,71,Miami (FL),2,61,Marquette,True
+Kansas,1,85,Michigan,4,87,Michigan,False
+Florida,3,62,Florida Gulf Coast,15,50,Florida,True
+Louisville,1,77,Oregon,12,69,Louisville,True
+Michigan State,3,61,Duke,2,71,Duke,False
+Wichita State,9,70,Ohio State,2,66,Wichita State,True
+Syracuse,4,55,Marquette,3,39,Syracuse,True
+Michigan,4,79,Florida,3,59,Michigan,True
+Louisville,1,85,Duke,2,63,Louisville,True
+Louisville,1,72,Wichita State,9,68,Louisville,True
+Michigan,4,61,Syracuse,4,56,Michigan,True
+Louisville,1,82,Michigan,4,76,Louisville,True
