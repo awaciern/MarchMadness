@@ -5,7 +5,7 @@ import csv
 import pandas as pd
 
 URL = 'https://web.archive.org/web/20120315142441/https://kenpom.com/'
-FILE_PATH = 'KenPomData\\2012.csv'
+FILE_PATH = '..\\Data\\KenPomData\\2012.csv'
 PYTHAGOREAN = True
 
 page = requests.get(URL)
