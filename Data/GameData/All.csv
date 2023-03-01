@@ -16,7 +16,7 @@ Florida State,3,66.0,St. Bonaventure,14,63.0,Florida State,True
 Gonzaga,7,77.0,West Virginia,10,54.0,Gonzaga,True
 Ohio State,2,78.0,Loyola (MD),15,59.0,Ohio State,True
 Kentucky,1,81.0,Western Kentucky,16,66.0,Kentucky,True
-Iowa State,8,77.0,Connecticut,9,64.0,Iowa State,True
+Iowa State,8,77.0,UConn,9,64.0,Iowa State,True
 Wichita State,5,59.0,VCU,12,62.0,VCU,False
 Indiana,4,79.0,New Mexico State,13,66.0,Indiana,True
 UNLV,6,64.0,Colorado,11,68.0,Colorado,False
@@ -27,7 +27,7 @@ North Carolina,1,77.0,Vermont,16,58.0,North Carolina,True
 Creighton,8,58.0,Alabama,9,57.0,Creighton,True
 Temple,5,44.0,South Florida,12,58.0,South Florida,False
 Michigan,4,60.0,Ohio,13,65.0,Ohio,False
-San Diego State,6,65.0,North Carolina State,11,79.0,North Carolina State,False
+San Diego State,6,65.0,NC State,11,79.0,North Carolina State,False
 Georgetown,3,74.0,Belmont,14,59.0,Georgetown,True
 Saint Mary's,7,69.0,Purdue,10,72.0,Purdue,False
 Kansas,2,65.0,Detroit,15,50.0,Kansas,True
@@ -45,7 +45,7 @@ Colorado,11,63.0,Baylor,3,80.0,Baylor,False
 Xavier,10,70.0,Lehigh,15,58.0,Xavier,True
 North Carolina,1,87.0,Creighton,8,73.0,North Carolina,True
 South Florida,12,56.0,Ohio,13,62.0,Ohio,False
-North Carolina State,11,66.0,Georgetown,3,63.0,North Carolina State,True
+NC State,11,66.0,Georgetown,3,63.0,North Carolina State,True
 Purdue,10,60.0,Kansas,2,63.0,Kansas,False
 Michigan State,1,44.0,Louisville,4,57.0,Louisville,False
 Marquette,3,58.0,Florida,7,68.0,Florida,False
@@ -54,7 +54,7 @@ Cincinnati,6,66.0,Ohio State,2,81.0,Ohio State,False
 Kentucky,1,102.0,Indiana,4,90.0,Kentucky,True
 Baylor,3,75.0,Xavier,10,70.0,Baylor,True
 North Carolina,1,73.0,Ohio,13,65.0,North Carolina,True
-North Carolina State,11,57.0,Kansas,2,60.0,Kansas,False
+NC State,11,57.0,Kansas,2,60.0,Kansas,False
 Louisville,4,72.0,Florida,7,68.0,Louisville,True
 Syracuse,1,70.0,Ohio State,2,77.0,Ohio State,False
 Kentucky,1,82.0,Baylor,3,70.0,Kentucky,True
@@ -194,10 +194,10 @@ Arkansas,5,56.0,Wofford,12,53.0,Arkansas,True
 North Carolina,4,67.0,Harvard,13,65.0,North Carolina,True
 Xavier,6,76.0,Ole Miss,11,57.0,Xavier,True
 Baylor,3,56.0,Georgia State,14,57.0,Georgia State,False
-Virginia Commonwealth,7,72.0,Ohio State,10,75.0,Ohio State,False
+VCU,7,72.0,Ohio State,10,75.0,Ohio State,False
 Arizona,2,93.0,Texas Southern,15,72.0,Arizona,True
 Villanova,1,93.0,Lafayette,16,52.0,Villanova,True
-North Carolina State,8,66.0,LSU,9,65.0,North Carolina State,True
+NC State,8,66.0,LSU,9,65.0,North Carolina State,True
 Northern Iowa,5,71.0,Wyoming,12,54.0,Northern Iowa,True
 Louisville,4,57.0,California-Irvine,13,55.0,Louisville,True
 Providence,6,53.0,Dayton,11,66.0,Dayton,False
@@ -224,7 +224,7 @@ Wisconsin,1,72.0,Oregon,8,65.0,Wisconsin,True
 Arkansas,5,78.0,North Carolina,4,87.0,North Carolina,False
 Xavier,6,75.0,Georgia State,14,67.0,Xavier,True
 Ohio State,10,58.0,Arizona,2,73.0,Arizona,False
-Villanova,1,68.0,North Carolina State,8,71.0,North Carolina State,False
+Villanova,1,68.0,NC State,8,71.0,North Carolina State,False
 Northern Iowa,5,53.0,Louisville,4,66.0,Louisville,False
 Dayton,11,66.0,Oklahoma,3,72.0,Oklahoma,False
 Michigan State,7,60.0,Virginia,2,54.0,Michigan State,True
@@ -238,7 +238,7 @@ Butler,6,64.0,Notre Dame,3,67.0,Notre Dame,False
 Wichita State,7,78.0,Kansas,2,65.0,Wichita State,True
 Wisconsin,1,79.0,North Carolina,4,72.0,Wisconsin,True
 Xavier,6,60.0,Arizona,2,68.0,Arizona,False
-North Carolina State,8,65.0,Louisville,4,75.0,Louisville,False
+NC State,8,65.0,Louisville,4,75.0,Louisville,False
 Oklahoma,3,58.0,Michigan State,7,62.0,Michigan State,False
 Duke,1,63.0,Utah,5,57.0,Duke,True
 UCLA,11,62.0,Gonzaga,2,74.0,Gonzaga,False
@@ -326,7 +326,7 @@ Villanova,1,76.0,Mount St. Mary's,16,56.0,Villanova,True
 Wisconsin,8,84.0,Virginia Tech,9,74.0,Wisconsin,True
 Virginia,5,76.0,UNC Wilmington,12,71.0,Virginia,True
 Florida,4,80.0,East Tennessee State,13,65.0,Florida,True
-SMU,6,65.0,USC,11,66.0,USC,False
+Southern Methodist,6,65.0,USC,11,66.0,USC,False
 Baylor,3,91.0,New Mexico State,14,73.0,Baylor,True
 South Carolina,7,93.0,Marquette,10,73.0,South Carolina,True
 Duke,2,87.0,Troy,15,65.0,Duke,True
@@ -459,7 +459,7 @@ Michigan State,2,76.0,Bradley,15,65.0,Michigan State,True
 Virginia,1,71.0,Gardner-Webb,16,56.0,Virginia,True
 Ole Miss,8,72.0,Oklahoma,9,95.0,Oklahoma,False
 Wisconsin,5,54.0,Oregon,12,72.0,Oregon,False
-Kansas State,4,64.0,UC Irvine,13,70.0,UC Irvine,False
+Kansas State,4,64.0,California-Irvine,13,70.0,UC Irvine,False
 Villanova,6,61.0,Saint Mary's,11,57.0,Villanova,True
 Purdue,3,61.0,Old Dominion,14,48.0,Purdue,True
 Cincinnati,7,72.0,Iowa,10,79.0,Iowa,False
@@ -481,7 +481,7 @@ Liberty,12,58.0,Virginia Tech,4,67.0,Virginia Tech,False
 Maryland,6,67.0,LSU,3,69.0,LSU,False
 Minnesota,10,50.0,Michigan State,2,70.0,Michigan State,False
 Virginia,1,63.0,Oklahoma,9,51.0,Virginia,True
-Oregon,12,73.0,UC Irvine,13,54.0,Oregon,True
+Oregon,12,73.0,California-Irvine,13,54.0,Oregon,True
 Villanova,6,61.0,Purdue,3,87.0,Purdue,False
 Iowa,10,77.0,Tennessee,2,83.0,Tennessee,False
 North Carolina,1,81.0,Washington,9,59.0,North Carolina,True
@@ -568,7 +568,7 @@ Baylor,1,78.0,Houston,2,59.0,Baylor,True
 Gonzaga,1,70.0,Baylor,1,86.0,Baylor,False
 Gonzaga,1,93.0,Georgia State,16,72.0,Gonzaga,True
 Boise State,8,53.0,Memphis,9,64.0,Memphis,False
-Connecticut,5,63.0,New Mexico State,12,70.0,New Mexico State,False
+UConn,5,63.0,New Mexico State,12,70.0,New Mexico State,False
 Arkansas,4,75.0,Vermont,13,71.0,Arkansas,True
 Alabama,6,64.0,Notre Dame,11,78.0,Notre Dame,False
 Texas Tech,3,97.0,Montana State,14,62.0,Texas Tech,True

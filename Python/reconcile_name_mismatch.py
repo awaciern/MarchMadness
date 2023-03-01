@@ -1,5 +1,19 @@
 import pandas as pd
 
+'''
+NOTE: The following team name changes were manually made to bracket data:
+Connecticut -> UConn
+North Carolina State -> NC State
+SMU -> Southern Methodist
+UC Irvine -> California-Irvine
+Virginia Commonwealth -> VCU
+
+NOTE: The following teams were mismatched in KenPom only due to being in play-in games (no reconcile needed):
+Boise State (2013 - as a 13 seed, WIERD :P)
+Long Island (2013)
+Providence (2017)
+'''
+
 kp_to_game_name_dict = {}
 kp_to_game_name_dict['TODO'] = 'TODO'
 kp_to_game_name_dict['Arizona St.'] = 'Arizona State'
@@ -52,3 +66,15 @@ kp_to_game_name_dict['Virginia Commonwealth'] = 'VCU'
 kp_to_game_name_dict['Weber St.'] = 'Weber State'
 kp_to_game_name_dict['Wichita St.'] = 'Wichita State'
 kp_to_game_name_dict['Wright St.'] = 'Wright State'
+
+for year in range(2012, 2022):
+    if year == 2020:
+        continue
+
+    FILE_PATH = '..\\Data\\KenPomData\\' + str(year) + '.csv'
+    df_kp = pd.read_csv(FILE_PATH)
+
+    for key in kp_to_game_name_dict:
+        df_kp.loc[df_kp['Team'] == key, 'Team'] = kp_to_game_name_dict[key]
+
+    df_kp.to_csv(path_or_buf=FILE_PATH, index=False)

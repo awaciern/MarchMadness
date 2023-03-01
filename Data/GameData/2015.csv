@@ -5,10 +5,10 @@ Arkansas,5,56,Wofford,12,53,Arkansas,True
 North Carolina,4,67,Harvard,13,65,North Carolina,True
 Xavier,6,76,Ole Miss,11,57,Xavier,True
 Baylor,3,56,Georgia State,14,57,Georgia State,False
-Virginia Commonwealth,7,72,Ohio State,10,75,Ohio State,False
+VCU,7,72,Ohio State,10,75,Ohio State,False
 Arizona,2,93,Texas Southern,15,72,Arizona,True
 Villanova,1,93,Lafayette,16,52,Villanova,True
-North Carolina State,8,66,LSU,9,65,North Carolina State,True
+NC State,8,66,LSU,9,65,North Carolina State,True
 Northern Iowa,5,71,Wyoming,12,54,Northern Iowa,True
 Louisville,4,57,California-Irvine,13,55,Louisville,True
 Providence,6,53,Dayton,11,66,Dayton,False
@@ -35,7 +35,7 @@ Wisconsin,1,72,Oregon,8,65,Wisconsin,True
 Arkansas,5,78,North Carolina,4,87,North Carolina,False
 Xavier,6,75,Georgia State,14,67,Xavier,True
 Ohio State,10,58,Arizona,2,73,Arizona,False
-Villanova,1,68,North Carolina State,8,71,North Carolina State,False
+Villanova,1,68,NC State,8,71,North Carolina State,False
 Northern Iowa,5,53,Louisville,4,66,Louisville,False
 Dayton,11,66,Oklahoma,3,72,Oklahoma,False
 Michigan State,7,60,Virginia,2,54,Michigan State,True
@@ -49,7 +49,7 @@ Butler,6,64,Notre Dame,3,67,Notre Dame,False
 Wichita State,7,78,Kansas,2,65,Wichita State,True
 Wisconsin,1,79,North Carolina,4,72,Wisconsin,True
 Xavier,6,60,Arizona,2,68,Arizona,False
-North Carolina State,8,65,Louisville,4,75,Louisville,False
+NC State,8,65,Louisville,4,75,Louisville,False
 Oklahoma,3,58,Michigan State,7,62,Michigan State,False
 Duke,1,63,Utah,5,57,Duke,True
 UCLA,11,62,Gonzaga,2,74,Gonzaga,False
