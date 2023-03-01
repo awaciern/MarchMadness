@@ -41,6 +41,7 @@ kp_to_game_name_dict['Miami FL'] = 'Miami (FL)'
 kp_to_game_name_dict['Michigan St.'] = 'Michigan State'
 kp_to_game_name_dict['Mississippi'] = 'Ole Miss'
 kp_to_game_name_dict['Mississippi St.'] = 'Mississippi State'
+kp_to_game_name_dict['Montana St.'] = 'Montana State'
 kp_to_game_name_dict['Morehead St.'] = 'Morehead State'
 kp_to_game_name_dict['Murray St.'] = 'Murray State'
 kp_to_game_name_dict['NC Asheville'] = 'UNC Asheville'
@@ -67,7 +68,7 @@ kp_to_game_name_dict['Weber St.'] = 'Weber State'
 kp_to_game_name_dict['Wichita St.'] = 'Wichita State'
 kp_to_game_name_dict['Wright St.'] = 'Wright State'
 
-for year in range(2012, 2022):
+for year in range(2012, 2023):
     if year == 2020:
         continue
 

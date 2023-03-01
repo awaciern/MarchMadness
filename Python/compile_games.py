@@ -10,6 +10,8 @@ for year in range(2012, 2023):
         # i = 0
         df = pd.read_csv('..\\Data\\BracketData\\' + str(year) + '\\Round' +
                          str(round) + '_' + str(year) + '.csv')
+        df['Year'] = year
+        df['Round'] = round
         # i += len(df)
         # j += len(df)
         # print(df)

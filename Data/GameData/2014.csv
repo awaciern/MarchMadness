@@ -1,64 +1,64 @@
-Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
-Arizona,1,68,Weber State,16,59,Arizona,True
-Gonzaga,8,85,Oklahoma State,9,77,Gonzaga,True
-Oklahoma,5,75,North Dakota State,12,80,North Dakota State,False
-San Diego State,4,73,New Mexico State,13,69,San Diego State,True
-Baylor,6,74,Nebraska,11,60,Baylor,True
-Creighton,3,76,Louisiana-Lafayette,14,66,Creighton,True
-Oregon,7,87,BYU,10,68,Oregon,True
-Wisconsin,2,75,American,15,35,Wisconsin,True
-Virginia,1,70,Coastal Carolina,16,59,Virginia,True
-Memphis,8,71,George Washington,9,66,Memphis,True
-Cincinnati,5,57,Harvard,12,61,Harvard,False
-Michigan State,4,93,Delaware,13,78,Michigan State,True
-North Carolina,6,79,Providence,11,77,North Carolina,True
-Iowa State,3,93,NC Central,14,75,Iowa State,True
-UConn,7,89,Saint Joseph's,10,81,UConn,True
-Villanova,2,73,Milwaukee,15,53,Villanova,True
-Florida,1,67,Albany,16,55,Florida,True
-Colorado,8,48,Pittsburgh,9,77,Pittsburgh,False
-VCU,5,75,Stephen F. Austin,12,77,Stephen F. Austin,False
-UCLA,4,76,Tulsa,13,59,UCLA,True
-Ohio State,6,59,Dayton,11,60,Dayton,False
-Syracuse,3,77,Western Michigan,14,53,Syracuse,True
-New Mexico,7,53,Stanford,10,58,Stanford,False
-Kansas,2,80,Eastern Kentucky,15,69,Kansas,True
-Wichita State,1,64,Cal Poly,16,37,Wichita State,True
-Kentucky,8,56,Kansas State,9,49,Kentucky,True
-Saint Louis,5,83,NC State,12,80,Saint Louis,True
-Louisville,4,71,Manhattan,13,64,Louisville,True
-Massachusetts,6,67,Tennessee,11,86,Tennessee,False
-Duke,3,71,Mercer,14,78,Mercer,False
-Texas,7,87,Arizona State,10,85,Texas,True
-Michigan,2,57,Wofford,15,40,Michigan,True
-Arizona,1,84,Gonzaga,8,61,Arizona,True
-North Dakota State,12,44,San Diego State,4,63,San Diego State,False
-Baylor,6,85,Creighton,3,55,Baylor,True
-Oregon,7,77,Wisconsin,2,85,Wisconsin,False
-Virginia,1,78,Memphis,8,60,Virginia,True
-Harvard,12,73,Michigan State,4,80,Michigan State,False
-North Carolina,6,83,Iowa State,3,85,Iowa State,False
-UConn,7,77,Villanova,2,65,UConn,True
-Florida,1,61,Pittsburgh,9,45,Florida,True
-Stephen F. Austin,12,60,UCLA,4,77,UCLA,False
-Dayton,11,55,Syracuse,3,53,Dayton,True
-Stanford,10,60,Kansas,2,57,Stanford,True
-Wichita State,1,76,Kentucky,8,78,Kentucky,False
-Saint Louis,5,51,Louisville,4,66,Louisville,False
-Tennessee,11,83,Mercer,14,63,Tennessee,True
-Texas,7,65,Michigan,2,79,Michigan,False
-Arizona,1,70,San Diego State,4,64,Arizona,True
-Baylor,6,52,Wisconsin,2,69,Wisconsin,False
-Virginia,1,59,Michigan State,4,61,Michigan State,False
-Iowa State,3,76,UConn,7,81,UConn,False
-Florida,1,79,UCLA,4,68,Florida,True
-Dayton,11,82,Stanford,10,72,Dayton,True
-Kentucky,8,74,Louisville,4,69,Kentucky,True
-Tennessee,11,71,Michigan,2,73,Michigan,False
-Arizona,1,63,Wisconsin,2,64,Wisconsin,False
-Michigan State,4,54,UConn,7,60,UConn,False
-Florida,1,62,Dayton,11,52,Florida,True
-Kentucky,8,75,Michigan,2,72,Kentucky,True
-Kentucky,8,74,Wisconsin,2,73,Kentucky,True
-UConn,7,63,Florida,1,53,UConn,True
-Kentucky,8,54,UConn,7,60,UConn,False
+Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1,Year,Round
+Arizona,1,68,Weber State,16,59,Arizona,True,2014,1
+Gonzaga,8,85,Oklahoma State,9,77,Gonzaga,True,2014,1
+Oklahoma,5,75,North Dakota State,12,80,North Dakota State,False,2014,1
+San Diego State,4,73,New Mexico State,13,69,San Diego State,True,2014,1
+Baylor,6,74,Nebraska,11,60,Baylor,True,2014,1
+Creighton,3,76,Louisiana-Lafayette,14,66,Creighton,True,2014,1
+Oregon,7,87,BYU,10,68,Oregon,True,2014,1
+Wisconsin,2,75,American,15,35,Wisconsin,True,2014,1
+Virginia,1,70,Coastal Carolina,16,59,Virginia,True,2014,1
+Memphis,8,71,George Washington,9,66,Memphis,True,2014,1
+Cincinnati,5,57,Harvard,12,61,Harvard,False,2014,1
+Michigan State,4,93,Delaware,13,78,Michigan State,True,2014,1
+North Carolina,6,79,Providence,11,77,North Carolina,True,2014,1
+Iowa State,3,93,NC Central,14,75,Iowa State,True,2014,1
+UConn,7,89,Saint Joseph's,10,81,UConn,True,2014,1
+Villanova,2,73,Milwaukee,15,53,Villanova,True,2014,1
+Florida,1,67,Albany,16,55,Florida,True,2014,1
+Colorado,8,48,Pittsburgh,9,77,Pittsburgh,False,2014,1
+VCU,5,75,Stephen F. Austin,12,77,Stephen F. Austin,False,2014,1
+UCLA,4,76,Tulsa,13,59,UCLA,True,2014,1
+Ohio State,6,59,Dayton,11,60,Dayton,False,2014,1
+Syracuse,3,77,Western Michigan,14,53,Syracuse,True,2014,1
+New Mexico,7,53,Stanford,10,58,Stanford,False,2014,1
+Kansas,2,80,Eastern Kentucky,15,69,Kansas,True,2014,1
+Wichita State,1,64,Cal Poly,16,37,Wichita State,True,2014,1
+Kentucky,8,56,Kansas State,9,49,Kentucky,True,2014,1
+Saint Louis,5,83,NC State,12,80,Saint Louis,True,2014,1
+Louisville,4,71,Manhattan,13,64,Louisville,True,2014,1
+Massachusetts,6,67,Tennessee,11,86,Tennessee,False,2014,1
+Duke,3,71,Mercer,14,78,Mercer,False,2014,1
+Texas,7,87,Arizona State,10,85,Texas,True,2014,1
+Michigan,2,57,Wofford,15,40,Michigan,True,2014,1
+Arizona,1,84,Gonzaga,8,61,Arizona,True,2014,2
+North Dakota State,12,44,San Diego State,4,63,San Diego State,False,2014,2
+Baylor,6,85,Creighton,3,55,Baylor,True,2014,2
+Oregon,7,77,Wisconsin,2,85,Wisconsin,False,2014,2
+Virginia,1,78,Memphis,8,60,Virginia,True,2014,2
+Harvard,12,73,Michigan State,4,80,Michigan State,False,2014,2
+North Carolina,6,83,Iowa State,3,85,Iowa State,False,2014,2
+UConn,7,77,Villanova,2,65,UConn,True,2014,2
+Florida,1,61,Pittsburgh,9,45,Florida,True,2014,2
+Stephen F. Austin,12,60,UCLA,4,77,UCLA,False,2014,2
+Dayton,11,55,Syracuse,3,53,Dayton,True,2014,2
+Stanford,10,60,Kansas,2,57,Stanford,True,2014,2
+Wichita State,1,76,Kentucky,8,78,Kentucky,False,2014,2
+Saint Louis,5,51,Louisville,4,66,Louisville,False,2014,2
+Tennessee,11,83,Mercer,14,63,Tennessee,True,2014,2
+Texas,7,65,Michigan,2,79,Michigan,False,2014,2
+Arizona,1,70,San Diego State,4,64,Arizona,True,2014,3
+Baylor,6,52,Wisconsin,2,69,Wisconsin,False,2014,3
+Virginia,1,59,Michigan State,4,61,Michigan State,False,2014,3
+Iowa State,3,76,UConn,7,81,UConn,False,2014,3
+Florida,1,79,UCLA,4,68,Florida,True,2014,3
+Dayton,11,82,Stanford,10,72,Dayton,True,2014,3
+Kentucky,8,74,Louisville,4,69,Kentucky,True,2014,3
+Tennessee,11,71,Michigan,2,73,Michigan,False,2014,3
+Arizona,1,63,Wisconsin,2,64,Wisconsin,False,2014,4
+Michigan State,4,54,UConn,7,60,UConn,False,2014,4
+Florida,1,62,Dayton,11,52,Florida,True,2014,4
+Kentucky,8,75,Michigan,2,72,Kentucky,True,2014,4
+Kentucky,8,74,Wisconsin,2,73,Kentucky,True,2014,5
+UConn,7,63,Florida,1,53,UConn,True,2014,5
+Kentucky,8,54,UConn,7,60,UConn,False,2014,6
