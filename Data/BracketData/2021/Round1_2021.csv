@@ -1,33 +1,33 @@
-Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
-Gonzaga,1,98,Norfolk State,16,55,Gonzaga,True
-Oklahoma,8,72,Missouri,9,68,Oklahoma,True
-Creighton,5,63,UC Santa Barbara,12,62,Creighton,True
-Virginia,4,58,Ohio,13,62,Ohio,False
-USC,6,72,Drake,11,56,USC,True
-Kansas,3,93,Eastern Washington,14,84,Kansas,True
+Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
+Gonzaga,1,98.0,Norfolk State,16,55.0,Gonzaga,True
+Oklahoma,8,72.0,Missouri,9,68.0,Oklahoma,True
+Creighton,5,63.0,UC Santa Barbara,12,62.0,Creighton,True
+Virginia,4,58.0,Ohio,13,62.0,Ohio,False
+USC,6,72.0,Drake,11,56.0,USC,True
+Kansas,3,93.0,Eastern Washington,14,84.0,Kansas,True
 Oregon,7,,VCU,10,,Oregon,True
-Iowa,2,86,Grand Canyon,15,74,Iowa,True
-Michigan,1,82,Texas Southern,16,66,Michigan,True
-LSU,8,76,St. Bonaventure,9,61,LSU,True
-Colorado,5,96,Georgetown,12,73,Colorado,True
-Florida State,4,64,UNC Greensboro,13,54,Florida State,True
-BYU,6,62,UCLA,11,73,UCLA,False
-Texas,3,52,Abilene Christian,14,53,Abilene Christian,False
-UConn,7,54,Maryland,10,63,Maryland,False
-Alabama,2,68,Iona,15,55,Alabama,True
-Baylor,1,79,Hartford,16,55,Baylor,True
-North Carolina,8,62,Wisconsin,9,85,Wisconsin,False
-Villanova,5,73,Winthrop,12,63,Villanova,True
-Purdue,4,69,North Texas,13,78,North Texas,False
-Texas Tech,6,65,Utah State,11,53,Texas Tech,True
-Arkansas,3,85,Colgate,14,68,Arkansas,True
-Florida,7,75,Virginia Tech,10,70,Florida,True
-Ohio State,2,72,Oral Roberts,15,75,Oral Roberts,False
-Illinois,1,78,Drexel,16,49,Illinois,True
-Loyola Chicago,8,71,Georgia Tech,9,60,Loyola Chicago,True
-Tennessee,5,56,Oregon State,12,70,Oregon State,False
-Oklahoma State,4,69,Liberty,13,60,Oklahoma State,True
-San Diego State,6,62,Syracuse,11,78,Syracuse,False
-West Virginia,3,84,Morehead State,14,67,West Virginia,True
-Clemson,7,56,Rutgers,10,60,Rutgers,False
-Houston,2,87,Cleveland State,15,56,Houston,True
+Iowa,2,86.0,Grand Canyon,15,74.0,Iowa,True
+Michigan,1,82.0,Texas Southern,16,66.0,Michigan,True
+LSU,8,76.0,St. Bonaventure,9,61.0,LSU,True
+Colorado,5,96.0,Georgetown,12,73.0,Colorado,True
+Florida State,4,64.0,UNC Greensboro,13,54.0,Florida State,True
+BYU,6,62.0,UCLA,11,73.0,UCLA,False
+Texas,3,52.0,Abilene Christian,14,53.0,Abilene Christian,False
+UConn,7,54.0,Maryland,10,63.0,Maryland,False
+Alabama,2,68.0,Iona,15,55.0,Alabama,True
+Baylor,1,79.0,Hartford,16,55.0,Baylor,True
+North Carolina,8,62.0,Wisconsin,9,85.0,Wisconsin,False
+Villanova,5,73.0,Winthrop,12,63.0,Villanova,True
+Purdue,4,69.0,North Texas,13,78.0,North Texas,False
+Texas Tech,6,65.0,Utah State,11,53.0,Texas Tech,True
+Arkansas,3,85.0,Colgate,14,68.0,Arkansas,True
+Florida,7,75.0,Virginia Tech,10,70.0,Florida,True
+Ohio State,2,72.0,Oral Roberts,15,75.0,Oral Roberts,False
+Illinois,1,78.0,Drexel,16,49.0,Illinois,True
+Loyola Chicago,8,71.0,Georgia Tech,9,60.0,Loyola Chicago,True
+Tennessee,5,56.0,Oregon State,12,70.0,Oregon State,False
+Oklahoma State,4,69.0,Liberty,13,60.0,Oklahoma State,True
+San Diego State,6,62.0,Syracuse,11,78.0,Syracuse,False
+West Virginia,3,84.0,Morehead State,14,67.0,West Virginia,True
+Clemson,7,56.0,Rutgers,10,60.0,Rutgers,False
+Houston,2,87.0,Cleveland State,15,56.0,Houston,True
