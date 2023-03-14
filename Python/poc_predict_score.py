@@ -2,8 +2,8 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 import csv
 
-YEAR = 2022
-FINAL_FOUR_SETUP = [0, 1, 2, 3]
+YEAR = 2023
+FINAL_FOUR_SETUP = [2, 1, 3, 0]
 
 df_games = pd.read_csv('..\\Data\\GameCombinedData\\All.csv')
 
@@ -71,16 +71,18 @@ print(model.score(X_train, y))
 print(type(model.predict(X_train)))
 
 pred_teams_by_round = []
-pred_was_correct_by_round = []
+# pred_was_correct_by_round = []
 pred_seeds_by_round = []
-num_correct_by_round = []
-score_by_round = []
-score = 0
+# num_correct_by_round = []
+# score_by_round = []
+# score = 0
 for round in range(1, 7):
-    df_round = pd.read_csv('..\\Data\\BracketCombinedData\\' + str(YEAR) + '\\Round'
-                           + str(round) + '_' + str(YEAR) + '.csv')
+    if round == 1:
+        df_round = pd.read_csv('..\\Data\\BracketCombinedData\\' + str(YEAR) + '\\Round'
+                               + str(round) + '_' + str(YEAR) + '.csv')
+
     if round != 1:
-        winning_teams = df_round['Winning_Team']
+        # winning_teams = df_round['Winning_Team']
         # print(winning_teams)
         df_round = pd.DataFrame(columns=['Team__1', 'Team__2'])
         if round == 5:
@@ -117,7 +119,7 @@ for round in range(1, 7):
         # print(df_round.shape)
         # print(df_round)
 
-        df_round['Winning_Team'] = winning_teams
+        # df_round['Winning_Team'] = winning_teams
         # print(df_round)
 
     print(round)
@@ -134,39 +136,39 @@ for round in range(1, 7):
     pred_seeds_by_round.append(pred_seeds.to_list())
     print(pred_teams)
 
-    pred_was_correct = pred_teams == df_round['Winning_Team']
-    pred_was_correct_by_round.append(pred_was_correct.to_list())
-    num_correct = pred_was_correct.sum()
-    num_correct_by_round.append(num_correct)
-    print(num_correct)
-    round_score = num_correct * 2**(round-1) * 10
-    print(round_score)
-    score_by_round.append(round_score)
-    score += round_score
-    print()
+    # pred_was_correct = pred_teams == df_round['Winning_Team']
+    # pred_was_correct_by_round.append(pred_was_correct.to_list())
+    # num_correct = pred_was_correct.sum()
+    # num_correct_by_round.append(num_correct)
+    # print(num_correct)
+    # round_score = num_correct * 2**(round-1) * 10
+    # print(round_score)
+    # score_by_round.append(round_score)
+    # score += round_score
+    # print()
 
-print(score)
-print(num_correct_by_round)
-print(score_by_round)
-print(pred_teams_by_round)
-print(pred_seeds_by_round)
-print(pred_was_correct_by_round)
+# print(score)
+# print(num_correct_by_round)
+# print(score_by_round)
+# print(pred_teams_by_round)
+# print(pred_seeds_by_round)
+# print(pred_was_correct_by_round)
 
 pred_file_str = ''
-num_correct_total = 0
+# num_correct_total = 0
 for i in range(0, 6):
-    num_correct_total += num_correct_by_round[i]
+    # num_correct_total += num_correct_by_round[i]
     num_picks = len(pred_teams_by_round[i])
-    pred_file_str += str(num_correct_by_round[i]) + ' for ' + str(num_picks) + ','
-    pred_file_str += str(score_by_round[i]) + ','
+    # pred_file_str += str(num_correct_by_round[i]) + ' for ' + str(num_picks) + ','
+    # pred_file_str += str(score_by_round[i]) + ','
     for j in range(0, num_picks):
         pred_file_str += '[' + str(pred_seeds_by_round[i][j]) + ']' + \
-                         pred_teams_by_round[i][j] + \
-                         '(' + str(int(pred_was_correct_by_round[i][j])) + '),'
+                         pred_teams_by_round[i][j] + ',' #\
+                         # '(' + str(int(pred_was_correct_by_round[i][j])) + '),'
     pred_file_str = pred_file_str[:-1]
     pred_file_str += '\n'
-pred_file_str += str(num_correct_total) + ' for 63,'
-pred_file_str += str(score)
+# pred_file_str += str(num_correct_total) + ' for 63,'
+# pred_file_str += str(score)
 
 print(pred_file_str)
 with open('..\\Predictions\\LogisticPOC\\' + str(YEAR) + '.csv', 'w') as pred_file:

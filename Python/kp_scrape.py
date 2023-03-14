@@ -4,9 +4,9 @@ import re
 import csv
 import pandas as pd
 
-URL = 'https://web.archive.org/web/20120315142441/https://kenpom.com/'
-FILE_PATH = '..\\Data\\KenPomData\\2012.csv'
-PYTHAGOREAN = True
+URL = 'https://web.archive.org/web/20230313204645/https://kenpom.com/'
+FILE_PATH = '..\\Data\\KenPomData\\2023.csv'
+PYTHAGOREAN = False
 
 page = requests.get(URL)
 soup = BeautifulSoup(page.content, 'html.parser')
