@@ -1,33 +1,33 @@
-Seed__1,Team__1,Seed__2,Team__2
-1,Kansas,16,Howard
-8,Arkansas,9,Illinois
-5,Saint Mary's,12,VCU
-4,UConn,13,Iona
-6,TCU,11,Arizona State
-3,Gonzaga,14,Grand Canyon
-7,Northwestern,10,Boise State
-2,UCLA,15,UNC Asheville
-1,Purdue,16,Texas Southern
-8,Memphis,9,Florida Atlantic
-5,Duke,12,Oral Roberts
-4,Tennessee,13,Louisiana
-6,Kentucky,11,Providence
-3,Kansas State,14,Montana State
-7,Michigan State,10,USC
-2,Marquette,15,Vermont
-1,Alabama,16,Texas A&M–CC
-8,Maryland,9,West Virginia
-5,San Diego State,12,Charleston
-4,Virginia,13,Furman
-6,Creighton,11,NC State
-3,Baylor,14,UC Santa Barbara
-7,Missouri,10,Utah State
-2,Arizona,15,Princeton
-1,Houston,16,Northern Kentucky
-8,Iowa,9,Auburn
-5,Miami (FL),12,Drake
-4,Indiana,13,Kent State
-6,Iowa State,11,Pittsburgh
-3,Xavier,14,Kennesaw State
-7,Texas A&M,10,Penn State
-2,Texas,15,Colgate
+Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
+Kansas,1,96,Howard,16,68,Kansas,True
+Arkansas,8,73,Illinois,9,63,Arkansas,True
+Saint Mary's,5,63,VCU,12,51,Saint Mary's,True
+UConn,4,87,Iona,13,63,UConn,True
+TCU,6,72,Arizona State,11,70,TCU,True
+Gonzaga,3,82,Grand Canyon,14,70,Gonzaga,True
+Northwestern,7,75,Boise State,10,67,Northwestern,True
+UCLA,2,86,UNC Asheville,15,53,UCLA,True
+Purdue,1,8,Fairleigh Dickinson,16,63,Fairleigh Dickinson,False
+Memphis,8,65,Florida Atlantic,9,66,Florida Atlantic,False
+Duke,5,74,Oral Roberts,12,51,Duke,True
+Tennessee,4,58,Louisiana,13,55,Tennessee,True
+Kentucky,6,61,Providence,11,53,Kentucky,True
+Kansas State,3,77,Montana State,14,65,Kansas State,True
+Michigan State,7,72,USC,10,62,Michigan State,True
+Marquette,2,78,Vermont,15,61,Marquette,True
+Alabama,1,96,Texas A&M–Corpus Christi,16,75,Alabama,True
+Maryland,8,67,West Virginia,9,65,Maryland,True
+San Diego State,5,63,Charleston,12,57,San Diego State,True
+Virginia,4,67,Furman,13,68,Furman,False
+Creighton,6,72,North Carolina State,11,63,Creighton,True
+Baylor,3,74,UC Santa Barbara,14,56,Baylor,True
+Missouri,7,76,Utah State,10,65,Missouri,True
+Arizona,2,55,Princeton,15,59,Princeton,False
+Houston,1,63,Northern Kentucky,16,52,Houston,True
+Iowa,8,75,Auburn,9,83,Auburn,False
+Miami (FL),5,63,Drake,12,56,Miami (FL),True
+Indiana,4,71,Kent State,13,60,Indiana,True
+Iowa State,6,41,Pittsburgh,11,59,Pittsburgh,False
+Xavier,3,72,Kennesaw State,14,67,Xavier,True
+Texas A&M,7,59,Penn State,10,76,Penn State,False
+Texas,2,81,Colgate,15,61,Texas,True

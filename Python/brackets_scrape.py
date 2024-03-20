@@ -12,11 +12,13 @@ def scrape_bracket_region(region_regex, round_snake):
     start = soup.find('span', id=re.compile(region_regex)).parent
     table = start.find_next_sibling('table')
     table_rows = table.tbody.find_all('tr')
+    # print(len(table_rows))
 
     game_id = 0
     teams_played = 0
     for row in table_rows:
         row_str = str(row)
+        # print(row_str)
         winner = False
         name_skip = False
 
@@ -75,6 +77,18 @@ def scrape_bracket_region(region_regex, round_snake):
                     score = None
                     name = 'VCU'
                     name_skip = True
+            elif YEAR == '2023' and region_regex == 'East_regional*' and game_id == 0:
+                if teams_played == 0:
+                    seed = 1
+                    score = 8
+                    name = 'Purdue'
+                    name_skip = True
+                else:
+                    seed = 16
+                    score = 63
+                    winner = True
+                    name = 'Virginia'
+                    name_skip = True
             else:
                 continue
 
@@ -121,25 +135,26 @@ def scrape_bracket_region(region_regex, round_snake):
             teams_played = 0
             game_id += 1
 
-YEAR = '2021'
+YEAR = '2024'
 URL = 'https://en.wikipedia.org/wiki/' + YEAR + '_NCAA_Division_I_men%27s_basketball_tournament'
-ROUND1_FILE_PATH = '..\\Data\\BracketData\\'+ YEAR +'\\Round1_' + YEAR + '.csv'
-ROUND2_FILE_PATH = '..\\Data\\BracketData\\'+ YEAR +'\\Round2_' + YEAR + '.csv'
-ROUND3_FILE_PATH = '..\\Data\\BracketData\\'+ YEAR +'\\Round3_' + YEAR + '.csv'
-ROUND4_FILE_PATH = '..\\Data\\BracketData\\'+ YEAR +'\\Round4_' + YEAR + '.csv'
-ROUND3_FILE_PATH = '..\\Data\\BracketData\\'+ YEAR +'\\Round6_' + YEAR + '.csv'
-ROUND5_FILE_PATH = '..\\Data\\BracketData\\'+ YEAR +'\\Round5_' + YEAR + '.csv'
-FILE_PATH_START = '..\\Data\\BracketData\\'+ YEAR +'\\Round'
+ROUND1_FILE_PATH = '../Data/BracketData/'+ YEAR +'/Round1_' + YEAR + '.csv'
+ROUND2_FILE_PATH = '../Data/BracketData/'+ YEAR +'/Round2_' + YEAR + '.csv'
+ROUND3_FILE_PATH = '../Data/BracketData/'+ YEAR +'/Round3_' + YEAR + '.csv'
+ROUND4_FILE_PATH = '../Data/BracketData/'+ YEAR +'/Round4_' + YEAR + '.csv'
+ROUND3_FILE_PATH = '../Data/BracketData/'+ YEAR +'/Round6_' + YEAR + '.csv'
+ROUND5_FILE_PATH = '../Data/BracketData/'+ YEAR +'/Round5_' + YEAR + '.csv'
+FILE_PATH_START = '../Data/BracketData/'+ YEAR +'/Round'
 FILE_PATH_END = '_' + YEAR + '.csv'
 
 headings = ['Team1', 'Team1_Seed', 'Team1_Score',
             'Team2', 'Team2_Seed', 'Team2_Score',
             'WinningTeam', 'Team1_Win']
 
-if not os.path.exists('..\\BracketData\\'+ YEAR):
-    os.mkdir('..\\BracketData\\'+ YEAR)
+# if not os.path.exists('..\\BracketData\\'+ YEAR):
+# if not os.path.exists('../BracketData/'+ YEAR):
+#     os.mkdir('../BracketData/'+ YEAR)
 
-for i in range(1, 7):
+for i in range(1, 2):
     with open(FILE_PATH_START + str(i) + FILE_PATH_END, 'w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(headings)
@@ -149,7 +164,7 @@ soup = BeautifulSoup(page.content, 'html.parser')
 
 round_snake_regional = ['1', '2', '1', '3', '1', '2', '1', '4', '1', '2', '1', '3', '1', '2', '1']
 for region in ['West', 'East', 'South', 'Midwest']:
-    region_regex = region + '_Regional*'
+    region_regex = region + '_regional*'
     scrape_bracket_region(region_regex, round_snake_regional)
 
 round_snake_finalfour = ['5', '6', '5']

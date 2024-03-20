@@ -1,14 +1,14 @@
 import pandas as pd
 
 df_all_games_combined = pd.DataFrame()
-for year in range(2012, 2023):
+for year in range(2012, 2024):
     if year == 2020:
         continue
 
     print(year)
 
-    df_games =  pd.read_csv('..\\Data\\GameData\\' + str(year) + '.csv')
-    df_kp = pd.read_csv('..\\Data\\KenPomData\\' + str(year) + '.csv')
+    df_games =  pd.read_csv('../Data/GameData/' + str(year) + '.csv')
+    df_kp = pd.read_csv('../Data/KenPomData/' + str(year) + '.csv')
 
     for col_name in df_kp.columns:
         df_kp.rename(columns={col_name : col_name + '__1'}, inplace=True)
@@ -50,9 +50,9 @@ for year in range(2012, 2023):
     print(df_year_games_combined.shape)
     print()
 
-    df_year_games_combined.to_csv(path_or_buf='..\\Data\\GameCombinedData\\' + str(year) + '.csv', index=False)
+    df_year_games_combined.to_csv(path_or_buf='../Data/GameCombinedData/' + str(year) + '.csv', index=False)
     df_all_games_combined = pd.concat([df_all_games_combined, df_year_games_combined])
 
-df_all_games_combined.to_csv(path_or_buf='..\\Data\\GameCombinedData\\All.csv', index=False)
+df_all_games_combined.to_csv(path_or_buf='../Data/GameCombinedData/All.csv', index=False)
 print('ALL')
 print(df_all_games_combined.shape)

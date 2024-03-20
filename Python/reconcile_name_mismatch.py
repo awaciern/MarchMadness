@@ -38,6 +38,7 @@ kp_to_game_name_dict['Kent St.'] = 'Kent State'
 kp_to_game_name_dict['Long Beach St.'] = 'Long Beach State'
 kp_to_game_name_dict['Louisiana Lafayette'] = 'Louisiana-Lafayette'
 kp_to_game_name_dict['Loyola MD'] = 'Loyola (MD)'
+kp_to_game_name_dict['McNeese St.'] = 'McNeese'
 kp_to_game_name_dict['Miami FL'] = 'Miami (FL)'
 kp_to_game_name_dict['Michigan St.'] = 'Michigan State'
 kp_to_game_name_dict['Mississippi'] = 'Ole Miss'
@@ -51,7 +52,7 @@ kp_to_game_name_dict['New Mexico St.'] = 'New Mexico State'
 kp_to_game_name_dict['Norfolk St.'] = 'Norfolk State'
 kp_to_game_name_dict['North Carolina Central'] = 'NC Central'
 kp_to_game_name_dict['North Carolina St.'] = 'NC State'
-kp_to_game_name_dict['N.C. State'] = 'NC State'
+kp_to_game_name_dict['N.C. State'] = 'North Carolina State'
 kp_to_game_name_dict['North Dakota St.'] = 'North Dakota State'
 kp_to_game_name_dict['Northwestern St.'] = 'Northwestern State'
 kp_to_game_name_dict['Ohio St.'] = 'Ohio State'
@@ -64,10 +65,11 @@ kp_to_game_name_dict['South Dakota St.'] = 'South Dakota State'
 kp_to_game_name_dict['Southern Mississippi'] = 'Southern Miss'
 kp_to_game_name_dict['St. Louis'] = 'Saint Louis'
 kp_to_game_name_dict['St. Mary\'s'] = 'Saint Mary\'s'
-kp_to_game_name_dict['Texas A&M Corpus Chris'] = 'Texas A&M–CC'
+kp_to_game_name_dict['Texas A&M–CC'] = 'Texas A&M–Corpus Christi'
 kp_to_game_name_dict['UC Irvine'] = 'California-Irvine'
 kp_to_game_name_dict['Utah St.'] = 'Utah State'
 kp_to_game_name_dict['Virginia Commonwealth'] = 'VCU'
+kp_to_game_name_dict['Washington St.'] = 'Washington State'
 kp_to_game_name_dict['Weber St.'] = 'Weber State'
 kp_to_game_name_dict['Wichita St.'] = 'Wichita State'
 kp_to_game_name_dict['Wright St.'] = 'Wright State'
@@ -76,7 +78,7 @@ for year in range(2023, 2024):
     if year == 2020:
         continue
 
-    FILE_PATH = '..\\Data\\KenPomData\\' + str(year) + '.csv'
+    FILE_PATH = '../Data/KenPomData/' + str(year) + '.csv'
     df_kp = pd.read_csv(FILE_PATH)
 
     for key in kp_to_game_name_dict:

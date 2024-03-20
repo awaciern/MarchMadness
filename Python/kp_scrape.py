@@ -4,8 +4,10 @@ import re
 import csv
 import pandas as pd
 
-URL = 'https://web.archive.org/web/20230313204645/https://kenpom.com/'
-FILE_PATH = '..\\Data\\KenPomData\\2023.csv'
+# URL = 'https://web.archive.org/web/20230313204645/https://kenpom.com/'
+URL = 'https://web.archive.org/web/20240318160959/https://kenpom.com/'
+# FILE_PATH = '..\\Data\\KenPomData\\2023_0.csv'
+FILE_PATH = '../Data/KenPomData/2024.csv'
 PYTHAGOREAN = False
 
 page = requests.get(URL)

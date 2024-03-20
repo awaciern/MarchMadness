@@ -629,3 +629,66 @@ Kansas,1,76.0,Miami (FL),10,50.0,Kansas,True,2022,4
 Duke,2,77.0,North Carolina,8,81.0,North Carolina,False,2022,5
 Villanova,2,65.0,Kansas,1,81.0,Kansas,False,2022,5
 North Carolina,8,69.0,Kansas,1,72.0,Kansas,False,2022,6
+Kansas,1,96.0,Howard,16,68.0,Kansas,True,2023,1
+Arkansas,8,73.0,Illinois,9,63.0,Arkansas,True,2023,1
+Saint Mary's,5,63.0,VCU,12,51.0,Saint Mary's,True,2023,1
+UConn,4,87.0,Iona,13,63.0,UConn,True,2023,1
+TCU,6,72.0,Arizona State,11,70.0,TCU,True,2023,1
+Gonzaga,3,82.0,Grand Canyon,14,70.0,Gonzaga,True,2023,1
+Northwestern,7,75.0,Boise State,10,67.0,Northwestern,True,2023,1
+UCLA,2,86.0,UNC Asheville,15,53.0,UCLA,True,2023,1
+Purdue,1,8.0,Fairleigh Dickinson,16,63.0,Fairleigh Dickinson,False,2023,1
+Memphis,8,65.0,Florida Atlantic,9,66.0,Florida Atlantic,False,2023,1
+Duke,5,74.0,Oral Roberts,12,51.0,Duke,True,2023,1
+Tennessee,4,58.0,Louisiana,13,55.0,Tennessee,True,2023,1
+Kentucky,6,61.0,Providence,11,53.0,Kentucky,True,2023,1
+Kansas State,3,77.0,Montana State,14,65.0,Kansas State,True,2023,1
+Michigan State,7,72.0,USC,10,62.0,Michigan State,True,2023,1
+Marquette,2,78.0,Vermont,15,61.0,Marquette,True,2023,1
+Alabama,1,96.0,Texas A&M–Corpus Christi,16,75.0,Alabama,True,2023,1
+Maryland,8,67.0,West Virginia,9,65.0,Maryland,True,2023,1
+San Diego State,5,63.0,Charleston,12,57.0,San Diego State,True,2023,1
+Virginia,4,67.0,Furman,13,68.0,Furman,False,2023,1
+Creighton,6,72.0,North Carolina State,11,63.0,Creighton,True,2023,1
+Baylor,3,74.0,UC Santa Barbara,14,56.0,Baylor,True,2023,1
+Missouri,7,76.0,Utah State,10,65.0,Missouri,True,2023,1
+Arizona,2,55.0,Princeton,15,59.0,Princeton,False,2023,1
+Houston,1,63.0,Northern Kentucky,16,52.0,Houston,True,2023,1
+Iowa,8,75.0,Auburn,9,83.0,Auburn,False,2023,1
+Miami (FL),5,63.0,Drake,12,56.0,Miami (FL),True,2023,1
+Indiana,4,71.0,Kent State,13,60.0,Indiana,True,2023,1
+Iowa State,6,41.0,Pittsburgh,11,59.0,Pittsburgh,False,2023,1
+Xavier,3,72.0,Kennesaw State,14,67.0,Xavier,True,2023,1
+Texas A&M,7,59.0,Penn State,10,76.0,Penn State,False,2023,1
+Texas,2,81.0,Colgate,15,61.0,Texas,True,2023,1
+Kansas,1,71.0,Arkansas,8,72.0,Arkansas,False,2023,2
+Saint Mary's,5,55.0,UConn,4,70.0,UConn,False,2023,2
+TCU,6,81.0,Gonzaga,3,84.0,Gonzaga,False,2023,2
+Northwestern,7,63.0,UCLA,2,68.0,UCLA,False,2023,2
+Fairleigh Dickinson,16,70.0,Florida Atlantic,9,78.0,Florida Atlantic,False,2023,2
+Duke,5,52.0,Tennessee,4,65.0,Tennessee,False,2023,2
+Kentucky,6,69.0,Kansas State,3,75.0,Kansas State,False,2023,2
+Michigan State,7,69.0,Marquette,2,60.0,Michigan State,True,2023,2
+Alabama,1,73.0,Maryland,8,51.0,Alabama,True,2023,2
+San Diego State,5,75.0,Furman,13,52.0,San Diego State,True,2023,2
+Creighton,6,85.0,Baylor,3,76.0,Creighton,True,2023,2
+Missouri,7,63.0,Princeton,15,78.0,Princeton,False,2023,2
+Houston,1,81.0,Auburn,9,64.0,Houston,True,2023,2
+Miami (FL),5,85.0,Indiana,4,69.0,Miami (FL),True,2023,2
+Pittsburgh,11,73.0,Xavier,3,84.0,Xavier,False,2023,2
+Penn State,10,66.0,Texas,2,71.0,Texas,False,2023,2
+Arkansas,8,65.0,UConn,4,88.0,UConn,False,2023,3
+Gonzaga,3,79.0,UCLA,2,76.0,Gonzaga,True,2023,3
+Florida Atlantic,9,62.0,Tennessee,4,55.0,Florida Atlantic,True,2023,3
+Kansas State,3,98.0,Michigan State,7,93.0,Kansas State,True,2023,3
+Alabama,1,64.0,San Diego State,5,71.0,San Diego State,False,2023,3
+Creighton,6,86.0,Princeton,15,75.0,Creighton,True,2023,3
+Houston,1,75.0,Miami (FL),5,89.0,Miami (FL),False,2023,3
+Xavier,3,71.0,Texas,2,83.0,Texas,False,2023,3
+UConn,4,82.0,Gonzaga,3,54.0,UConn,True,2023,4
+Florida Atlantic,9,79.0,Kansas State,3,76.0,Florida Atlantic,True,2023,4
+San Diego State,5,57.0,Creighton,6,56.0,San Diego State,True,2023,4
+Miami (FL),5,88.0,Texas,2,81.0,Miami (FL),True,2023,4
+San Diego State,5,72.0,Florida Atlantic,9,71.0,San Diego State,True,2023,5
+Miami (FL),5,59.0,UConn,4,72.0,UConn,False,2023,5
+San Diego State,5,59.0,UConn,4,76.0,UConn,False,2023,6

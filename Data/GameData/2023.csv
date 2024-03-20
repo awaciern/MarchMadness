@@ -1,0 +1,64 @@
+Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1,Year,Round
+Kansas,1,96,Howard,16,68,Kansas,True,2023,1
+Arkansas,8,73,Illinois,9,63,Arkansas,True,2023,1
+Saint Mary's,5,63,VCU,12,51,Saint Mary's,True,2023,1
+UConn,4,87,Iona,13,63,UConn,True,2023,1
+TCU,6,72,Arizona State,11,70,TCU,True,2023,1
+Gonzaga,3,82,Grand Canyon,14,70,Gonzaga,True,2023,1
+Northwestern,7,75,Boise State,10,67,Northwestern,True,2023,1
+UCLA,2,86,UNC Asheville,15,53,UCLA,True,2023,1
+Purdue,1,8,Fairleigh Dickinson,16,63,Fairleigh Dickinson,False,2023,1
+Memphis,8,65,Florida Atlantic,9,66,Florida Atlantic,False,2023,1
+Duke,5,74,Oral Roberts,12,51,Duke,True,2023,1
+Tennessee,4,58,Louisiana,13,55,Tennessee,True,2023,1
+Kentucky,6,61,Providence,11,53,Kentucky,True,2023,1
+Kansas State,3,77,Montana State,14,65,Kansas State,True,2023,1
+Michigan State,7,72,USC,10,62,Michigan State,True,2023,1
+Marquette,2,78,Vermont,15,61,Marquette,True,2023,1
+Alabama,1,96,Texas A&M–Corpus Christi,16,75,Alabama,True,2023,1
+Maryland,8,67,West Virginia,9,65,Maryland,True,2023,1
+San Diego State,5,63,Charleston,12,57,San Diego State,True,2023,1
+Virginia,4,67,Furman,13,68,Furman,False,2023,1
+Creighton,6,72,North Carolina State,11,63,Creighton,True,2023,1
+Baylor,3,74,UC Santa Barbara,14,56,Baylor,True,2023,1
+Missouri,7,76,Utah State,10,65,Missouri,True,2023,1
+Arizona,2,55,Princeton,15,59,Princeton,False,2023,1
+Houston,1,63,Northern Kentucky,16,52,Houston,True,2023,1
+Iowa,8,75,Auburn,9,83,Auburn,False,2023,1
+Miami (FL),5,63,Drake,12,56,Miami (FL),True,2023,1
+Indiana,4,71,Kent State,13,60,Indiana,True,2023,1
+Iowa State,6,41,Pittsburgh,11,59,Pittsburgh,False,2023,1
+Xavier,3,72,Kennesaw State,14,67,Xavier,True,2023,1
+Texas A&M,7,59,Penn State,10,76,Penn State,False,2023,1
+Texas,2,81,Colgate,15,61,Texas,True,2023,1
+Kansas,1,71,Arkansas,8,72,Arkansas,False,2023,2
+Saint Mary's,5,55,UConn,4,70,UConn,False,2023,2
+TCU,6,81,Gonzaga,3,84,Gonzaga,False,2023,2
+Northwestern,7,63,UCLA,2,68,UCLA,False,2023,2
+Fairleigh Dickinson,16,70,Florida Atlantic,9,78,Florida Atlantic,False,2023,2
+Duke,5,52,Tennessee,4,65,Tennessee,False,2023,2
+Kentucky,6,69,Kansas State,3,75,Kansas State,False,2023,2
+Michigan State,7,69,Marquette,2,60,Michigan State,True,2023,2
+Alabama,1,73,Maryland,8,51,Alabama,True,2023,2
+San Diego State,5,75,Furman,13,52,San Diego State,True,2023,2
+Creighton,6,85,Baylor,3,76,Creighton,True,2023,2
+Missouri,7,63,Princeton,15,78,Princeton,False,2023,2
+Houston,1,81,Auburn,9,64,Houston,True,2023,2
+Miami (FL),5,85,Indiana,4,69,Miami (FL),True,2023,2
+Pittsburgh,11,73,Xavier,3,84,Xavier,False,2023,2
+Penn State,10,66,Texas,2,71,Texas,False,2023,2
+Arkansas,8,65,UConn,4,88,UConn,False,2023,3
+Gonzaga,3,79,UCLA,2,76,Gonzaga,True,2023,3
+Florida Atlantic,9,62,Tennessee,4,55,Florida Atlantic,True,2023,3
+Kansas State,3,98,Michigan State,7,93,Kansas State,True,2023,3
+Alabama,1,64,San Diego State,5,71,San Diego State,False,2023,3
+Creighton,6,86,Princeton,15,75,Creighton,True,2023,3
+Houston,1,75,Miami (FL),5,89,Miami (FL),False,2023,3
+Xavier,3,71,Texas,2,83,Texas,False,2023,3
+UConn,4,82,Gonzaga,3,54,UConn,True,2023,4
+Florida Atlantic,9,79,Kansas State,3,76,Florida Atlantic,True,2023,4
+San Diego State,5,57,Creighton,6,56,San Diego State,True,2023,4
+Miami (FL),5,88,Texas,2,81,Miami (FL),True,2023,4
+San Diego State,5,72,Florida Atlantic,9,71,San Diego State,True,2023,5
+Miami (FL),5,59,UConn,4,72,UConn,False,2023,5
+San Diego State,5,59,UConn,4,76,UConn,False,2023,6

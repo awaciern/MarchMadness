@@ -1,0 +1,9 @@
+OVERALL PERFORMANCE
+ROUND 1: 284 for 352, 80.68%, 2840 points
+ROUND 2: 133 for 176, 75.57%, 2660 points
+ROUND 3: 52 for 88, 59.09%, 2080 points
+ROUND 4: 22 for 44, 50.00%, 1760 points
+ROUND 5: 11 for 22, 50.00%, 1760 points
+ROUND 6: 5 for 11, 45.45%, 16000 points
+ALL ROUNDS: 507 for 693, 73.16%
+AVG BRACKET SCORE = 1154.55
