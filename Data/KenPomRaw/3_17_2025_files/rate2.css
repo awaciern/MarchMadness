@@ -1,0 +1,411 @@
+/*
+Responsive page
+* make rank and team sticky and scroll
+*/
+#half-column {
+	width:50%;
+	margin-left:auto;
+	margin-right:auto;
+	padding: 5px;
+	border: 1px solid black;
+}
+
+#half-column2 {
+	width:60%;
+	margin-left:auto;
+	margin-right:auto;
+	padding: 5px;
+	border: 1px solid black;
+}
+
+#content-header #half-column-left {
+	margin:20px 5px;
+	text-align:left;
+}
+
+#data-area {
+	color:#000;
+	font-size:12px;
+	width:100%;
+	margin-top: 5px;
+}
+
+#ratings-table tr.bold-bottom td
+{
+	border-bottom: 2px solid #000;
+}
+
+#ratings-table td.bold-bottom
+{
+	border-bottom: 2px solid #000;
+}
+
+#ratings-table tr.bold-bottom-tourney td
+{
+	border-bottom: 2px solid #000;
+	background-color: #fcc;
+}
+
+#ratings-table tr.tourney td
+{
+	background-color: #fcc;
+}
+
+#ratings-table
+{
+	font-family: "Signika", "arial";
+	font-size: 14px;
+	border-collapse:collapse;
+	margin-left:auto;
+	margin-right:auto;
+	border-bottom: 2px solid #000;
+    margin-bottom: 3px;
+}
+
+#ratings-table tr th {
+	text-align: center;
+	line-height: 1;
+}
+
+#ratings-table th {
+	color: #039;
+	padding: 1px 5px;
+	background:#c3d9ff;
+	vertical-align:bottom;
+}
+
+#ratings-table td.td-left
+{
+	color: #000;
+	line-height:1.2;
+	padding: 1px 2px 1px 4px;
+}
+
+#ratings-table td.td-right
+{
+	color: #000;
+	line-height:1.2;
+	padding: 1px 4px 1px 2px;
+}
+
+#ratings-table td.divide,th.divide
+{
+	border-left: 1px solid #BBB;
+}
+
+#ratings-table tr td.td-left-align,th.td-left-align
+{
+	text-align: left;
+}
+
+#ratings-table tr td
+{
+	border-bottom: 1px solid #000;
+	text-align: center;
+	color: #000;
+	line-height:1.2;
+	padding: 1px 5px;
+	white-space: nowrap;
+}
+
+#ratings-table td.divide-today
+{
+	border-left: 1px dotted #000;
+	background-color: #DEE;
+}
+
+#ratings-table td.thisConf
+{
+	background-color: #ECD;
+}
+
+#ratings-table td.thisConf-divide
+{
+	background-color: #ECD;
+	border-left: 1px dotted #000;
+}
+
+#ratings-table td.extra-padding
+{
+	padding:5px 3px 1px 3px;
+}
+
+#ratings-table tr.label td
+{
+	border-top: 2px solid #000;
+	background-color:#eef;
+	text-align:left;
+}
+
+#ratings-table tr.bold-bottom td
+{
+	border-bottom: 2px solid #000;
+}
+
+#ratings-table td.bold-bottom-divide
+{
+	border-bottom: 2px solid #000;
+	border-left: 1px solid #BBB;
+}
+
+#ratings-table td.bold-bottom-left
+{
+	border-bottom: 2px solid #000;
+	text-align:left;
+}
+
+#ratings-table td.wrong {
+	text-align:left;
+	color:#FF0000;
+}
+
+#ratings-table td.exact {
+	text-align:left;
+	background-color:#FFCC00;
+	border:2px solid #FF6600;
+}
+
+#ratings-table td.correct {
+	text-align:left;
+	color:#347c17;
+}
+
+#ratings-table tr.notes-top td {
+	border-top: 2px solid #000;
+}
+
+#ratings-table tr.notes td {
+	text-align: left;
+	background-color: #F2FAFD;
+}
+
+#ratings-table tr td:nth-child(2) {
+	text-align:left;
+}
+
+#confStandings {
+	color:#000;
+	font-size:12pt;
+	clear:both;
+	border: 0;
+	margin-left: 0;
+	margin-top: 5px;
+	text-align:center;
+}
+
+h4 {
+	font-weight:600;
+	font-size:1.3em;
+	margin-bottom:0px;
+}
+
+#question {
+	margin-left:auto;
+	margin-right:auto;
+	padding-top: 4px;
+	padding-bottom: 4px;	
+}
+
+#question h4 {
+	background-color:#F2EAED;
+	padding:0;
+	font-weight:normal;
+	margin-bottom: 0;
+	font-size: 100%;
+}
+
+.table-note {
+	font-size: 12px;
+	text-align: left;
+	display: inline-block;
+	line-height: 1.5;
+}
+
+.aplnote {
+    text-align:left;
+    font-size:12px;
+    line-height: 1.1;
+    padding-top: 2px;
+    white-space: nowrap
+}
+
+#table-wrapper {
+    display: inline-block;
+    margin-bottom: 10px;
+}
+
+.no_break {
+	white-space: nowrap;
+}
+
+@media screen and (max-width:880px) {
+
+	/* For contact page */
+	#half-column-left {
+		text-align:center;
+	}
+
+	#data-area {
+		overflow-x:scroll;
+		width:100%;
+		max-height: calc(100vh - 18px);
+		/* padding-bottom: 20px; */
+	}
+
+	table td {
+		background-color:#F2FAFD;
+	}
+
+	#ratings-table {
+		table-layout:fixed;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	#ratings-table thead:not(:first-of-type) {
+		display:none !important;
+	}
+
+	#ratings-table .thead1 th {
+		position:sticky;
+		position:-webkit-sticky;
+		top:0;
+	}
+	#ratings-table .thead2 th {
+		position:sticky;
+		position:-webkit-sticky;
+		top:16px;
+	}
+
+	#ratings-table .thead3 th {
+		position:sticky;
+		position:-webkit-sticky;
+		top:58px;
+	}
+
+	#ratings-table tr th.hard_left,#ratings-table tr td.hard_left {
+		left:0;
+		min-width:25px;
+		position:sticky;
+		position:-webkit-sticky;
+		z-index:6;
+		padding: 0px;
+	}
+
+	#ratings-table tr td.hard_left {
+		*position: relative; /*ie7*/
+		z-index:5;
+	}
+
+	#ratings-table tr th.next_left,#ratings-table tr td.next_left {
+		*position: relative; /*ie7*/
+		left:25px;
+		max-width:110px;
+		position:sticky;
+		position:-webkit-sticky;
+		overflow:hidden;
+		padding-left: 1px;
+	}
+
+	#ratings-table tr td.next_left {
+		z-index:5;
+		white-space:nowrap;
+		table-layout:fixed;
+	}
+
+    #ratings-table tr th.next_left {
+        z-index:6;
+    }
+
+	#ratings-table tr th {
+		text-align: center;
+		line-height: 1;
+		position:sticky;
+		position:-webkit-sticky;
+		top:0;
+		padding: 1px 3px;
+	}
+
+	#ratings-table tr td {
+		border:none;
+		padding:4px 3px;
+	}
+	#ratings-table tr.bold-bottom td {
+		border-bottom:none;
+	}
+
+	#ratings-table td.bold-bottom-left {
+		border-bottom: none;
+	}
+	#ratings-table td.bold-bottom {
+		border-bottom: none;
+	}
+	#ratings-table td.bold-bottom-divide {
+		border-bottom: none;
+	}
+
+	#ratings-table tr th.wl,#ratings-table tr td.wl {
+		min-width:35px;
+		padding-left: 1px;
+		padding-right: 1px;
+	}
+
+    #ratings-table tr th.conf,#ratings-table tr td.conf {
+        min-width:35px;
+        padding-left: 1px;
+        padding-right: 1px;
+    }
+
+	#ratings-table tr td {
+		line-height: 0.8;
+	}
+
+	#ratings-table td.td-left
+	{
+		padding: 1px 1px 1px 3px;
+	}
+
+	#ratings-table td.td-right
+	{
+		padding: 1px 3px 1px 1px;
+	}
+
+	.playerstats-table {
+		white-space:nowrap;
+	}
+
+	.playerstats-table td:nth-of-type(1){
+		position:sticky;
+		position:-webkit-sticky;
+		left:0;
+		z-index:5;
+		padding:0;
+	}
+	.playerstats-table td:nth-of-type(2){
+		position:sticky;
+		position:-webkit-sticky;
+		left:35px;
+		z-index:5;
+	}
+	.playerstats-table th:nth-of-type(1) {
+		position:sticky;
+		position:-webkit-sticky;
+		left:0;
+		z-index:6;
+		padding:0;
+	}
+	.playerstats-table th:nth-of-type(2) {
+		position:sticky;
+		position:-webkit-sticky;
+		left:35px;
+		z-index:6;
+	}
+	.x {
+		position:sticky;
+		position:-webkit-sticky;
+		left:calc(50% - 130px);
+	}
+    #table-wrapper {
+        margin-bottom: 20px;
+    }
+
+}

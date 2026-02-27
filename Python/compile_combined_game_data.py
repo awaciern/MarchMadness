@@ -1,7 +1,7 @@
 import pandas as pd
 
 df_all_games_combined = pd.DataFrame()
-for year in range(2012, 2024):
+for year in range(2012, 2025):
     if year == 2020:
         continue
 

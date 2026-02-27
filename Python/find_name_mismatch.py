@@ -2,11 +2,11 @@ import pandas as pd
 
 games_mismatch_names = []
 kp_mismatch_names = []
-for year in range(2024, 2025):
+for year in range(2025, 2026):
     if year == 2020:
         continue
     # df_games = pd.read_csv('../Data/GameData/' + str(year) + '.csv')
-    df_games = pd.read_csv('../Data/BracketData/2024/Round1_' + str(year) + '.csv')
+    df_games = pd.read_csv('../Data/BracketData/2025/Round1_' + str(year) + '.csv')
     df_kp = pd.read_csv('../Data/KenPomData/' + str(year) + '.csv')
     # print(df_bracket)
     # print(df_kp['Team'].values)

@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 df_all_games_combined = pd.DataFrame()
-for year in range(2024, 2025):
+for year in range(2025, 2026):
     if year == 2020:
         continue
 
@@ -30,7 +30,7 @@ for year in range(2024, 2025):
         df_join2 = df_round.join(other=df_kp2.set_index(['Team__2', 'Seed__2']),
                                  on=['Team__2', 'Seed__2'],
                                  how='inner')
-        print(df_join1.shape)
+        print(df_join2.shape)
 
         join_cols_common = ['Team__1', 'Seed__1', #'Score__1',
                             'Team__2', 'Seed__2', #'Score__2',

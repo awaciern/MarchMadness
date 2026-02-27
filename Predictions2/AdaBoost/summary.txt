@@ -1,0 +1,11 @@
+OVERALL PERFORMANCE
+Train Score = 0.7549407114624506
+Test Score = 0.704
+ROUND 1: 282 for 384, 73.44%, 2820 points
+ROUND 2: 128 for 192, 66.67%, 2560 points
+ROUND 3: 50 for 96, 52.08%, 2000 points
+ROUND 4: 21 for 48, 43.75%, 1680 points
+ROUND 5: 8 for 24, 33.33%, 1280 points
+ROUND 6: 4 for 12, 33.33%, 1280 points
+ALL ROUNDS: 493 for 756, 65.21%
+AVG BRACKET SCORE = 968.33

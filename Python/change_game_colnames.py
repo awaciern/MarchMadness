@@ -12,7 +12,7 @@ COL_NAME_CHANGE_DICT['Team1_Win'] = 'Win__1'
 COL_NAME_CHANGE_DICT['Year'] = 'Year'
 COL_NAME_CHANGE_DICT['Round'] = 'Round'
 
-for year in range(2023, 2024):
+for year in range(2024, 2025):
     df_year_games = pd.DataFrame()
     if year == 2020:
         continue

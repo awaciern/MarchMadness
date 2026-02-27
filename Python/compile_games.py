@@ -2,7 +2,7 @@ import pandas as pd
 
 # j = 0
 df_all_games = pd.DataFrame()
-for year in range(2012, 2024):
+for year in range(2012, 2025):
     df_year_games = pd.DataFrame()
     if year == 2020:
         continue

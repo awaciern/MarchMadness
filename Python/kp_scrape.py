@@ -5,13 +5,19 @@ import csv
 import pandas as pd
 
 # URL = 'https://web.archive.org/web/20230313204645/https://kenpom.com/'
-URL = 'https://web.archive.org/web/20240318160959/https://kenpom.com/'
+# URL = 'https://web.archive.org/web/20240318160959/https://kenpom.com/'
+# URL = 'https://kenpom.com/'
+IN_PATH = '../Data/KenPomRaw/3_17_2025.htm'
 # FILE_PATH = '..\\Data\\KenPomData\\2023_0.csv'
-FILE_PATH = '../Data/KenPomData/2024.csv'
+FILE_PATH = '../Data/KenPomData/2025.csv'
 PYTHAGOREAN = False
 
-page = requests.get(URL)
-soup = BeautifulSoup(page.content, 'html.parser')
+# page = requests.get(URL)
+# soup = BeautifulSoup(page.content, 'html.parser')
+with open(IN_PATH) as html_file:
+    html = html_file.read()
+# print(html)
+soup = BeautifulSoup(html, 'html.parser')
 data_area = soup.find(id='data-area')
 table = data_area.find('table')
 
@@ -29,7 +35,9 @@ headings = ['Rk_AdjEM', 'Team', 'Seed', 'Conf',
 #     if text != "" and text not in headings:
 #         headings.append(text)
 
-table_data = table.tbody.find_all('tr', class_='tourney')
+# table_data = table.tbody.find_all('tr', class_='tourney')
+table_data = table.find_all('tr', class_='tourney')
+print(len(table_data))
 data = []
 for team in table_data:
     stats = []

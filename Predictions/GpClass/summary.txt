@@ -1,9 +1,10 @@
 OVERALL PERFORMANCE
-ROUND 1: 337 for 352, 95.74%, 3370 points
-ROUND 2: 166 for 176, 94.32%, 3320 points
-ROUND 3: 80 for 88, 90.91%, 3200 points
-ROUND 4: 40 for 44, 90.91%, 3200 points
-ROUND 5: 20 for 22, 90.91%, 3200 points
-ROUND 6: 10 for 11, 90.91%, 3200 points
-ALL ROUNDS: 653 for 693, 94.23%
-AVG BRACKET SCORE = 1771.82
+Train Score = 1.0
+ROUND 1: 381 for 384, 99.22%, 3810 points
+ROUND 2: 190 for 192, 98.96%, 3800 points
+ROUND 3: 96 for 96, 100.00%, 3840 points
+ROUND 4: 48 for 48, 100.00%, 3840 points
+ROUND 5: 22 for 24, 91.67%, 3520 points
+ROUND 6: 11 for 12, 91.67%, 3520 points
+ALL ROUNDS: 748 for 756, 98.94%
+AVG BRACKET SCORE = 1860.83

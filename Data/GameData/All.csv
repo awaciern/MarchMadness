@@ -692,3 +692,66 @@ Miami (FL),5,88.0,Texas,2,81.0,Miami (FL),True,2023,4
 San Diego State,5,72.0,Florida Atlantic,9,71.0,San Diego State,True,2023,5
 Miami (FL),5,59.0,UConn,4,72.0,UConn,False,2023,5
 San Diego State,5,59.0,UConn,4,76.0,UConn,False,2023,6
+UConn,1,91.0,Stetson,16,52.0,UConn,True,2024,1
+Florida Atlantic,8,65.0,Northwestern,9,77.0,Northwestern,False,2024,1
+San Diego State,5,69.0,UAB,12,65.0,San Diego State,True,2024,1
+Auburn,4,76.0,Yale,13,78.0,Yale,False,2024,1
+BYU,6,67.0,Duquesne,11,71.0,Duquesne,False,2024,1
+Illinois,3,85.0,Morehead State,14,69.0,Illinois,True,2024,1
+Washington State,7,66.0,Drake,10,61.0,Washington State,True,2024,1
+Iowa State,2,82.0,South Dakota State,15,65.0,Iowa State,True,2024,1
+North Carolina,1,90.0,Wagner,16,62.0,North Carolina,True,2024,1
+Mississippi State,8,51.0,Michigan State,9,69.0,Michigan State,False,2024,1
+Saint Mary's,5,66.0,Grand Canyon,12,75.0,Grand Canyon,False,2024,1
+Alabama,4,109.0,Charleston,13,96.0,Alabama,True,2024,1
+Clemson,6,77.0,New Mexico,11,56.0,Clemson,True,2024,1
+Baylor,3,92.0,Colgate,14,67.0,Baylor,True,2024,1
+Dayton,7,63.0,Nevada,10,60.0,Dayton,True,2024,1
+Arizona,2,85.0,Long Beach State,15,65.0,Arizona,True,2024,1
+Houston,1,86.0,Longwood,16,46.0,Houston,True,2024,1
+Nebraska,8,83.0,Texas A&M,9,98.0,Texas A&M,False,2024,1
+Wisconsin,5,61.0,James Madison,12,72.0,James Madison,False,2024,1
+Duke,4,64.0,Vermont,13,47.0,Duke,True,2024,1
+Texas Tech,6,67.0,NC State,11,80.0,NC State,False,2024,1
+Kentucky,3,76.0,Oakland,14,80.0,Oakland,False,2024,1
+Florida,7,100.0,Colorado,10,102.0,Colorado,False,2024,1
+Marquette,2,87.0,Western Kentucky,15,69.0,Marquette,True,2024,1
+Purdue,1,78.0,Grambling State,16,50.0,Purdue,True,2024,1
+Utah State,8,88.0,TCU,9,72.0,Utah State,True,2024,1
+Gonzaga,5,86.0,McNeese,12,65.0,Gonzaga,True,2024,1
+Kansas,4,93.0,Samford,13,89.0,Kansas,True,2024,1
+South Carolina,6,73.0,Oregon,11,87.0,Oregon,False,2024,1
+Creighton,3,77.0,Akron,14,60.0,Creighton,True,2024,1
+Texas,7,56.0,Colorado State,10,44.0,Texas,True,2024,1
+Tennessee,2,83.0,Saint Peter's,15,49.0,Tennessee,True,2024,1
+UConn,1,75.0,Northwestern,9,58.0,UConn,True,2024,2
+San Diego State,5,85.0,Yale,13,57.0,San Diego State,True,2024,2
+Duquesne,11,63.0,Illinois,3,89.0,Illinois,False,2024,2
+Washington State,7,56.0,Iowa State,2,67.0,Iowa State,False,2024,2
+North Carolina,1,85.0,Michigan State,9,69.0,North Carolina,True,2024,2
+Grand Canyon,12,61.0,Alabama,4,72.0,Alabama,False,2024,2
+Clemson,6,72.0,Baylor,3,64.0,Clemson,True,2024,2
+Dayton,7,68.0,Arizona,2,78.0,Arizona,False,2024,2
+Houston,1,100.0,Texas A&M,9,95.0,Houston,True,2024,2
+James Madison,12,55.0,Duke,4,93.0,Duke,False,2024,2
+NC State,11,79.0,Oakland,14,73.0,NC State,True,2024,2
+Colorado,10,77.0,Marquette,2,81.0,Marquette,False,2024,2
+Purdue,1,106.0,Utah State,8,67.0,Purdue,True,2024,2
+Gonzaga,5,89.0,Kansas,4,68.0,Gonzaga,True,2024,2
+Oregon,11,73.0,Creighton,3,86.0,Creighton,False,2024,2
+Texas,7,58.0,Tennessee,2,62.0,Tennessee,False,2024,2
+UConn,1,82.0,San Diego State,5,52.0,UConn,True,2024,3
+Illinois,3,72.0,Iowa State,2,69.0,Illinois,True,2024,3
+North Carolina,1,87.0,Alabama,4,89.0,Alabama,False,2024,3
+Clemson,6,77.0,Arizona,2,72.0,Clemson,True,2024,3
+Houston,1,51.0,Duke,4,54.0,Duke,False,2024,3
+NC State,11,67.0,Marquette,2,58.0,NC State,True,2024,3
+Purdue,1,80.0,Gonzaga,5,68.0,Purdue,True,2024,3
+Creighton,3,75.0,Tennessee,2,82.0,Tennessee,False,2024,3
+UConn,1,77.0,Illinois,3,52.0,UConn,True,2024,4
+Alabama,4,89.0,Clemson,6,82.0,Alabama,True,2024,4
+Duke,4,64.0,NC State,11,76.0,NC State,False,2024,4
+Purdue,1,72.0,Tennessee,2,66.0,Purdue,True,2024,4
+UConn,1,86.0,Alabama,4,72.0,UConn,True,2024,5
+NC State,11,50.0,Purdue,1,63.0,Purdue,False,2024,5
+UConn,1,75.0,Purdue,1,60.0,UConn,True,2024,6

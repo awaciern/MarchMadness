@@ -1,0 +1,12 @@
+@font-face {
+  font-family: 'Signika';
+  font-style: normal;
+  font-weight: 400;
+  src: url(https://fonts.gstatic.com/l/font?kit=vEFO2_JTCgwQ5ejvMV0Ox_Kg1UwJ0tKfX5bDhsncfY0XC3rYb1-Q5DMIpvIHvi1PONAykAPkZ0oNso5mBf2piHSDB7_kM4RLo5l4iOpku3xEnJ3D9yAifwcmGTvyu4rzHmfPFVRUlHMst2Sb1NJyxyzUw9T8fTUSRACawcpkVFj6EcWYU0MX9MLtV0f12C0NJGc8dvZf85jAIsQPp79hNNWuMKrQYliJlHPN7BQocuVHkkPevJX-aymwqysXVYAWwOzP-QI&skey=2df7b3f7f6d8a32a&v=v25) format('woff2');
+}
+@font-face {
+  font-family: 'Signika';
+  font-style: normal;
+  font-weight: 600;
+  src: url(https://fonts.gstatic.com/l/font?kit=vEFO2_JTCgwQ5ejvMV0Ox_Kg1UwJ0tKfX5bDhsncfY0XC3rYb1-Q5DMIpvIHvi1PONAykAPkZ0oNso5mBf2piHSDB7_kM4RLo5l4iOpku3xEnJ3D9yAifwcmGTvyu4rzHmfPFVRUlHMst2Sb1NJyxyzUw9T8fTUSRACawcpkVFj6EcWYU0MX9MLtV0f12C0NJGc8dvZf85jAIsQPp79hNNWuMKrQYliJlHPN7BQocuVHkkPevJX-aymwqysXVYAWwOzP-QI&skey=2df7b3f7f6d8a32a&v=v25) format('woff2');
+}

@@ -9,8 +9,10 @@ def scrape_bracket_region(region_regex, round_snake):
     print()
     print(region_regex)
     print()
-    start = soup.find('span', id=re.compile(region_regex)).parent
+    start = soup.find('span', id=re.compile(region_regex)).parent.parent
+    # print(start)
     table = start.find_next_sibling('table')
+    # print(table)
     table_rows = table.tbody.find_all('tr')
     # print(len(table_rows))
 
@@ -37,9 +39,11 @@ def scrape_bracket_region(region_regex, round_snake):
                 continue
         else:
             nums_unbold = re.findall('>\d+\**\\s*</td>', row_str)
+            # print(nums_unbold)
             for i in range(0, len(nums_unbold)):
                 nums_unbold[i] = nums_unbold[i].replace('>', '').replace('</td', '').replace('*', '').strip()
             nums_bold = re.findall('<b>\d+\**\s*</b>', row_str)
+            # print(nums_bold)
             for i in range(0, len(nums_bold)):
                 nums_bold[i] = nums_bold[i].replace('<b>', '').replace('</b>', '').replace('*', '').strip()
             if len(nums_unbold) == 2 and not nums_bold:
@@ -101,6 +105,7 @@ def scrape_bracket_region(region_regex, round_snake):
                 print(row_str)
                 print('ERROR: No team name found!')
                 quit()
+            # print(name)
 
         if winner:
             winningteam = name
@@ -114,6 +119,14 @@ def scrape_bracket_region(region_regex, round_snake):
             team2 = name
             team2_seed = seed
             team2_score = score
+
+            if not winner:
+                if team1_score > team2_score:
+                    winningteam = team1
+                    team1_win = True
+                else:
+                    winningteam = team2
+                    team1_win = False
 
             print()
             print(game_id)
@@ -163,7 +176,7 @@ page = requests.get(URL)
 soup = BeautifulSoup(page.content, 'html.parser')
 
 round_snake_regional = ['1', '2', '1', '3', '1', '2', '1', '4', '1', '2', '1', '3', '1', '2', '1']
-for region in ['West', 'East', 'South', 'Midwest']:
+for region in ['East', 'West', 'South', 'Midwest']:
     region_regex = region + '_regional*'
     scrape_bracket_region(region_regex, round_snake_regional)
 

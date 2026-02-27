@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+    <g class="logo-bars" transform="translate(0,0)" fill="rgb(45, 161, 95)">
+        <rect width="8" height="27" x="0" y="3" rx="1"></rect>
+        <rect width="8" height="16.65" x="12" y="13.35" rx="1"></rect>
+        <rect width="8" height="22.95" x="24" y="7.05" rx="1"></rect>
+    </g>
+</svg>
+

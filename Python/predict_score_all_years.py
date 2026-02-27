@@ -8,9 +8,10 @@ from sklearn.ensemble import AdaBoostClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 import csv
 import os
+import math
 
-NUM_PAST_YEARS = 11
-THIS_YEAR = 2024
+NUM_PAST_YEARS = 12
+THIS_YEAR = 2025
 
 FINAL_FOUR_SETUP_DICT = {}
 FINAL_FOUR_SETUP_DICT[2012] = [2, 0, 1, 3]
@@ -25,13 +26,13 @@ FINAL_FOUR_SETUP_DICT[2021] = [0, 1, 2, 3]
 FINAL_FOUR_SETUP_DICT[2022] = [0, 1, 2, 3]
 FINAL_FOUR_SETUP_DICT[2023] = [2, 1, 3, 0]
 FINAL_FOUR_SETUP_DICT[2024] = [1, 0, 2, 3]
-
+FINAL_FOUR_SETUP_DICT[2025] = [1, 0, 2, 3]
 
 df_games = pd.read_csv('../Data/GameCombinedData/All.csv')
 
 feat_list = [
               # 'Team__1',
-              'Seed__1',
+              # 'Seed__1',
               # 'Rk_AdjEM__1',
               # 'Conf__1',
               # 'Wins__1',
@@ -48,14 +49,14 @@ feat_list = [
               # 'Rk_Luck__1',
               'SOS_AdjEM__1',
               # 'Rk_SOS_AdjEM__1',
-              'SOS_AdjO__1',
+              # 'SOS_AdjO__1',
               # 'Rk_SOS_AdjO__1',
-              'SOS_AdjD__1',
+              # 'SOS_AdjD__1',
               # 'Rk_SOS_AdjD__1',
               # 'NCSOS_AdjEM__1',
               'Rk_NCSOS_AdjEM__1',
               # 'Team__2',
-              'Seed__2',
+              # 'Seed__2',
               'Rk_AdjEM__2',
               # 'Conf__2',
               # 'Wins__2',
@@ -72,44 +73,62 @@ feat_list = [
               # 'Rk_Luck__2',
               'SOS_AdjEM__2',
               # 'Rk_SOS_AdjEM__2',
-              'SOS_AdjO__2',
+              # 'SOS_AdjO__2',
               # 'Rk_SOS_AdjO__2',
-              'SOS_AdjD__2',
+              # 'SOS_AdjD__2',
               # 'Rk_SOS_AdjD__2',
               # 'NCSOS_AdjEM__2',
-              # 'Rk_NCSOS_AdjEM__2',
+              'Rk_NCSOS_AdjEM__2',
               # 'Round',
             ]
 
 X_train = df_games[feat_list]
+# for row in X_train:
+#     print(row)
 # print(X_train.shape)
+# print(X_train)
+# for index, row in X_train.iterrows():
+#     for value in row:
+#         if math.isnan(value):
+#             print(row)
 
 y = df_games['Win__1']
 # print(y.shape)
+# print(y)
 
-# MODEL = 'Logistic'
+# MODEL = 'Logistic_Newton'
+# model = LogisticRegression(random_state=0, solver='newton-cg', max_iter=1000).fit(X_train, y)
+# MODEL = 'Logistic_LBFGS'
 # model = LogisticRegression(random_state=0, solver='lbfgs', max_iter=1000).fit(X_train, y)
-# MODEL = 'KNN'
-# model = KNeighborsClassifier(n_neighbors=3).fit(X_train, y)
-# MODEL = 'SVC_RBF'
-# model = SVC(gamma='auto').fit(X_train, y)
+# MODEL = 'Logistic_Liblinear'
+# model = LogisticRegression(random_state=0, solver='liblinear', max_iter=1000).fit(X_train, y)
+# MODEL = 'KNN3'
+# model = KNeighborsClassifier(n_neighbors=5).fit(X_train, y)
+# MODEL = 'KNN5'
+# model = KNeighborsClassifier(n_neighbors=5).fit(X_train, y)
+MODEL = 'SVC_RBF'
+model = SVC(gamma='auto').fit(X_train, y)
 # MODEL = 'SVC_Linear'
 # model = SVC(kernel='linear').fit(X_train, y)
+# MODEL = 'SVC_Poly_deg2'
+# model = SVC(kernel='poly', degree=2).fit(X_train, y)
+# MODEL = 'SVC_Poly_deg3'
+# model = SVC(kernel='poly', degree=3).fit(X_train, y)
 # MODEL = 'DecisionTree'
 # model = DecisionTreeClassifier().fit(X_train, y)
 # MODEL = 'RandomForest'
 # model = RandomForestClassifier().fit(X_train, y)
 # MODEL = 'AdaBoost'
 # model = AdaBoostClassifier().fit(X_train, y)
-MODEL = 'GpClass'
-model = GaussianProcessClassifier().fit(X_train, y)
+# MODEL = 'GpClass'
+# model = GaussianProcessClassifier().fit(X_train, y)
 
 print(model.score(X_train, y))
 # print(type(model.predict(X_train)))
 
 total_num_correct_by_round = [0 for i in range(0, 7)]
 total_score = 0
-for year in range(2012, 2025):
+for year in range(2012, 2026):
     if year == 2020:
         continue
 
@@ -236,6 +255,7 @@ for year in range(2012, 2025):
     print()
 
 summary_str = 'OVERALL PERFORMANCE\n'
+summary_str += f'Train Score = {model.score(X_train, y)}\n'
 summary_str += f'ROUND 1: {total_num_correct_by_round[1]} for {32 * NUM_PAST_YEARS}, {total_num_correct_by_round[1] / (32 * NUM_PAST_YEARS) * 100:.2f}%, {10 * total_num_correct_by_round[1]} points\n'
 summary_str += f'ROUND 2: {total_num_correct_by_round[2]} for {16 * NUM_PAST_YEARS}, {total_num_correct_by_round[2] / (16 * NUM_PAST_YEARS) * 100:.2f}%, {20 * total_num_correct_by_round[2]} points\n'
 summary_str += f'ROUND 3: {total_num_correct_by_round[3]} for {8 * NUM_PAST_YEARS}, {total_num_correct_by_round[3] / (8 * NUM_PAST_YEARS) * 100:.2f}%, {40 * total_num_correct_by_round[3]} points\n'
