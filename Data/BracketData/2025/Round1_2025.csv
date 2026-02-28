@@ -1,33 +1,33 @@
-Team__1,Seed__1,Team__2,Seed__2
-Auburn,1,Alabama State,16
-Louisville,8,Creighton,9
-Michigan,5,UC San Diego,12
-Texas A&M,4,Yale,13
-Ole Miss,6,North Carolina,11
-Iowa State,3,Lipscomb,14
-Marquette,7,New Mexico State,10
-Michigan State,2,Bryant,15
-Florida,1,Norfolk State,16
-UConn,8,Oklahoma,9
-Memphis,5,Colorado State,12
-Maryland,4,Grand Canyon,13
-Missouri,6,Drake,11
-Texas Tech,3,UNC Wilmington,14
-Kansas,7,Arkansas,10
-St. John's,2,Omaha,15
-Duke,1,Mount St. Mary's,16
-Mississippi State,8,Baylor,9
-Oregon,5,Liberty,12
-Arizona,4,Akron,13
-BYU,6,VCU,11
-Wisconsin,3,Montana,14
-Saint Mary's,7,Vanderbilt,10
-Alabama,2,Robert Morris,15
-Houston,1,SIU Edwardsville,16
-Gonzaga,8,Georgia,9
-Clemson,5,McNeese,12
-Purdue,4,High Point,13
-Illinois,6,Xavier,11
-Kentucky,3,Troy,14
-UCLA,7,Utah State,10
-Tennessee,2,Wofford,15
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Auburn,1,83,Alabama St.,16,63,Auburn,True
+Louisville,8,75,Creighton,9,89,Creighton,False
+Michigan,5,68,UC San Diego,12,65,Michigan,True
+Texas A&M,4,80,Yale,13,71,Texas A&M,True
+Ole Miss,6,71,North Carolina,11,64,Ole Miss,True
+Iowa St.,3,82,Lipscomb,14,55,Iowa St.,True
+Marquette,7,66,New Mexico,10,75,New Mexico,False
+Michigan St.,2,87,Bryant,15,62,Michigan St.,True
+Florida,1,95,Norfolk St.,16,69,Florida,True
+UConn,8,67,Oklahoma,9,59,UConn,True
+Memphis,5,70,Colorado St.,12,78,Colorado St.,False
+Maryland,4,81,Grand Canyon,13,49,Maryland,True
+Missouri,6,57,Drake,11,67,Drake,False
+Texas Tech,3,82,UNC Wilmington,14,72,Texas Tech,True
+Kansas,7,72,Arkansas,10,79,Arkansas,False
+St. John's,2,83,Omaha,15,53,St. John's,True
+Duke,1,93,Mount St. Mary's,16,49,Duke,True
+Mississippi St.,8,72,Baylor,9,75,Baylor,False
+Oregon,5,81,Liberty,12,52,Oregon,True
+Arizona,4,93,Akron,13,65,Arizona,True
+BYU,6,80,VCU,11,71,BYU,True
+Wisconsin,3,85,Montana,14,66,Wisconsin,True
+Saint Mary's,7,59,Vanderbilt,10,56,Saint Mary's,True
+Alabama,2,90,Robert Morris,15,81,Alabama,True
+Houston,1,78,SIU Edwardsville,16,40,Houston,True
+Gonzaga,8,89,Georgia,9,68,Gonzaga,True
+Clemson,5,67,McNeese,12,69,McNeese,False
+Purdue,4,75,High Point,13,63,Purdue,True
+Illinois,6,86,Xavier,11,73,Illinois,True
+Kentucky,3,76,Troy,14,57,Kentucky,True
+UCLA,7,72,Utah St.,10,47,UCLA,True
+Tennessee,2,77,Wofford,15,62,Tennessee,True

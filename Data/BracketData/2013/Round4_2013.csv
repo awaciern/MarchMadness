@@ -1,5 +1,5 @@
-Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
-Wichita State,9,70,Ohio State,2,66,Wichita State,True
-Syracuse,4,55,Marquette,3,39,Syracuse,True
-Michigan,4,79,Florida,3,59,Michigan,True
-Louisville,1,85,Duke,2,63,Louisville,True
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Louisville,1,85,Duke,2,63,Duke,False
+Wichita St.,9,70,Ohio St.,2,66,Ohio St.,False
+Michigan,4,79,Florida,3,59,Florida,False
+Syracuse,4,55,Marquette,3,39,Marquette,False

@@ -1,4 +1,4 @@
-Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
 Gonzaga,1,68,Arkansas,4,74,Arkansas,False
 Texas Tech,3,73,Duke,2,78,Duke,False
 North Carolina,8,73,UCLA,4,66,North Carolina,True
@@ -6,4 +6,4 @@ Purdue,3,64,Saint Peter's,15,67,Saint Peter's,False
 Arizona,1,60,Houston,5,72,Houston,False
 Michigan,11,55,Villanova,2,63,Villanova,False
 Kansas,1,66,Providence,4,61,Kansas,True
-Iowa State,11,56,Miami (FL),10,70,Miami (FL),False
+Iowa St.,11,56,Miami (FL),10,70,Miami (FL),False

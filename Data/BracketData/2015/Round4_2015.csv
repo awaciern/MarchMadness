@@ -1,5 +1,5 @@
-Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
-Wisconsin,1,85,Arizona,2,78,Wisconsin,True
-Louisville,4,70,Michigan State,7,76,Michigan State,False
-Duke,1,66,Gonzaga,2,52,Duke,True
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
 Kentucky,1,68,Notre Dame,3,66,Kentucky,True
+Wisconsin,1,85,Arizona,2,78,Wisconsin,True
+Louisville,4,70,Michigan St.,7,76,Michigan St.,False
+Duke,1,66,Gonzaga,2,52,Duke,True

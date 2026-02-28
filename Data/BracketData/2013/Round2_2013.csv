@@ -1,17 +1,17 @@
-Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
-Gonzaga,1,70,Wichita State,9,76,Wichita State,False
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Louisville,1,82,Colorado St.,8,56,Colorado St.,False
+Oregon,12,74,Saint Louis,4,57,Saint Louis,False
+Memphis,6,48,Michigan St.,3,70,Michigan St.,False
+Creighton,7,50,Duke,2,66,Duke,False
+Gonzaga,1,70,Wichita St.,9,76,Wichita St.,False
 Ole Miss,12,74,La Salle,13,76,La Salle,False
-Arizona,6,74,Harvard,14,51,Arizona,True
-Iowa State,10,75,Ohio State,2,78,Ohio State,False
-Indiana,1,58,Temple,9,52,Indiana,True
+Arizona,6,74,Harvard,14,51,Harvard,False
+Iowa St.,10,75,Ohio St.,2,78,Ohio St.,False
+Kansas,1,70,North Carolina,8,58,North Carolina,False
+VCU,5,53,Michigan,4,78,Michigan,False
+Minnesota,11,64,Florida,3,78,Florida,False
+San Diego St.,7,71,Fla. Gulf Coast,15,81,Fla. Gulf Coast,False
+Indiana,1,58,Temple,9,52,Temple,False
 California,12,60,Syracuse,4,66,Syracuse,False
 Butler,6,72,Marquette,3,74,Marquette,False
 Illinois,7,59,Miami (FL),2,63,Miami (FL),False
-Kansas,1,70,North Carolina,8,58,Kansas,True
-VCU,5,53,Michigan,4,78,Michigan,False
-Minnesota,11,64,Florida,3,78,Florida,False
-San Diego State,7,71,Florida Gulf Coast,15,81,Florida Gulf Coast,False
-Louisville,1,82,Colorado State,8,56,Louisville,True
-Oregon,12,74,Saint Louis,4,57,Oregon,True
-Memphis,6,48,Michigan State,3,70,Michigan State,False
-Creighton,7,50,Duke,2,66,Duke,False
