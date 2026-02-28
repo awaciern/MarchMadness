@@ -1,35 +1,34 @@
+import argparse
 import pandas as pd
+
+parser = argparse.ArgumentParser(description='Find team name mismatches between bracket and KenPom data.')
+parser.add_argument('bracket_files', nargs='+', help='One or more bracket CSV files (e.g. Round1_2025.csv Round2_2025.csv)')
+parser.add_argument('kenpom_file', help='KenPom CSV file (e.g. ../Data/KenPomData/2025.csv)')
+args = parser.parse_args()
 
 games_mismatch_names = []
 kp_mismatch_names = []
-for year in range(2025, 2026):
-    if year == 2020:
-        continue
-    # df_games = pd.read_csv('../Data/GameData/' + str(year) + '.csv')
-    df_games = pd.read_csv('../Data/BracketData/2025/Round1_' + str(year) + '.csv')
-    df_kp = pd.read_csv('../Data/KenPomData/' + str(year) + '.csv')
-    # print(df_bracket)
-    # print(df_kp['Team'].values)
+
+df_kp = pd.read_csv(args.kenpom_file)
+
+for bracket_file in args.bracket_files:
+    df_games = pd.read_csv(bracket_file)
+
     for index, row in df_games.iterrows():
-        team1 = row['Team__1']
-        # print(team1)
-        # print(df_kp.loc[df_kp['Team'] == team1])
+        team1 = row['Team1']
         if team1 not in df_kp['Team'].values and \
            team1 not in games_mismatch_names:
             games_mismatch_names.append(team1)
 
-        team2 = row['Team__2']
-        # print(team2)
-        # print(df_kp.loc[df_kp['Team'] == team2])
-        # print()
+        team2 = row['Team2']
         if team2 not in df_kp['Team'].values and \
            team2 not in games_mismatch_names:
             games_mismatch_names.append(team2)
 
     for index, row in df_kp.iterrows():
         team = row['Team']
-        if team not in df_games['Team__1'].values and \
-           team not in df_games['Team__2'].values and \
+        if team not in df_games['Team1'].values and \
+           team not in df_games['Team2'].values and \
            team not in kp_mismatch_names:
             kp_mismatch_names.append(team)
 
