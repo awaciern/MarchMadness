@@ -36,9 +36,7 @@ from sklearn.model_selection import train_test_split
 # Configuration
 # ---------------------------------------------------------------------------
 
-THIS_YEAR = 2025
-ALL_YEARS = [y for y in range(2012, THIS_YEAR + 1) if y != 2020]
-NUM_EVAL_YEARS = len(ALL_YEARS) - 1  # current year is not evaluated
+ALL_YEARS = [y for y in range(2012, 2026) if y != 2020]  # all completed years through 2025
 
 FEATURE_LIST = [
     'WinPct__1', 'AdjEM__1', 'AdjO__1', 'AdjD__1', 'AdjT__1', 'Luck__1',
@@ -165,8 +163,8 @@ def simulate_bracket(
     model,
     data_root: Path,
     year: int,
-    this_year: int,
-    ff_pairings: List[Tuple[int, int]],
+    this_year: int = None,
+    ff_pairings: List[Tuple[int, int]] = None,
 ) -> Tuple[list, list, list, list, int]:
     """
     Simulate filling out a bracket from Round 1 using the model.
@@ -178,7 +176,9 @@ def simulate_bracket(
         num_correct_by_round  – list of 6 ints  (zeros for current year)
         score                 – total ESPN-style bracket score (0 for current year)
     """
-    is_current = (year == this_year)
+    is_current = (this_year is not None and year == this_year)
+    if ff_pairings is None:
+        ff_pairings = [(0, 1), (2, 3)]
 
     pred_teams_by_round: list = []
     pred_seeds_by_round: list = []
@@ -325,6 +325,15 @@ def main():
         help='Path under which Predictions/<model>/ outputs are written.',
     )
     parser.add_argument(
+        '--this-year',
+        type=int,
+        default=None,
+        help=(
+            'Treat this year as the "current" year: its bracket is predicted but not scored. '
+            'If omitted, all years are treated as historical and fully scored.'
+        ),
+    )
+    parser.add_argument(
         '--final-four-pairings',
         default='0-1,2-3',
         help=(
@@ -340,7 +349,15 @@ def main():
     output_root = Path(args.output_root) / 'Predictions' / args.model
     output_root.mkdir(parents=True, exist_ok=True)
 
+    this_year = args.this_year
     current_year_ff_pairings = parse_ff_pairings_arg(args.final_four_pairings)
+
+    # Build the list of years to process: all completed years, plus the current
+    # year appended at the end if it was supplied and isn't already in ALL_YEARS.
+    years_to_process = list(ALL_YEARS)
+    if this_year is not None and this_year not in years_to_process:
+        years_to_process.append(this_year)
+    num_eval_years = len(years_to_process) - (1 if this_year is not None else 0)
 
     # -----------------------------------------------------------------------
     # Train model once on a random train/test split of all historical data.
@@ -359,15 +376,19 @@ def main():
     total_correct_by_round = [0] * 7   # index 0 unused; rounds 1-6 at [1]-[6]
     total_score = 0
 
-    for year in ALL_YEARS:
+    for year in years_to_process:
         print(f'\n{"="*50}\n{year}\n{"="*50}')
-        is_current = (year == THIS_YEAR)
+        is_current = (this_year is not None and year == this_year)
 
         # Determine Final Four pairings.
         if is_current:
             ff_pairings = current_year_ff_pairings
         else:
-            ff_pairings = derive_ff_pairings_from_data(data_root, year)
+            try:
+                ff_pairings = derive_ff_pairings_from_data(data_root, year)
+            except Exception as e:
+                print(f'  WARNING: could not derive FF pairings ({e}), using default 0-1,2-3')
+                ff_pairings = [(0, 1), (2, 3)]
 
         print(f'  FF pairings (R4 indices): {ff_pairings}')
 
@@ -376,7 +397,7 @@ def main():
             model=model,
             data_root=data_root,
             year=year,
-            this_year=THIS_YEAR,
+            this_year=this_year,
             ff_pairings=ff_pairings,
         )
 
@@ -397,20 +418,20 @@ def main():
     games_per_round = [32, 16, 8, 4, 2, 1]
     summary_lines = ['OVERALL PERFORMANCE']
     for rnd in range(1, 7):
-        total_games = games_per_round[rnd - 1] * NUM_EVAL_YEARS
+        total_games = games_per_round[rnd - 1] * num_eval_years
         n = total_correct_by_round[rnd]
-        pct = n / total_games * 100
+        pct = n / total_games * 100 if total_games else 0
         pts = n * (2 ** (rnd - 1)) * 10
         summary_lines.append(
             f'  Round {rnd}: {n}/{total_games} ({pct:.1f}%), {pts} pts'
         )
-    total_games_all = 63 * NUM_EVAL_YEARS
+    total_games_all = 63 * num_eval_years
     total_correct_all = sum(total_correct_by_round)
     summary_lines.append(
         f'  All rounds: {total_correct_all}/{total_games_all} '
         f'({total_correct_all / total_games_all * 100:.1f}%)'
     )
-    summary_lines.append(f'  Avg bracket score: {total_score / NUM_EVAL_YEARS:.1f}')
+    summary_lines.append(f'  Avg bracket score: {total_score / num_eval_years:.1f}')
     summary_lines.append(f'  Train accuracy: {model.score(X_tr, y_tr):.4f}')
     summary_lines.append(f'  Test  accuracy: {model.score(X_te, y_te):.4f}')
 
