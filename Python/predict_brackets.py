@@ -188,6 +188,9 @@ def simulate_bracket(
 
     # The predicted winners from the previous round (used to build rnd 2+ matchups).
     prev_pred_teams: List[str] = []
+    # Seed lookup built from Round 1 so later rounds can fill in seeds when KenPom
+    # has blank seeds (e.g. current year loaded with --no-seeds).
+    team_seed_map: dict = {}
 
     for rnd in range(1, 7):
         if rnd == 1 or not is_current:
@@ -195,6 +198,12 @@ def simulate_bracket(
             # the real Winning_Team column) to evaluate accuracy.
             df_round = load_bracket_round(data_root, year, rnd)
         # For rounds 2-6 of the current year, df_round is built from predictions.
+
+        if rnd == 1:
+            # Populate seed map from Round 1 for use in later rounds.
+            for _, _row in df_round.iterrows():
+                team_seed_map[_row['Team__1']] = _row['Seed__1']
+                team_seed_map[_row['Team__2']] = _row['Seed__2']
 
         if rnd > 1:
             # Capture actual winning teams before rebuilding df_round (past years only).
@@ -223,6 +232,11 @@ def simulate_bracket(
             df_matchups = pd.DataFrame(matchup_teams, columns=['Team__1', 'Team__2'])
             df_kp = load_kenpom(data_root, year)
             df_round = attach_kenpom(df_matchups, df_kp)
+
+            # Fill seeds from map in case KenPom has blank seeds (e.g. --no-seeds year).
+            if df_round['Seed__1'].isna().any() or df_round['Seed__2'].isna().any():
+                df_round['Seed__1'] = df_round['Team__1'].map(team_seed_map).fillna(df_round['Seed__1'])
+                df_round['Seed__2'] = df_round['Team__2'].map(team_seed_map).fillna(df_round['Seed__2'])
 
             if not is_current:
                 df_round['Winning_Team'] = actual_winners
