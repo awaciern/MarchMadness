@@ -2,12 +2,21 @@
 Converts a KenPom .txt file (tab-separated, seed embedded in team name)
 to the same CSV format used by the KenPomData CSV files.
 
-Usage: python convert_kenpom_txt.py <input_txt> <output_csv>
-Example: python convert_kenpom_txt.py ../Data/KenPomData/2025.txt ../Data/KenPomData/2025.csv
+Usage:
+    python convert_kenpom_txt.py <input_txt> <output_csv>
+    python convert_kenpom_txt.py <input_txt> <output_csv> --no-seeds
+
+By default, only teams with a seed embedded in the team name are included
+(i.e. tournament teams only).  Pass --no-seeds to include every team in the
+file and leave the Seed column blank.
+
+Example:
+    python convert_kenpom_txt.py ../Data/KenPomData/2025.txt ../Data/KenPomData/2025.csv
+    python convert_kenpom_txt.py ../Data/KenPomData/2026.txt ../Data/KenPomData/2026.csv --no-seeds
 """
 
+import argparse
 import csv
-import sys
 
 HEADINGS = [
     'Rk_AdjEM', 'Team', 'Seed', 'Conf', 'W-L', 'Wins', 'Losses', 'WinPct',
@@ -22,7 +31,7 @@ def parse_float(val):
     """Strip leading + and convert to float, handling bare decimal forms like -.026"""
     return float(val)
 
-def parse_row(cols):
+def parse_row(cols, no_seeds=False):
     """
     Expected tab-split column positions in the txt file:
     0:  Rk
@@ -52,11 +61,15 @@ def parse_row(cols):
 
     # Extract seed from end of team field
     team_field = cols[1]
-    parts = team_field.rsplit(' ', 1)
-    if len(parts) != 2 or not parts[1].isdigit():
-        return None  # no seed — skip this team
-    team_name = parts[0]
-    seed = int(parts[1])
+    if no_seeds:
+        team_name = team_field
+        seed = ''
+    else:
+        parts = team_field.rsplit(' ', 1)
+        if len(parts) != 2 or not parts[1].isdigit():
+            return None  # no seed — skip this team
+        team_name = parts[0]
+        seed = int(parts[1])
 
     wl = cols[3]
     wins, losses = wl.split('-')
@@ -91,12 +104,18 @@ def parse_row(cols):
         int(cols[20]),                  # Rk_NCSOS_AdjEM
     ]
 
-if len(sys.argv) != 3:
-    print("Usage: python convert_kenpom_txt.py <input_txt> <output_csv>")
-    sys.exit(1)
+parser = argparse.ArgumentParser(description='Convert a KenPom .txt file to CSV.')
+parser.add_argument('input_txt', help='Path to the input .txt file.')
+parser.add_argument('output_csv', help='Path for the output .csv file.')
+parser.add_argument(
+    '--no-seeds', action='store_true',
+    help='Include all teams; leave Seed blank (use when seeds are not yet assigned).'
+)
+args = parser.parse_args()
 
-input_path = sys.argv[1]
-output_path = sys.argv[2]
+input_path  = args.input_txt
+output_path = args.output_csv
+no_seeds    = args.no_seeds
 
 rows = []
 with open(input_path, 'r') as f:
@@ -106,7 +125,7 @@ with open(input_path, 'r') as f:
         # Skip header/separator lines — first column must be a plain integer rank
         if not cols[0].strip().isdigit():
             continue
-        row = parse_row(cols)
+        row = parse_row(cols, no_seeds=no_seeds)
         if row is not None:
             rows.append(row)
 
