@@ -1,11 +1,11 @@
 OVERALL PERFORMANCE
-  Round 1: 287/384 (74.7%), 2870 pts
-  Round 2: 125/192 (65.1%), 2500 pts
-  Round 3: 49/96 (51.0%), 1960 pts
-  Round 4: 19/48 (39.6%), 1520 pts
-  Round 5: 7/24 (29.2%), 1120 pts
-  Round 6: 3/12 (25.0%), 960 pts
-  All rounds: 490/756 (64.8%)
-  Avg bracket score: 910.8
-  Train accuracy: 0.7115
-  Test  accuracy: 0.7560
+  Round 1: 253/384 (65.9%), 2530 pts
+  Round 2: 99/192 (51.6%), 1980 pts
+  Round 3: 42/96 (43.8%), 1680 pts
+  Round 4: 15/48 (31.2%), 1200 pts
+  Round 5: 4/24 (16.7%), 640 pts
+  Round 6: 2/12 (16.7%), 640 pts
+  All rounds: 415/756 (54.9%)
+  Avg bracket score: 722.5
+  Train accuracy: 0.7080
+  Test  accuracy: 0.7011
