@@ -276,7 +276,12 @@ def build_and_train_model(model_key: str, X_train: pd.DataFrame, y_train: pd.Ser
                           model_params: dict = None):
     if model_key not in MODEL_REGISTRY:
         raise ValueError(f"Unknown model '{model_key}'. Options: {list(MODEL_REGISTRY)}")
-    estimator = MODEL_REGISTRY[model_key](**(model_params or {}))
+    params = dict(model_params or {})
+    # SVC requires probability=True to support predict_proba; inject it unless
+    # the caller explicitly set probability=False.
+    if model_key == 'svc' and 'probability' not in params:
+        params['probability'] = True
+    estimator = MODEL_REGISTRY[model_key](**params)
     estimator.fit(X_train, y_train)
     return estimator
 
@@ -293,13 +298,14 @@ def simulate_bracket(
     ff_pairings: List[Tuple[int, int]] = None,
     feature_list: list = None,
     cat_encoders: dict = None,
-) -> Tuple[list, list, list, list, int]:
+) -> Tuple[list, list, list, list, list, int]:
     """
     Simulate filling out a bracket from Round 1 using the model.
 
     Returns:
         pred_teams_by_round   – list of 6 lists of team names
         pred_seeds_by_round   – list of 6 lists of seeds
+        pred_probs_by_round   – list of 6 lists of win-prob floats (None if model lacks predict_proba)
         correct_by_round      – list of 6 lists of bools (empty list for current year)
         num_correct_by_round  – list of 6 ints  (zeros for current year)
         score                 – total ESPN-style bracket score (0 for current year)
@@ -319,7 +325,8 @@ def simulate_bracket(
 
     pred_teams_by_round: list = []
     pred_seeds_by_round: list = []
-    correct_by_round:    list = []
+    pred_probs_by_round:  list = []
+    correct_by_round:     list = []
     num_correct_by_round: list = []
     total_score = 0
 
@@ -389,6 +396,15 @@ def simulate_bracket(
             df_round = apply_label_encoders(df_round, cat_encoders)
         X = df_round[feature_list]
         preds = model.predict(X)
+        # Win probability for the predicted winner (None if model lacks predict_proba).
+        try:
+            proba = model.predict_proba(X)
+            win_probs = [
+                proba[k, 1] if preds[k] else proba[k, 0]
+                for k in range(len(preds))
+            ]
+        except AttributeError:
+            win_probs = [None] * len(preds)
         df_round = df_round.copy()
         df_round['Pred_Win__1'] = preds
 
@@ -400,7 +416,11 @@ def simulate_bracket(
 
         pred_teams_by_round.append(pred_teams.tolist())
         pred_seeds_by_round.append(pred_seeds.tolist())
+        pred_probs_by_round.append(win_probs)
         prev_pred_teams = pred_teams.tolist()
+
+        def _prob_str(p):
+            return f'{p:.0%}' if p is not None else ''
 
         if not is_current:
             correct = (pred_teams == df_round['Winning_Team']).tolist()
@@ -410,7 +430,7 @@ def simulate_bracket(
             num_correct_by_round.append(n_correct)
             total_score += round_score
             picks_str = '  '.join(
-                f'[{pred_seeds.iloc[k]}]{pred_teams.iloc[k]} {"✓" if correct[k] else "✗"}'
+                f'[{pred_seeds.iloc[k]}]{pred_teams.iloc[k]} {_prob_str(win_probs[k])} {"✓" if correct[k] else "✗"}'
                 for k in range(len(pred_teams))
             )
             print(f'  Round {rnd} ({n_correct} correct, {round_score} pts): {picks_str}')
@@ -418,12 +438,12 @@ def simulate_bracket(
             correct_by_round.append([])
             num_correct_by_round.append(0)
             picks_str = '  '.join(
-                f'[{pred_seeds.iloc[k]}]{pred_teams.iloc[k]}'
+                f'[{pred_seeds.iloc[k]}]{pred_teams.iloc[k]} {_prob_str(win_probs[k])}'
                 for k in range(len(pred_teams))
             )
             print(f'  Round {rnd}: {picks_str}')
 
-    return pred_teams_by_round, pred_seeds_by_round, correct_by_round, num_correct_by_round, total_score
+    return pred_teams_by_round, pred_seeds_by_round, pred_probs_by_round, correct_by_round, num_correct_by_round, total_score
 
 
 # ---------------------------------------------------------------------------
@@ -433,6 +453,7 @@ def simulate_bracket(
 def format_pred_file(
     pred_teams_by_round,
     pred_seeds_by_round,
+    pred_probs_by_round,
     correct_by_round,
     num_correct_by_round,
     total_score,
@@ -450,7 +471,9 @@ def format_pred_file(
             parts.append(f'{n_cor} for {n}')
             parts.append(str(round_score))
         for j in range(n):
-            entry = f'[{pred_seeds_by_round[rnd_idx][j]}]{pred_teams_by_round[rnd_idx][j]}'
+            prob = pred_probs_by_round[rnd_idx][j]
+            prob_tag = f'({prob:.2f})' if prob is not None else ''
+            entry = f'[{pred_seeds_by_round[rnd_idx][j]}]{pred_teams_by_round[rnd_idx][j]}{prob_tag}'
             if not is_current:
                 entry += f'({int(correct_by_round[rnd_idx][j])})'
             parts.append(entry)
@@ -648,7 +671,7 @@ def main():
         print(f'  FF pairings (R4 indices): {ff_pairings}')
 
         # Simulate bracket.
-        pred_teams, pred_seeds, correct, n_correct, score = simulate_bracket(
+        pred_teams, pred_seeds, pred_probs, correct, n_correct, score = simulate_bracket(
             model=model,
             data_root=data_root,
             year=year,
@@ -672,7 +695,7 @@ def main():
         })
 
         # Write prediction file.
-        pred_str = format_pred_file(pred_teams, pred_seeds, correct, n_correct, score, is_current)
+        pred_str = format_pred_file(pred_teams, pred_seeds, pred_probs, correct, n_correct, score, is_current)
         out_path = output_root / f'{year}.csv'
         out_path.write_text(pred_str)
 

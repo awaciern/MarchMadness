@@ -1,7 +1,7 @@
-22 for 32,220,[1]Virginia(0),[8]Creighton(0),[5]Kentucky(1),[4]Arizona(0),[6]Miami (FL)(0),[3]Tennessee(1),[7]Nevada(1),[2]Cincinnati(1),[1]Xavier(1),[9]Florida State(1),[5]Ohio State(1),[4]Gonzaga(1),[11]San Diego State(0),[3]Michigan(1),[7]Texas A&M(1),[2]North Carolina(1),[1]Villanova(1),[8]Virginia Tech(0),[12]Murray State(0),[13]Marshall(1),[6]Florida(1),[3]Texas Tech(1),[10]Butler(1),[2]Purdue(1),[1]Kansas(1),[9]North Carolina State(0),[12]New Mexico State(0),[4]Auburn(1),[11]Syracuse(1),[3]Michigan State(1),[10]Oklahoma(0),[2]Duke(1)
-9 for 16,180,[8]Creighton(0),[5]Kentucky(1),[3]Tennessee(0),[7]Nevada(1),[9]Florida State(1),[4]Gonzaga(1),[3]Michigan(1),[2]North Carolina(0),[1]Villanova(1),[13]Marshall(0),[3]Texas Tech(1),[2]Purdue(1),[9]North Carolina State(0),[4]Auburn(0),[3]Michigan State(0),[2]Duke(1)
-3 for 8,120,[5]Kentucky(0),[3]Tennessee(0),[4]Gonzaga(0),[3]Michigan(1),[1]Villanova(1),[2]Purdue(0),[9]North Carolina State(0),[2]Duke(1)
-2 for 4,160,[3]Tennessee(0),[3]Michigan(1),[1]Villanova(1),[2]Duke(0)
-2 for 2,320,[3]Michigan(1),[1]Villanova(1)
-1 for 1,320,[1]Villanova(1)
+22 for 32,220,[1]Virginia(0.60)(0),[8]Creighton(0.60)(0),[5]Kentucky(1.00)(1),[4]Arizona(0.60)(0),[6]Miami (FL)(0.60)(0),[3]Tennessee(0.80)(1),[7]Nevada(0.80)(1),[2]Cincinnati(0.80)(1),[1]Xavier(0.80)(1),[9]Florida State(0.80)(1),[5]Ohio State(0.60)(1),[4]Gonzaga(0.60)(1),[11]San Diego State(0.60)(0),[3]Michigan(0.60)(1),[7]Texas A&M(0.60)(1),[2]North Carolina(1.00)(1),[1]Villanova(1.00)(1),[8]Virginia Tech(0.80)(0),[12]Murray State(0.60)(0),[13]Marshall(0.60)(1),[6]Florida(1.00)(1),[3]Texas Tech(0.60)(1),[10]Butler(0.60)(1),[2]Purdue(1.00)(1),[1]Kansas(1.00)(1),[9]North Carolina State(0.60)(0),[12]New Mexico State(0.60)(0),[4]Auburn(0.60)(1),[11]Syracuse(0.60)(1),[3]Michigan State(0.60)(1),[10]Oklahoma(0.80)(0),[2]Duke(0.80)(1)
+9 for 16,180,[8]Creighton(0.60)(0),[5]Kentucky(0.60)(1),[3]Tennessee(0.80)(0),[7]Nevada(0.60)(1),[9]Florida State(0.60)(1),[4]Gonzaga(0.60)(1),[3]Michigan(0.80)(1),[2]North Carolina(0.60)(0),[1]Villanova(1.00)(1),[13]Marshall(0.80)(0),[3]Texas Tech(0.60)(1),[2]Purdue(0.60)(1),[9]North Carolina State(0.60)(0),[4]Auburn(1.00)(0),[3]Michigan State(0.80)(0),[2]Duke(0.80)(1)
+3 for 8,120,[5]Kentucky(0.60)(0),[3]Tennessee(0.80)(0),[4]Gonzaga(0.60)(0),[3]Michigan(0.60)(1),[1]Villanova(1.00)(1),[2]Purdue(1.00)(0),[9]North Carolina State(0.60)(0),[2]Duke(0.60)(1)
+2 for 4,160,[3]Tennessee(0.60)(0),[3]Michigan(1.00)(1),[1]Villanova(0.80)(1),[2]Duke(0.80)(0)
+2 for 2,320,[3]Michigan(0.80)(1),[1]Villanova(0.60)(1)
+1 for 1,320,[1]Villanova(0.60)(1)
 39 for 63,1320
