@@ -1,9 +1,14 @@
 """
 predict_brackets.py
 
-Trains a model (leave-one-year-out to prevent data leakage), simulates filling
-out the tournament bracket from Round 1 forward, and evaluates accuracy for each
-historical year.  The current year's bracket is also filled out and saved.
+For each historical year, trains a leave-one-year-out model (all other years as
+training data) to prevent data leakage, evaluates it on that year's game data,
+and simulates filling out that year's tournament bracket.  After all years are
+processed, also trains a traditional 67/33 random-split model on the full
+historical dataset and reports its accuracy for reference.
+
+The current year's bracket (--this-year) is predicted using a model trained on
+all available historical data; no test accuracy is reported for it.
 
 Final Four pairings (Round 5)
 - Past years: derived automatically from the actual Round 5 CSV by comparing its
@@ -537,36 +542,61 @@ def main():
     num_eval_years = len(years_to_process) - (1 if this_year is not None else 0)
 
     # -----------------------------------------------------------------------
-    # Train model once on a random train/test split of all historical data.
+    # Load the full game dataset once (used to build per-year training sets).
     # -----------------------------------------------------------------------
-    df_all = load_combined_games(data_root)
-    # Drop rows where any selected feature is NaN (e.g. BT__ columns that are
-    # missing for non-tournament teams when using --expert barttorvik).
-    pre_drop = len(df_all)
-    df_all = df_all.dropna(subset=feature_list)
-    dropped = pre_drop - len(df_all)
+    df_all_raw = load_combined_games(data_root)
+    pre_drop = len(df_all_raw)
+    df_all_raw = df_all_raw.dropna(subset=feature_list)
+    dropped = pre_drop - len(df_all_raw)
     if dropped:
-        print(f'Note: dropped {dropped}/{pre_drop} training rows with NaN in selected features.')
-    # Fit label encoders on training data for any categorical features, then encode.
-    cat_encoders = fit_label_encoders(df_all, cat_cols) if cat_cols else {}
-    if cat_encoders:
-        df_all = apply_label_encoders(df_all, cat_encoders)
-    X_all, y_all = df_all[feature_list], df_all['Win__1']
-    X_tr, X_te, y_tr, y_te = train_test_split(X_all, y_all, test_size=0.33, random_state=42)
-    model = build_and_train_model(args.model, X_tr, y_tr)
-    print(f'Model: {args.model}')
-    print(f'  Train accuracy: {model.score(X_tr, y_tr):.4f}')
-    print(f'  Test  accuracy: {model.score(X_te, y_te):.4f}')
+        print(f'Note: dropped {dropped}/{pre_drop} rows with NaN in selected features.')
+
+    # Fit label encoders on the full dataset so all values are known.
+    cat_encoders = fit_label_encoders(df_all_raw, cat_cols) if cat_cols else {}
+
+    print(f'Model type: {args.model}')
 
     # -----------------------------------------------------------------------
-    # Per-year loop
+    # Per-year loop — leave-one-year-out training to prevent data leakage.
     # -----------------------------------------------------------------------
     total_correct_by_round = [0] * 7   # index 0 unused; rounds 1-6 at [1]-[6]
     total_score = 0
+    year_model_stats: List[dict] = []   # {year, train_acc, test_acc, score}
 
     for year in years_to_process:
         print(f'\n{"="*50}\n{year}\n{"="*50}')
         is_current = (this_year is not None and year == this_year)
+
+        # --- Train a model for this year -----------------------------------
+        if is_current:
+            # Current year: train on ALL historical data (no test set).
+            df_train = df_all_raw.copy()
+        else:
+            # Historical year: train on every other year to avoid leakage.
+            df_train = df_all_raw[df_all_raw['Year'] != year].copy()
+
+        df_test_year = df_all_raw[df_all_raw['Year'] == year].copy() if not is_current else None
+
+        if cat_encoders:
+            df_train = apply_label_encoders(df_train, cat_encoders)
+            if df_test_year is not None:
+                df_test_year = apply_label_encoders(df_test_year, cat_encoders)
+
+        X_tr = df_train[feature_list]
+        y_tr = df_train['Win__1']
+        model = build_and_train_model(args.model, X_tr, y_tr)
+
+        train_acc = model.score(X_tr, y_tr)
+        if not is_current:
+            X_te = df_test_year[feature_list]
+            y_te = df_test_year['Win__1']
+            test_acc = model.score(X_te, y_te)
+            print(f'  Model trained on {len(df_train)} rows (excl. {year})')
+            print(f'  Train acc: {train_acc:.4f}  |  Test acc on {year}: {test_acc:.4f}')
+        else:
+            test_acc = None
+            print(f'  Model trained on all {len(df_train)} historical rows')
+            print(f'  Train acc: {train_acc:.4f}  (no test set for current year)')
 
         # Determine Final Four pairings.
         if is_current:
@@ -580,7 +610,7 @@ def main():
 
         print(f'  FF pairings (R4 indices): {ff_pairings}')
 
-        # Simulate.
+        # Simulate bracket.
         pred_teams, pred_seeds, correct, n_correct, score = simulate_bracket(
             model=model,
             data_root=data_root,
@@ -597,16 +627,52 @@ def main():
             total_score += score
             print(f'  Year total: {sum(n_correct)} for 63, {score} pts')
 
+        year_model_stats.append({
+            'year': year,
+            'train_acc': train_acc,
+            'test_acc': test_acc,
+            'bracket_score': score if not is_current else None,
+        })
+
         # Write prediction file.
         pred_str = format_pred_file(pred_teams, pred_seeds, correct, n_correct, score, is_current)
         out_path = output_root / f'{year}.csv'
         out_path.write_text(pred_str)
 
     # -----------------------------------------------------------------------
+    # Traditional random train/test split model (for reference comparison).
+    # -----------------------------------------------------------------------
+    print(f'\n{"="*50}\nTRADITIONAL 67/33 TRAIN-TEST SPLIT MODEL\n{"="*50}')
+    df_trad = df_all_raw[df_all_raw['Year'].isin(ALL_YEARS)].copy()
+    if cat_encoders:
+        df_trad = apply_label_encoders(df_trad, cat_encoders)
+    X_trad, y_trad = df_trad[feature_list], df_trad['Win__1']
+    X_tr_t, X_te_t, y_tr_t, y_te_t = train_test_split(X_trad, y_trad, test_size=0.33, random_state=42)
+    model_trad = build_and_train_model(args.model, X_tr_t, y_tr_t)
+    trad_train_acc = model_trad.score(X_tr_t, y_tr_t)
+    trad_test_acc  = model_trad.score(X_te_t, y_te_t)
+    print(f'  Train acc: {trad_train_acc:.4f}  |  Test acc: {trad_test_acc:.4f}')
+
+    # -----------------------------------------------------------------------
     # Summary
     # -----------------------------------------------------------------------
     games_per_round = [32, 16, 8, 4, 2, 1]
-    summary_lines = ['OVERALL PERFORMANCE']
+    summary_lines = ['LEAVE-ONE-YEAR-OUT MODEL PERFORMANCE']
+    summary_lines.append('')
+    summary_lines.append('Per-year model accuracy:')
+    for stat in year_model_stats:
+        if stat['test_acc'] is not None:
+            summary_lines.append(
+                f"  {stat['year']}: train={stat['train_acc']:.4f}  test={stat['test_acc']:.4f}"
+                + (f"  bracket={stat['bracket_score']} pts" if stat['bracket_score'] is not None else '')
+            )
+        else:
+            summary_lines.append(
+                f"  {stat['year']}: train={stat['train_acc']:.4f}  (current year — no test set)"
+            )
+
+    summary_lines.append('')
+    summary_lines.append('Bracket results:')
     for rnd in range(1, 7):
         total_games = games_per_round[rnd - 1] * num_eval_years
         n = total_correct_by_round[rnd]
@@ -617,13 +683,16 @@ def main():
         )
     total_games_all = 63 * num_eval_years
     total_correct_all = sum(total_correct_by_round)
-    summary_lines.append(
-        f'  All rounds: {total_correct_all}/{total_games_all} '
-        f'({total_correct_all / total_games_all * 100:.1f}%)'
-    )
-    summary_lines.append(f'  Avg bracket score: {total_score / num_eval_years:.1f}')
-    summary_lines.append(f'  Train accuracy: {model.score(X_tr, y_tr):.4f}')
-    summary_lines.append(f'  Test  accuracy: {model.score(X_te, y_te):.4f}')
+    if total_games_all:
+        summary_lines.append(
+            f'  All rounds: {total_correct_all}/{total_games_all} '
+            f'({total_correct_all / total_games_all * 100:.1f}%)'
+        )
+        summary_lines.append(f'  Avg bracket score: {total_score / num_eval_years:.1f}')
+
+    summary_lines.append('')
+    summary_lines.append('TRADITIONAL 67/33 TRAIN-TEST SPLIT MODEL (for reference)')
+    summary_lines.append(f'  Train acc: {trad_train_acc:.4f}  |  Test acc: {trad_test_acc:.4f}')
 
     summary_str = '\n'.join(summary_lines)
     print(f'\n{summary_str}')
