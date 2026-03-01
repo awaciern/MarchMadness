@@ -1,22 +1,22 @@
 Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
-Auburn,1,83,Alabama St.,16,63,Auburn,True
+Auburn,1,83,Alabama State,16,63,Auburn,True
 Louisville,8,75,Creighton,9,89,Creighton,False
 Michigan,5,68,UC San Diego,12,65,Michigan,True
 Texas A&M,4,80,Yale,13,71,Texas A&M,True
 Ole Miss,6,71,North Carolina,11,64,Ole Miss,True
-Iowa St.,3,82,Lipscomb,14,55,Iowa St.,True
+Iowa State,3,82,Lipscomb,14,55,Iowa State,True
 Marquette,7,66,New Mexico,10,75,New Mexico,False
-Michigan St.,2,87,Bryant,15,62,Michigan St.,True
-Florida,1,95,Norfolk St.,16,69,Florida,True
+Michigan State,2,87,Bryant,15,62,Michigan State,True
+Florida,1,95,Norfolk State,16,69,Florida,True
 UConn,8,67,Oklahoma,9,59,UConn,True
-Memphis,5,70,Colorado St.,12,78,Colorado St.,False
+Memphis,5,70,Colorado State,12,78,Colorado State,False
 Maryland,4,81,Grand Canyon,13,49,Maryland,True
 Missouri,6,57,Drake,11,67,Drake,False
 Texas Tech,3,82,UNC Wilmington,14,72,Texas Tech,True
 Kansas,7,72,Arkansas,10,79,Arkansas,False
 St. John's,2,83,Omaha,15,53,St. John's,True
 Duke,1,93,Mount St. Mary's,16,49,Duke,True
-Mississippi St.,8,72,Baylor,9,75,Baylor,False
+Mississippi State,8,72,Baylor,9,75,Baylor,False
 Oregon,5,81,Liberty,12,52,Oregon,True
 Arizona,4,93,Akron,13,65,Arizona,True
 BYU,6,80,VCU,11,71,BYU,True
@@ -29,5 +29,5 @@ Clemson,5,67,McNeese,12,69,McNeese,False
 Purdue,4,75,High Point,13,63,Purdue,True
 Illinois,6,86,Xavier,11,73,Illinois,True
 Kentucky,3,76,Troy,14,57,Kentucky,True
-UCLA,7,72,Utah St.,10,47,UCLA,True
+UCLA,7,72,Utah State,10,47,UCLA,True
 Tennessee,2,77,Wofford,15,62,Tennessee,True

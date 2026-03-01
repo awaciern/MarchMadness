@@ -1,8 +1,8 @@
 Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
-Alabama,1,64,San Diego St.,5,71,San Diego St.,False
+Alabama,1,64,San Diego State,5,71,San Diego State,False
 Creighton,6,86,Princeton,15,75,Creighton,True
-FAU,9,62,Tennessee,4,55,FAU,True
-Kansas St.,3,98,Michigan St.,7,93,Kansas St.,True
+Florida Atlantic,9,62,Tennessee,4,55,Florida Atlantic,True
+Kansas State,3,98,Michigan State,7,93,Kansas State,True
 Houston,1,75,Miami (FL),5,89,Miami (FL),False
 Xavier,3,71,Texas,2,83,Texas,False
 Arkansas,8,65,UConn,4,88,UConn,False

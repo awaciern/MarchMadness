@@ -1,87 +1,151 @@
+"""
+reconcile_name_mismatch.py
+
+Normalises team names in KenPomData, BracketData, and GameData CSVs so every
+source uses the same canonical name for each team.
+
+Canonical names (ground truth) are taken from GameData.  All known aliases are
+maintained in:
+
+    Data/TeamNames/team_names.csv
+
+Each row in that CSV has the form:
+    Canonical, Alias1, Alias2, ...
+
+To add a new alias, simply add it to the appropriate row in team_names.csv.
+
+Run this script BEFORE compile_combined_data.py.
+
+Usage:
+    python3 reconcile_name_mismatch.py
+    python3 reconcile_name_mismatch.py --year 2025   # single year only
+"""
+
+import argparse
+from pathlib import Path
+
 import pandas as pd
 
-'''
-NOTE: The following team name changes were manually made to bracket data:
-Connecticut -> UConn
-North Carolina State -> NC State
-SMU -> Southern Methodist
-UC Irvine -> California-Irvine
-Virginia Commonwealth -> VCU
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-NOTE: The following teams were mismatched in KenPom only due to being in play-in games (no reconcile needed):
-Boise State (2013 - as a 13 seed, WIERD :P)
-Long Island (2013)
-Providence (2017)
-'''
+DATA_ROOT = Path(__file__).resolve().parents[1] / 'Data'
+ALL_YEARS = [y for y in range(2012, 2026) if y != 2020]
 
-kp_to_game_name_dict = {}
-kp_to_game_name_dict['TODO'] = 'TODO'
-kp_to_game_name_dict['Arizona St.'] = 'Arizona State'
-kp_to_game_name_dict['Arkansas Little Rock'] = 'Little Rock'
-kp_to_game_name_dict['Boise St.'] = 'Boise State'
-kp_to_game_name_dict['Brigham Young'] = 'BYU'
-kp_to_game_name_dict['Cal St. Bakersfield'] = 'Cal State Bakersfield'
-kp_to_game_name_dict['Cal St. Fullerton'] = 'Cal State Fullerton'
-kp_to_game_name_dict['Cleveland St.'] = 'Cleveland State'
-kp_to_game_name_dict['Colorado St.'] = 'Colorado State'
-kp_to_game_name_dict['Connecticut'] = 'UConn'
-kp_to_game_name_dict['East Tennessee St.'] = 'East Tennessee State'
-kp_to_game_name_dict['Florida St.'] = 'Florida State'
-kp_to_game_name_dict['Fresno St.'] = 'Fresno State'
-kp_to_game_name_dict['Gardner Webb'] = 'Gardner-Webb'
-kp_to_game_name_dict['Georgia St.'] = 'Georgia State'
-kp_to_game_name_dict['Iowa St.'] = 'Iowa State'
-kp_to_game_name_dict['Jacksonville St.'] = 'Jacksonville State'
-kp_to_game_name_dict['Kansas St.'] = 'Kansas State'
-kp_to_game_name_dict['Kennesaw St.'] = 'Kennesaw State'
-kp_to_game_name_dict['Kent St.'] = 'Kent State'
-kp_to_game_name_dict['Long Beach St.'] = 'Long Beach State'
-kp_to_game_name_dict['Louisiana Lafayette'] = 'Louisiana-Lafayette'
-kp_to_game_name_dict['Loyola MD'] = 'Loyola (MD)'
-kp_to_game_name_dict['McNeese St.'] = 'McNeese'
-kp_to_game_name_dict['Miami FL'] = 'Miami (FL)'
-kp_to_game_name_dict['Michigan St.'] = 'Michigan State'
-kp_to_game_name_dict['Mississippi'] = 'Ole Miss'
-kp_to_game_name_dict['Mississippi St.'] = 'Mississippi State'
-kp_to_game_name_dict['Montana St.'] = 'Montana State'
-kp_to_game_name_dict['Morehead St.'] = 'Morehead State'
-kp_to_game_name_dict['Murray St.'] = 'Murray State'
-kp_to_game_name_dict['NC Asheville'] = 'UNC Asheville'
-kp_to_game_name_dict['Nevada Las Vegas'] = 'UNLV'
-kp_to_game_name_dict['New Mexico St.'] = 'New Mexico State'
-kp_to_game_name_dict['Norfolk St.'] = 'Norfolk State'
-kp_to_game_name_dict['North Carolina Central'] = 'NC Central'
-kp_to_game_name_dict['North Carolina St.'] = 'NC State'
-kp_to_game_name_dict['N.C. State'] = 'North Carolina State'
-kp_to_game_name_dict['North Dakota St.'] = 'North Dakota State'
-kp_to_game_name_dict['Northwestern St.'] = 'Northwestern State'
-kp_to_game_name_dict['Ohio St.'] = 'Ohio State'
-kp_to_game_name_dict['Oklahoma St.'] = 'Oklahoma State'
-kp_to_game_name_dict['Oregon St.'] = 'Oregon State'
-kp_to_game_name_dict['Penn St.'] = 'Penn State'
-kp_to_game_name_dict['SMU'] = 'Southern Methodist'
-kp_to_game_name_dict['San Diego St.'] = 'San Diego State'
-kp_to_game_name_dict['South Dakota St.'] = 'South Dakota State'
-kp_to_game_name_dict['Southern Mississippi'] = 'Southern Miss'
-kp_to_game_name_dict['St. Louis'] = 'Saint Louis'
-kp_to_game_name_dict['St. Mary\'s'] = 'Saint Mary\'s'
-kp_to_game_name_dict['Texas A&M–CC'] = 'Texas A&M–Corpus Christi'
-kp_to_game_name_dict['UC Irvine'] = 'California-Irvine'
-kp_to_game_name_dict['Utah St.'] = 'Utah State'
-kp_to_game_name_dict['Virginia Commonwealth'] = 'VCU'
-kp_to_game_name_dict['Washington St.'] = 'Washington State'
-kp_to_game_name_dict['Weber St.'] = 'Weber State'
-kp_to_game_name_dict['Wichita St.'] = 'Wichita State'
-kp_to_game_name_dict['Wright St.'] = 'Wright State'
+TEAM_NAMES_CSV = DATA_ROOT / 'TeamNames' / 'team_names.csv'
 
-for year in range(2023, 2024):
-    if year == 2020:
-        continue
 
-    FILE_PATH = '../Data/KenPomData/' + str(year) + '.csv'
-    df_kp = pd.read_csv(FILE_PATH)
+def load_alias_map() -> dict:
+    """
+    Read team_names.csv and return a dict mapping every alias → canonical name.
+    The first column is the canonical; all remaining non-empty columns are aliases.
+    """
+    df = pd.read_csv(TEAM_NAMES_CSV, dtype=str)
+    alias_map: dict = {}
+    canonical_col = df.columns[0]
+    for _, row in df.iterrows():
+        canonical = row[canonical_col].strip()
+        for col in df.columns[1:]:
+            alias = str(row[col]).strip()
+            if alias and alias != 'nan':
+                alias_map[alias] = canonical
+    return alias_map
 
-    for key in kp_to_game_name_dict:
-        df_kp.loc[df_kp['Team'] == key, 'Team'] = kp_to_game_name_dict[key]
 
-    df_kp.to_csv(path_or_buf=FILE_PATH, index=False)
+def apply_rename(df: pd.DataFrame, name_map: dict, cols: list) -> pd.DataFrame:
+    """Replace values in the given columns using name_map."""
+    df = df.copy()
+    for col in cols:
+        if col in df.columns:
+            df[col] = df[col].replace(name_map)
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Per-source reconciliation
+# ---------------------------------------------------------------------------
+
+KP_COLS      = ['Team']
+BRACKET_COLS = ['Team1', 'Team2', 'WinningTeam']
+GAME_COLS    = ['Team1', 'Team2', 'WinningTeam']
+
+
+def reconcile_kenpom(years, alias_map):
+    print('=== KenPom CSVs ===')
+    for year in years:
+        path = DATA_ROOT / 'KenPomData' / f'{year}.csv'
+        if not path.exists():
+            continue
+        df = pd.read_csv(path)
+        df_new = apply_rename(df, alias_map, KP_COLS)
+        changed = (df_new['Team'] != df['Team']).sum()
+        df_new.to_csv(path, index=False)
+        print(f'  {year}: {changed} name(s) updated')
+
+
+def reconcile_bracket(years, alias_map):
+    print('\n=== BracketData CSVs ===')
+    for year in years:
+        bracket_dir = DATA_ROOT / 'BracketData' / str(year)
+        if not bracket_dir.exists():
+            continue
+        total_changed = 0
+        for path in sorted(bracket_dir.glob('*.csv')):
+            df = pd.read_csv(path)
+            df_new = apply_rename(df, alias_map, BRACKET_COLS)
+            changed = sum(
+                (df_new[c] != df[c]).sum() for c in BRACKET_COLS if c in df.columns
+            )
+            if changed:
+                df_new.to_csv(path, index=False)
+                total_changed += changed
+        print(f'  {year}: {total_changed} name(s) updated')
+
+
+def reconcile_games(years, alias_map):
+    print('\n=== GameData CSVs ===')
+    game_dir = DATA_ROOT / 'GameData'
+    for year in years:
+        path = game_dir / f'{year}.csv'
+        if not path.exists():
+            continue
+        df = pd.read_csv(path)
+        df_new = apply_rename(df, alias_map, GAME_COLS)
+        changed = sum(
+            (df_new[c] != df[c]).sum() for c in GAME_COLS if c in df.columns
+        )
+        if changed:
+            df_new.to_csv(path, index=False)
+        print(f'  {year}: {changed} name(s) updated')
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Normalise team names across KenPom, BracketData, and GameData CSVs.',
+    )
+    parser.add_argument(
+        '--year', '-y',
+        type=int,
+        default=None,
+        help='Process only this year (default: all years).',
+    )
+    args = parser.parse_args()
+    years = [args.year] if args.year else ALL_YEARS
+
+    alias_map = load_alias_map()
+    print(f'Loaded {len(alias_map)} alias → canonical mappings from {TEAM_NAMES_CSV.relative_to(DATA_ROOT.parent)}\n')
+
+    reconcile_kenpom(years, alias_map)
+    reconcile_bracket(years, alias_map)
+    reconcile_games(years, alias_map)
+
+    print('\nDone. Run compile_combined_data.py to rebuild combined CSVs.')
+
+
+if __name__ == '__main__':
+    main()

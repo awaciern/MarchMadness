@@ -1,51 +1,51 @@
 Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win,Year,Round
-Gonzaga,1,93,Georgia St.,16,72,Gonzaga,True,2022,1
-Boise St.,8,53,Memphis,9,64,Memphis,False,2022,1
-UConn,5,63,New Mexico St.,12,70,New Mexico St.,False,2022,1
+Gonzaga,1,93,Georgia State,16,72,Gonzaga,True,2022,1
+Boise State,8,53,Memphis,9,64,Memphis,False,2022,1
+UConn,5,63,New Mexico State,12,70,New Mexico State,False,2022,1
 Arkansas,4,75,Vermont,13,71,Arkansas,True,2022,1
 Alabama,6,64,Notre Dame,11,78,Notre Dame,False,2022,1
-Texas Tech,3,97,Montana St.,14,62,Texas Tech,True,2022,1
-Michigan St.,7,74,Davidson,10,73,Michigan St.,True,2022,1
-Duke,2,78,Cal St. Fullerton,15,61,Duke,True,2022,1
-Baylor,1,85,Norfolk St.,16,49,Baylor,True,2022,1
+Texas Tech,3,97,Montana State,14,62,Texas Tech,True,2022,1
+Michigan State,7,74,Davidson,10,73,Michigan State,True,2022,1
+Duke,2,78,Cal State Fullerton,15,61,Duke,True,2022,1
+Baylor,1,85,Norfolk State,16,49,Baylor,True,2022,1
 North Carolina,8,95,Marquette,9,63,North Carolina,True,2022,1
 Saint Mary's,5,82,Indiana,12,53,Saint Mary's,True,2022,1
 UCLA,4,57,Akron,13,53,UCLA,True,2022,1
 Texas,6,81,Virginia Tech,11,73,Texas,True,2022,1
 Purdue,3,78,Yale,14,56,Purdue,True,2022,1
-Murray St.,7,92,San Francisco,10,87,Murray St.,True,2022,1
+Murray State,7,92,San Francisco,10,87,Murray State,True,2022,1
 Kentucky,2,79,Saint Peter's,15,85,Saint Peter's,False,2022,1
-Arizona,1,87,Wright St.,16,70,Arizona,True,2022,1
+Arizona,1,87,Wright State,16,70,Arizona,True,2022,1
 Seton Hall,8,42,TCU,9,69,TCU,False,2022,1
 Houston,5,82,UAB,12,68,Houston,True,2022,1
 Illinois,4,54,Chattanooga,13,53,Illinois,True,2022,1
-Colorado St.,6,63,Michigan,11,75,Michigan,False,2022,1
+Colorado State,6,63,Michigan,11,75,Michigan,False,2022,1
 Tennessee,3,88,Longwood,14,56,Tennessee,True,2022,1
-Ohio St.,7,54,Loyola Chicago,10,41,Ohio St.,True,2022,1
+Ohio State,7,54,Loyola Chicago,10,41,Ohio State,True,2022,1
 Villanova,2,80,Delaware,15,60,Villanova,True,2022,1
 Kansas,1,83,Texas Southern,16,56,Kansas,True,2022,1
-San Diego St.,8,69,Creighton,9,72,Creighton,False,2022,1
+San Diego State,8,69,Creighton,9,72,Creighton,False,2022,1
 Iowa,5,63,Richmond,12,67,Richmond,False,2022,1
-Providence,4,66,South Dakota St.,13,57,Providence,True,2022,1
-LSU,6,54,Iowa St.,11,59,Iowa St.,False,2022,1
+Providence,4,66,South Dakota State,13,57,Providence,True,2022,1
+LSU,6,54,Iowa State,11,59,Iowa State,False,2022,1
 Wisconsin,3,67,Colgate,14,60,Wisconsin,True,2022,1
 USC,7,66,Miami (FL),10,68,Miami (FL),False,2022,1
-Auburn,2,80,Jacksonville St.,15,61,Auburn,True,2022,1
+Auburn,2,80,Jacksonville State,15,61,Auburn,True,2022,1
 Gonzaga,1,82,Memphis,9,78,Gonzaga,True,2022,2
-New Mexico St.,12,48,Arkansas,4,53,Arkansas,False,2022,2
+New Mexico State,12,48,Arkansas,4,53,Arkansas,False,2022,2
 Notre Dame,11,53,Texas Tech,3,59,Texas Tech,False,2022,2
-Michigan St.,7,76,Duke,2,85,Duke,False,2022,2
+Michigan State,7,76,Duke,2,85,Duke,False,2022,2
 Baylor,1,86,North Carolina,8,93,North Carolina,False,2022,2
 Saint Mary's,5,56,UCLA,4,72,UCLA,False,2022,2
 Texas,6,71,Purdue,3,81,Purdue,False,2022,2
-Murray St.,7,60,Saint Peter's,15,70,Saint Peter's,False,2022,2
+Murray State,7,60,Saint Peter's,15,70,Saint Peter's,False,2022,2
 Arizona,1,85,TCU,9,80,Arizona,True,2022,2
 Houston,5,68,Illinois,4,53,Houston,True,2022,2
 Michigan,11,76,Tennessee,3,68,Michigan,True,2022,2
-Ohio St.,7,61,Villanova,2,71,Villanova,False,2022,2
+Ohio State,7,61,Villanova,2,71,Villanova,False,2022,2
 Kansas,1,79,Creighton,9,72,Kansas,True,2022,2
 Richmond,12,51,Providence,4,79,Providence,False,2022,2
-Iowa St.,11,54,Wisconsin,3,49,Iowa St.,True,2022,2
+Iowa State,11,54,Wisconsin,3,49,Iowa State,True,2022,2
 Miami (FL),10,79,Auburn,2,61,Miami (FL),True,2022,2
 Gonzaga,1,68,Arkansas,4,74,Arkansas,False,2022,3
 Texas Tech,3,73,Duke,2,78,Duke,False,2022,3
@@ -54,7 +54,7 @@ Purdue,3,64,Saint Peter's,15,67,Saint Peter's,False,2022,3
 Arizona,1,60,Houston,5,72,Houston,False,2022,3
 Michigan,11,55,Villanova,2,63,Villanova,False,2022,3
 Kansas,1,66,Providence,4,61,Kansas,True,2022,3
-Iowa St.,11,56,Miami (FL),10,70,Miami (FL),False,2022,3
+Iowa State,11,56,Miami (FL),10,70,Miami (FL),False,2022,3
 Arkansas,4,69,Duke,2,78,Duke,False,2022,4
 North Carolina,8,69,Saint Peter's,15,49,North Carolina,True,2022,4
 Houston,5,44,Villanova,2,50,Villanova,False,2022,4

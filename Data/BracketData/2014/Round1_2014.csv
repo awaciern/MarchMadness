@@ -1,33 +1,33 @@
 Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
 Florida,1,67,Albany,16,55,Albany,False
-Colorado,8,48,Pitt,9,77,Pitt,False
+Colorado,8,48,Pittsburgh,9,77,Pittsburgh,False
 VCU,5,75,Stephen F. Austin,12,77,Stephen F. Austin,False
 UCLA,4,76,Tulsa,13,59,Tulsa,False
-Ohio St.,6,59,Dayton,11,60,Dayton,False
-Syracuse,3,77,Western Mich.,14,53,Western Mich.,False
+Ohio State,6,59,Dayton,11,60,Dayton,False
+Syracuse,3,77,Western Michigan,14,53,Western Michigan,False
 New Mexico,7,53,Stanford,10,58,Stanford,False
 Kansas,2,80,Eastern Kentucky,15,69,Eastern Kentucky,False
 Virginia,1,70,Coastal Carolina,16,59,Coastal Carolina,False
-Memphis,8,71,G. Washington,9,66,G. Washington,False
+Memphis,8,71,George Washington,9,66,George Washington,False
 Cincinnati,5,57,Harvard,12,61,Harvard,False
-Michigan St.,4,93,Delaware,13,78,Delaware,False
+Michigan State,4,93,Delaware,13,78,Delaware,False
 North Carolina,6,79,Providence,11,77,Providence,False
-Iowa St.,3,93,NC Central,14,75,NC Central,False
+Iowa State,3,93,NC Central,14,75,NC Central,False
 UConn,7,89,Saint Joseph's,10,81,Saint Joseph's,False
 Villanova,2,73,Milwaukee,15,53,Milwaukee,False
-Arizona,1,68,Weber St.,16,59,Weber St.,False
-Gonzaga,8,85,Oklahoma St.,9,77,Oklahoma St.,False
-Oklahoma,5,75,North Dakota St.,12,80,North Dakota St.,False
-San Diego St.,4,73,New Mexico St.,13,69,New Mexico St.,False
+Arizona,1,68,Weber State,16,59,Weber State,False
+Gonzaga,8,85,Oklahoma State,9,77,Oklahoma State,False
+Oklahoma,5,75,North Dakota State,12,80,North Dakota State,False
+San Diego State,4,73,New Mexico State,13,69,New Mexico State,False
 Baylor,6,74,Nebraska,11,60,Nebraska,False
-Creighton,3,76,Louisiana,14,66,Louisiana,False
+Creighton,3,76,Louisiana-Lafayette,14,66,Louisiana-Lafayette,False
 Oregon,7,87,BYU,10,68,BYU,False
 Wisconsin,2,75,American,15,35,American,False
-Wichita St.,1,64,Cal Poly,16,37,Cal Poly,False
-Kentucky,8,56,Kansas St.,9,49,Kansas St.,False
-Saint Louis,5,83,NC State,12,80,NC State,False
+Wichita State,1,64,Cal Poly,16,37,Cal Poly,False
+Kentucky,8,56,Kansas State,9,49,Kansas State,False
+Saint Louis,5,83,North Carolina State,12,80,North Carolina State,False
 Louisville,4,71,Manhattan,13,64,Manhattan,False
-UMass,6,67,Tennessee,11,86,Tennessee,False
+Massachusetts,6,67,Tennessee,11,86,Tennessee,False
 Duke,3,71,Mercer,14,78,Mercer,False
-Texas,7,87,Arizona St.,10,85,Arizona St.,False
+Texas,7,87,Arizona State,10,85,Arizona State,False
 Michigan,2,57,Wofford,15,40,Wofford,False
