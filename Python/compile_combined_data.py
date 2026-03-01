@@ -95,15 +95,20 @@ def compile_game_year(data_root: Path, year: int) -> pd.DataFrame:
     return df_combined
 
 
-def compile_bracket_year(data_root: Path, year: int) -> None:
-    """Write BracketCombinedData CSVs for all available rounds of a single year."""
+def compile_bracket_year(data_root: Path, year: int, round1_only: bool = False) -> None:
+    """Write BracketCombinedData CSVs for all available rounds of a single year.
+
+    Pass round1_only=True for the current year when the tournament has not yet
+    been played – only Round 1 (the pre-tournament matchups) will be compiled.
+    """
     kp_path = data_root / 'Data' / 'KenPomData' / f'{year}.csv'
     df_kp   = pd.read_csv(kp_path)
 
     out_dir = data_root / 'Data' / 'BracketCombinedData' / str(year)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    for rnd in BRACKET_ROUNDS:
+    rounds = [1] if round1_only else BRACKET_ROUNDS
+    for rnd in rounds:
         bracket_path = (
             data_root / 'Data' / 'BracketData' / str(year) / f'Round{rnd}_{year}.csv'
         )
@@ -146,10 +151,30 @@ def main():
         default='both',
         help='Which combined data to compile (default: both).',
     )
+    parser.add_argument(
+        '--this-year',
+        type=int,
+        default=None,
+        help=(
+            'Mark this year as the current (pre-tournament) year.  '
+            'Only Round 1 of BracketCombinedData will be compiled for it, '
+            'and it will be excluded from GameCombinedData.'
+        ),
+    )
     args = parser.parse_args()
 
     data_root  = Path(__file__).resolve().parents[1]
-    years      = [args.year] if args.year else ALL_YEARS
+    this_year  = args.this_year
+
+    # Build the year list; if --this-year is supplied and not already in ALL_YEARS,
+    # append it so it gets processed.
+    if args.year:
+        years = [args.year]
+    else:
+        years = list(ALL_YEARS)
+        if this_year is not None and this_year not in years:
+            years.append(this_year)
+
     do_game    = args.type in ('game', 'both')
     do_bracket = args.type in ('bracket', 'both')
 
@@ -160,6 +185,9 @@ def main():
         print('=== Compiling GameCombinedData ===')
         df_all = pd.DataFrame()
         for year in years:
+            if this_year is not None and year == this_year:
+                print(f'  {year}: skipped (--this-year; tournament not yet played)')
+                continue
             game_path = data_root / 'Data' / 'GameData' / f'{year}.csv'
             kp_path   = data_root / 'Data' / 'KenPomData' / f'{year}.csv'
             if not game_path.exists():
@@ -198,8 +226,12 @@ def main():
                 print(f'  {year}: BracketData/{year}/ not found, skipping')
                 continue
 
-            print(f'  {year}:')
-            compile_bracket_year(data_root, year)
+            round1_only = (this_year is not None and year == this_year)
+            if round1_only:
+                print(f'  {year}: (current year – Round 1 only)')
+            else:
+                print(f'  {year}:')
+            compile_bracket_year(data_root, year, round1_only=round1_only)
 
 
 if __name__ == '__main__':

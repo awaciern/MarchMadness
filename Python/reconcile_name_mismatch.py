@@ -31,7 +31,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 
 DATA_ROOT = Path(__file__).resolve().parents[1] / 'Data'
-ALL_YEARS = [y for y in range(2012, 2026) if y != 2020]
+ALL_YEARS = [y for y in range(2012, 2027) if y != 2020]
 
 TEAM_NAMES_CSV = DATA_ROOT / 'TeamNames' / 'team_names.csv'
 
