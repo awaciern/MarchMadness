@@ -285,6 +285,9 @@ def simulate_bracket(
                 df_round['Winning_Team'] = actual_winners
 
         # Predict.
+        # Save raw seed values before encoding so display isn't affected.
+        raw_seeds_1 = df_round['Seed__1'].copy() if 'Seed__1' in df_round.columns else None
+        raw_seeds_2 = df_round['Seed__2'].copy() if 'Seed__2' in df_round.columns else None
         if cat_encoders:
             df_round = apply_label_encoders(df_round, cat_encoders)
         X = df_round[feature_list]
@@ -293,7 +296,10 @@ def simulate_bracket(
         df_round['Pred_Win__1'] = preds
 
         pred_teams = df_round['Team__1'].where(preds, df_round['Team__2'])
-        pred_seeds = df_round['Seed__1'].where(preds, df_round['Seed__2'])
+        # Use raw (pre-encoding) seeds for display.
+        s1 = raw_seeds_1 if raw_seeds_1 is not None else df_round['Seed__1']
+        s2 = raw_seeds_2 if raw_seeds_2 is not None else df_round['Seed__2']
+        pred_seeds = s1.where(preds, s2)
 
         pred_teams_by_round.append(pred_teams.tolist())
         pred_seeds_by_round.append(pred_seeds.tolist())
