@@ -378,7 +378,6 @@ def main():
         metavar='FEATURE',
         help=(
             'Space-separated list of base feature names to use for training and prediction. '
-            '__1 and __2 suffixes are added automatically for each team. '
             f'Choices: {{{", ".join(FEATURE_BASES)}}}. '
             'Default: all features.'
         ),
