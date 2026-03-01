@@ -1,39 +1,81 @@
+"""
+find_name_mismatch.py
+
+Diagnoses team name mismatches between BracketData Round 1 and the two stats
+sources (KenPomData and BartTorvikData) for a given year.
+
+Usage:
+    python3 find_name_mismatch.py --year 2026
+    python3 find_name_mismatch.py --year 2025
+"""
+
 import argparse
+from pathlib import Path
+
 import pandas as pd
 
-parser = argparse.ArgumentParser(description='Find team name mismatches between bracket and KenPom data.')
-parser.add_argument('bracket_files', nargs='+', help='One or more bracket CSV files (e.g. Round1_2025.csv Round2_2025.csv)')
-parser.add_argument('kenpom_file', help='KenPom CSV file (e.g. ../Data/KenPomData/2025.csv)')
-args = parser.parse_args()
+DATA_ROOT = Path(__file__).resolve().parents[1] / 'Data'
 
-games_mismatch_names = []
-kp_mismatch_names = []
 
-df_kp = pd.read_csv(args.kenpom_file)
+def bracket_teams(year: int) -> set:
+    path = DATA_ROOT / 'BracketData' / str(year) / f'Round1_{year}.csv'
+    if not path.exists():
+        print(f'  [!] BracketData not found: {path}')
+        return set()
+    df = pd.read_csv(path)
+    return set(df['Team1'].dropna()) | set(df['Team2'].dropna())
 
-for bracket_file in args.bracket_files:
-    df_games = pd.read_csv(bracket_file)
 
-    for index, row in df_games.iterrows():
-        team1 = row['Team1']
-        if team1 not in df_kp['Team'].values and \
-           team1 not in games_mismatch_names:
-            games_mismatch_names.append(team1)
+def stats_teams(subdir: str, year: int) -> set:
+    path = DATA_ROOT / subdir / f'{year}.csv'
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    return set(df['Team'].dropna())
 
-        team2 = row['Team2']
-        if team2 not in df_kp['Team'].values and \
-           team2 not in games_mismatch_names:
-            games_mismatch_names.append(team2)
 
-    for index, row in df_kp.iterrows():
-        team = row['Team']
-        if team not in df_games['Team1'].values and \
-           team not in df_games['Team2'].values and \
-           team not in kp_mismatch_names:
-            kp_mismatch_names.append(team)
+def report_mismatches(label: str, bracket: set, stats: set):
+    in_bracket_not_stats = sorted(bracket - stats)
+    in_stats_not_bracket = sorted(stats - bracket)
+    print(f'\n--- {label} ---')
+    print(f'  In BracketData but NOT in {label} ({len(in_bracket_not_stats)}):')
+    for t in in_bracket_not_stats:
+        print(f'    {t}')
+    print(f'  In {label} but NOT in BracketData ({len(in_stats_not_bracket)}):')
+    for t in in_stats_not_bracket:
+        print(f'    {t}')
 
-print('TEAM NAMES IN GAMES BUT NOT IN KENPOM (length=' + str(len(games_mismatch_names)) + '):')
-print(pd.Series(games_mismatch_names).sort_values())
-print()
-print('TEAM NAMES IN KENPOM BUT NOT IN GAMES (length=' + str(len(kp_mismatch_names)) + '):')
-print(pd.Series(kp_mismatch_names).sort_values())
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Find team name mismatches between BracketData and stats sources.'
+    )
+    parser.add_argument('--year', '-y', type=int, required=True, help='Tournament year.')
+    args = parser.parse_args()
+    year = args.year
+
+    print(f'=== Name mismatch check for {year} ===')
+
+    bracket = bracket_teams(year)
+    if not bracket:
+        return
+
+    print(f'  BracketData Round 1: {len(bracket)} teams')
+
+    kenpom = stats_teams('KenPomData', year)
+    if kenpom is None:
+        print(f'  [!] KenPomData/{year}.csv not found — skipping.')
+    else:
+        print(f'  KenPomData: {len(kenpom)} teams')
+        report_mismatches('KenPomData', bracket, kenpom)
+
+    barttorvik = stats_teams('BartTorvikData', year)
+    if barttorvik is None:
+        print(f'  [!] BartTorvikData/{year}.csv not found — skipping.')
+    else:
+        print(f'  BartTorvikData: {len(barttorvik)} teams')
+        report_mismatches('BartTorvikData', bracket, barttorvik)
+
+
+if __name__ == '__main__':
+    main()

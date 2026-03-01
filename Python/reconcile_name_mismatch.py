@@ -1,8 +1,8 @@
 """
 reconcile_name_mismatch.py
 
-Normalises team names in KenPomData, BracketData, and GameData CSVs so every
-source uses the same canonical name for each team.
+Normalises team names in KenPomData, BartTorvikData, BracketData, and GameData
+CSVs so every source uses the same canonical name for each team.
 
 Canonical names (ground truth) are taken from GameData.  All known aliases are
 maintained in:
@@ -69,6 +69,19 @@ def apply_rename(df: pd.DataFrame, name_map: dict, cols: list) -> pd.DataFrame:
 KP_COLS      = ['Team']
 BRACKET_COLS = ['Team1', 'Team2', 'WinningTeam']
 GAME_COLS    = ['Team1', 'Team2', 'WinningTeam']
+
+
+def reconcile_barttorvik(years, alias_map):
+    print('\n=== BartTorvikData CSVs ===')
+    for year in years:
+        path = DATA_ROOT / 'BartTorvikData' / f'{year}.csv'
+        if not path.exists():
+            continue
+        df = pd.read_csv(path)
+        df_new = apply_rename(df, alias_map, KP_COLS)
+        changed = (df_new['Team'] != df['Team']).sum()
+        df_new.to_csv(path, index=False)
+        print(f'  {year}: {changed} name(s) updated')
 
 
 def reconcile_kenpom(years, alias_map):
@@ -140,6 +153,7 @@ def main():
     alias_map = load_alias_map()
     print(f'Loaded {len(alias_map)} alias → canonical mappings from {TEAM_NAMES_CSV.relative_to(DATA_ROOT.parent)}\n')
 
+    reconcile_barttorvik(years, alias_map)
     reconcile_kenpom(years, alias_map)
     reconcile_bracket(years, alias_map)
     reconcile_games(years, alias_map)

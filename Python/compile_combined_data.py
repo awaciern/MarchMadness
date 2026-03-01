@@ -2,13 +2,9 @@
 compile_combined_data.py
 
 Compiles GameCombinedData and/or BracketCombinedData for all (or a single) year
-by merging game/bracket data with KenPom stats using pd.merge (avoids the silent
-row-drop bug from chained .join() calls in the older scripts).
-
-Replaces:
-    compile_combined_game_data.py
-    compile_combined_bracket_data.py
-    compile_combined_bracket_data2.py
+by merging game/bracket data with KenPom stats (KP__ prefix) and BartTorvik
+stats (BT__ prefix) using pd.merge.  The __1 / __2 suffix further identifies
+which team each column belongs to, e.g. KP__AdjEM__1 and BT__AdjOE__2.
 
 Usage:
     python3 compile_combined_data.py                      # all years, both types
@@ -50,17 +46,23 @@ def rename_matchup_cols(df: pd.DataFrame) -> pd.DataFrame:
     })
 
 
+def prefix_stats_cols(df: pd.DataFrame, prefix: str, drop_cols: list = None) -> pd.DataFrame:
+    """Prefix every non-Team column with *prefix* (e.g. 'KP__' or 'BT__').
+    Columns listed in drop_cols are removed before prefixing."""
+    if drop_cols:
+        df = df.drop(columns=[c for c in drop_cols if c in df.columns], errors='ignore')
+    rename_map = {c: f'{prefix}{c}' for c in df.columns if c != 'Team'}
+    return df.rename(columns=rename_map)
+
+
 def attach_kenpom(df: pd.DataFrame, df_kp: pd.DataFrame) -> pd.DataFrame:
     """
-    Merge KenPom stats into a matchup DataFrame that already uses the
-    double-underscore column convention (Team__1, Team__2, …).
-
-    KenPom's Seed column is dropped before merging to keep the seed values
-    that are already present in the matchup data and to avoid duplicate columns.
+    Merge KenPom stats (KP__-prefixed) into a matchup DataFrame.
+    Seed is dropped from KenPom – the matchup data already carries seeds.
     """
-    kp = df_kp.drop(columns=['Seed'], errors='ignore')
+    kp = prefix_stats_cols(df_kp, 'KP__', drop_cols=['Seed'])
 
-    kp1 = kp.add_suffix('__1')   # Team → Team__1, AdjEM → AdjEM__1, …
+    kp1 = kp.add_suffix('__1')   # Team → Team__1, KP__AdjEM → KP__AdjEM__1
     kp2 = kp.add_suffix('__2')
 
     result = df.merge(kp1, on='Team__1', how='inner')
@@ -68,13 +70,31 @@ def attach_kenpom(df: pd.DataFrame, df_kp: pd.DataFrame) -> pd.DataFrame:
     return result.reset_index(drop=True)
 
 
+def attach_barttorvik(df: pd.DataFrame, df_bt: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merge BartTorvik stats (BT__-prefixed) into a matchup DataFrame.
+    Uses a left join so rows are preserved even if a team is absent from
+    BartTorvik data (e.g. play-in teams, pre-tournament year).
+    """
+    bt = prefix_stats_cols(df_bt, 'BT__', drop_cols=['Seed'])
+
+    bt1 = bt.add_suffix('__1')   # Team → Team__1, BT__AdjOE → BT__AdjOE__1
+    bt2 = bt.add_suffix('__2')
+
+    result = df.merge(bt1, on='Team__1', how='left')
+    result = result.merge(bt2, on='Team__2', how='left')
+    return result.reset_index(drop=True)
+
+
 def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Place __1 KenPom columns first, then __2, then remaining metadata columns."""
+    """Place metadata first, then KP__*__1, KP__*__2, BT__*__1, BT__*__2."""
     cols = df.columns.tolist()
-    cols1 = [c for c in cols if '__1' in c and c != 'Win__1']
-    cols2 = [c for c in cols if '__2' in c]
-    rest  = [c for c in cols if c not in cols1 and c not in cols2]
-    return df[cols1 + cols2 + rest]
+    kp1  = [c for c in cols if c.startswith('KP__') and c.endswith('__1')]
+    kp2  = [c for c in cols if c.startswith('KP__') and c.endswith('__2')]
+    bt1  = [c for c in cols if c.startswith('BT__') and c.endswith('__1')]
+    bt2  = [c for c in cols if c.startswith('BT__') and c.endswith('__2')]
+    rest = [c for c in cols if c not in kp1 + kp2 + bt1 + bt2]
+    return df[rest + kp1 + kp2 + bt1 + bt2]
 
 
 # ---------------------------------------------------------------------------
@@ -85,12 +105,16 @@ def compile_game_year(data_root: Path, year: int) -> pd.DataFrame:
     """Return the combined game DataFrame for a single year."""
     game_path = data_root / 'Data' / 'GameData' / f'{year}.csv'
     kp_path   = data_root / 'Data' / 'KenPomData' / f'{year}.csv'
+    bt_path   = data_root / 'Data' / 'BartTorvikData' / f'{year}.csv'
 
     df_games = pd.read_csv(game_path)
     df_kp    = pd.read_csv(kp_path)
 
-    df_games = rename_matchup_cols(df_games)
+    df_games    = rename_matchup_cols(df_games)
     df_combined = attach_kenpom(df_games, df_kp)
+    if bt_path.exists():
+        df_bt       = pd.read_csv(bt_path)
+        df_combined = attach_barttorvik(df_combined, df_bt)
     df_combined = reorder_columns(df_combined)
     return df_combined
 
@@ -102,7 +126,9 @@ def compile_bracket_year(data_root: Path, year: int, round1_only: bool = False) 
     been played – only Round 1 (the pre-tournament matchups) will be compiled.
     """
     kp_path = data_root / 'Data' / 'KenPomData' / f'{year}.csv'
+    bt_path = data_root / 'Data' / 'BartTorvikData' / f'{year}.csv'
     df_kp   = pd.read_csv(kp_path)
+    df_bt   = pd.read_csv(bt_path) if bt_path.exists() else None
 
     out_dir = data_root / 'Data' / 'BracketCombinedData' / str(year)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -116,9 +142,11 @@ def compile_bracket_year(data_root: Path, year: int, round1_only: bool = False) 
             print(f'    Round {rnd}: source file not found, skipping')
             continue
 
-        df_round = pd.read_csv(bracket_path)
-        df_round = rename_matchup_cols(df_round)
+        df_round    = pd.read_csv(bracket_path)
+        df_round    = rename_matchup_cols(df_round)
         df_combined = attach_kenpom(df_round, df_kp)
+        if df_bt is not None:
+            df_combined = attach_barttorvik(df_combined, df_bt)
         df_combined = reorder_columns(df_combined)
 
         out_path = out_dir / f'Round{rnd}_{year}.csv'
