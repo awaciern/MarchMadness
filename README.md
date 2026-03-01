@@ -1,6 +1,6 @@
 # MarchMadness
 
-Trains scikit-learn models on KenPom and BartTorvik efficiency stats to predict NCAA tournament brackets, scores historical predictions, and fills out brackets for the current year before the tournament begins.
+Trains scikit-learn models on KenPom efficiency stats to predict NCAA tournament brackets, scores historical predictions, and fills out brackets for the current year before the tournament begins.
 
 ---
 
@@ -207,39 +207,77 @@ Default features: `WinPct AdjO AdjD SOS_AdjEM`
 
 #### Supported models (`--model`)
 
-| Key | Algorithm |
-|---|---|
-| `logistic_lbfgs` *(default)* | Logistic Regression (LBFGS) |
-| `logistic_newton` | Logistic Regression (Newton-CG) |
-| `logistic_liblinear` | Logistic Regression (Liblinear) |
-| `knn3` | k-Nearest Neighbors (k=3) |
-| `knn5` | k-Nearest Neighbors (k=5) |
-| `svc_rbf` | SVM (RBF kernel) |
-| `svc_linear` | SVM (linear kernel) |
-| `svc_poly2` | SVM (polynomial degree 2) |
-| `svc_poly3` | SVM (polynomial degree 3) |
-| `decision_tree` | Decision Tree |
-| `random_forest` | Random Forest |
-| `adaboost` | AdaBoost |
-| `gp` | Gaussian Process |
+| Key | Algorithm | sklearn docs |
+|---|---|---|
+| `logistic_regression` *(default)* | Logistic Regression | [LogisticRegression](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html#sklearn.linear_model.LogisticRegression) |
+| `knn` | k-Nearest Neighbors | [KNeighborsClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.KNeighborsClassifier.html) |
+| `svc` | Support Vector Machine | [SVC](https://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html) |
+| `decision_tree` | Decision Tree | [DecisionTreeClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.tree.DecisionTreeClassifier.html) |
+| `random_forest` | Random Forest | [RandomForestClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html#sklearn.ensemble.RandomForestClassifier) |
+| `adaboost` | AdaBoost | [AdaBoostClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostClassifier.html) |
+| `gpc` | Gaussian Process | [GaussianProcessClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.gaussian_process.GaussianProcessClassifier.html) |
+
+#### `--model-params`
+
+Pass constructor keyword arguments to the model using `key=value` pairs. Values are automatically cast to `int`, `float`, `bool`, `None`, or `str`. See the sklearn docs linked above for valid parameters for each model.
+
+```bash
+python3 Python/predict_brackets.py --model logistic_regression --model-params solver=lbfgs max_iter=1000 random_state=0
+python3 Python/predict_brackets.py --model knn --model-params n_neighbors=7
+python3 Python/predict_brackets.py --model random_forest --model-params n_estimators=200 random_state=42
+python3 Python/predict_brackets.py --model svc --model-params kernel=rbf C=1.0
+```
+
+Model parameters are appended to the output folder name: `Predictions/<model>_<score>_<KP|BT>_<features>_<param1=val1>+<param2=val2>/`
+
+---
+
+### `Python/convert_kenpom_txt.py`
+
+Converts a raw KenPom HTML file into the `KenPomData/<YEAR>.csv` format.
+
+```bash
+python3 Python/convert_kenpom_txt.py Data/KenPomRaw/3_17_2025.htm Data/KenPomData/2025.csv
+# Pre-tournament (no seeds assigned yet):
+python3 Python/convert_kenpom_txt.py Data/KenPomRaw/2_28_2026.htm Data/KenPomData/2026.csv --no-seeds
+```
+
+`--no-seeds` includes all 360+ teams (not just tournament field) and leaves the `Seed` column blank.
+
+---
+
+### `Python/brackets_api.py`
+
+Fetches NCAA tournament bracket data from the NCAA API and writes per-round `BracketData` CSVs for a given year.
+
+```bash
+python3 Python/brackets_api.py 2025
+```
+
+---
+
+### `Python/find_name_mismatch.py`
+
+Diagnostic script. Compares team names across `BracketData`, `GameData`, and `KenPomData` for a given year and prints names that don't match.
+
+```bash
+python3 Python/find_name_mismatch.py --year 2026
+```
 
 ---
 
 ## Adding a New Year (Pre-Tournament)
 
-1. Save KenPom HTML → `convert_kenpom_txt.py --no-seeds`
-2. Copy BartTorvik .txt → `convert_barttorvik_txt.py --no-seeds`
-3. Manually enter `BracketData/<YEAR>/Round1_<YEAR>.csv` (32 matchups, scores = 0)
-4. Run `find_name_mismatch.py --year <YEAR>` — review mismatches
-5. Fix mismatches in `team_names.csv`, then run `reconcile_name_mismatch.py --year <YEAR>`; repeat until clean
-6. Run `compile_combined_data.py --this-year <YEAR>`
-7. Run `predict_brackets.py --this-year <YEAR>`
+1. Copy KenPom Data → run `convert_kenpom_txt.py --no-seeds`
+2. Manually enter `BracketData/<YEAR>/Round1_<YEAR>.csv` (32 matchups, scores = 0)
+3. Run `reconcile_name_mismatch.py --year <YEAR>` — fix any reported mismatches in `team_names.csv`
+4. Run `compile_combined_data.py --this-year <YEAR>`
+5. Run `predict_brackets.py --this-year <YEAR>`
 
 ## Adding a New Year (Post-Tournament)
 
 1. Fetch bracket results: `brackets_api.py <YEAR>` (or enter manually)
-2. Copy final BartTorvik .txt → `convert_barttorvik_txt.py --all-teams`
-3. Run `determine_winner.py --year <YEAR>`
-4. Run `reconcile_name_mismatch.py --year <YEAR>`
-5. Run `compile_combined_data.py --year <YEAR>`
-6. Run `predict_brackets.py` (no `--this-year`; all years scored)
+2. Run `determine_winner.py --year <YEAR>`
+3. Run `reconcile_name_mismatch.py --year <YEAR>`
+4. Run `compile_combined_data.py --year <YEAR>`
+5. Run `predict_brackets.py` (no `--this-year`; all years scored)

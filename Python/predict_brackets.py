@@ -87,24 +87,46 @@ DEFAULT_FEATURE_BASES: List[str] = ['WinPct', 'AdjO', 'AdjD', 'SOS_AdjEM']
 CATEGORICAL_BASE_NAMES: frozenset = frozenset(['Conf', 'Seed'])
 
 MODEL_REGISTRY = {
-    'logistic_lbfgs':     lambda: LogisticRegression(random_state=0, solver='lbfgs',     max_iter=1000),
-    'logistic_newton':    lambda: LogisticRegression(random_state=0, solver='newton-cg', max_iter=1000),
-    'logistic_liblinear': lambda: LogisticRegression(random_state=0, solver='liblinear', max_iter=1000),
-    'knn3':               lambda: KNeighborsClassifier(n_neighbors=3),
-    'knn5':               lambda: KNeighborsClassifier(n_neighbors=5),
-    'svc_rbf':            lambda: SVC(gamma='auto'),
-    'svc_linear':         lambda: SVC(kernel='linear'),
-    'svc_poly2':          lambda: SVC(kernel='poly', degree=2),
-    'svc_poly3':          lambda: SVC(kernel='poly', degree=3),
-    'decision_tree':      lambda: DecisionTreeClassifier(),
-    'random_forest':      lambda: RandomForestClassifier(),
-    'adaboost':           lambda: AdaBoostClassifier(),
-    'gp':                 lambda: GaussianProcessClassifier(),
+    'logistic_regression': LogisticRegression,
+    'knn':                 KNeighborsClassifier,
+    'svc':                 SVC,
+    'decision_tree':       DecisionTreeClassifier,
+    'random_forest':       RandomForestClassifier,
+    'adaboost':            AdaBoostClassifier,
+    'gpc':                 GaussianProcessClassifier,
 }
 
 # ---------------------------------------------------------------------------
 # Data helpers
 # ---------------------------------------------------------------------------
+
+def parse_model_params(params_list: list) -> dict:
+    """
+    Parse a list of 'key=value' strings into a typed dict.
+    Attempts int → float → bool → None → str in that order.
+    Single/double quotes around the value are stripped.
+    """
+    result = {}
+    for item in (params_list or []):
+        key, _, val_str = item.partition('=')
+        key = key.strip()
+        val_str = val_str.strip().strip("'\"")
+        low = val_str.lower()
+        if low == 'true':
+            result[key] = True
+        elif low == 'false':
+            result[key] = False
+        elif low == 'none':
+            result[key] = None
+        else:
+            try:
+                result[key] = int(val_str)
+            except ValueError:
+                try:
+                    result[key] = float(val_str)
+                except ValueError:
+                    result[key] = val_str
+    return result
 
 def load_combined_games(data_root: Path, exclude_year: int = None) -> pd.DataFrame:
     """Load GameCombinedData/All.csv, optionally excluding one year."""
@@ -250,10 +272,11 @@ def parse_ff_pairings_arg(arg: str) -> List[Tuple[int, int]]:
 # Model training
 # ---------------------------------------------------------------------------
 
-def build_and_train_model(model_key: str, X_train: pd.DataFrame, y_train: pd.Series):
+def build_and_train_model(model_key: str, X_train: pd.DataFrame, y_train: pd.Series,
+                          model_params: dict = None):
     if model_key not in MODEL_REGISTRY:
         raise ValueError(f"Unknown model '{model_key}'. Options: {list(MODEL_REGISTRY)}")
-    estimator = MODEL_REGISTRY[model_key]()
+    estimator = MODEL_REGISTRY[model_key](**(model_params or {}))
     estimator.fit(X_train, y_train)
     return estimator
 
@@ -449,9 +472,9 @@ def main():
     )
     parser.add_argument(
         '--model', '-m',
-        default='logistic_lbfgs',
+        default='logistic_regression',
         choices=list(MODEL_REGISTRY),
-        help='Model to use for predictions.',
+        help='Model algorithm to use for predictions.',
     )
     parser.add_argument(
         '--data-root', '-d',
@@ -480,6 +503,17 @@ def main():
             'are paired for the Final Four.  Used ONLY for the current year; '
             'past years derive pairings from actual Round 5 data.  '
             'Format: "i-j,k-l", e.g. "0-2,1-3".  Default: "0-1,2-3".'
+        ),
+    )
+    parser.add_argument(
+        '--model-params',
+        nargs='*',
+        default=[],
+        metavar='KEY=VALUE',
+        help=(
+            'Parameters to pass to the model constructor as key=value pairs. '
+            'Values are auto-cast to int, float, bool, None, or str. '
+            'Example: --model-params random_state=0 solver=lbfgs max_iter=1000'
         ),
     )
     parser.add_argument(
@@ -515,6 +549,9 @@ def main():
 
     expert    = args.expert
     data_root = Path(args.data_root)
+    model_params = parse_model_params(args.model_params)
+    if model_params:
+        print(f'Model params: {model_params}')
     # Resolve each base name to its source-prefixed column, then expand __1/__2.
     feature_list = [
         f'{resolve_feature_col(b, expert)}__{i}'
@@ -584,7 +621,7 @@ def main():
 
         X_tr = df_train[feature_list]
         y_tr = df_train['Win__1']
-        model = build_and_train_model(args.model, X_tr, y_tr)
+        model = build_and_train_model(args.model, X_tr, y_tr, model_params)
 
         train_acc = model.score(X_tr, y_tr)
         if not is_current:
@@ -648,7 +685,7 @@ def main():
         df_trad = apply_label_encoders(df_trad, cat_encoders)
     X_trad, y_trad = df_trad[feature_list], df_trad['Win__1']
     X_tr_t, X_te_t, y_tr_t, y_te_t = train_test_split(X_trad, y_trad, test_size=0.33, random_state=42)
-    model_trad = build_and_train_model(args.model, X_tr_t, y_tr_t)
+    model_trad = build_and_train_model(args.model, X_tr_t, y_tr_t, model_params)
     trad_train_acc = model_trad.score(X_tr_t, y_tr_t)
     trad_test_acc  = model_trad.score(X_te_t, y_te_t)
     print(f'  Train acc: {trad_train_acc:.4f}  |  Test acc: {trad_test_acc:.4f}')
@@ -714,7 +751,11 @@ def main():
             seen_bases.add(col_base)
             feat_parts.append(col_base)
     feat_str = '+'.join(feat_parts)
-    final_dir_name = f'{args.model}_{int(avg_score_val)}_{expert_tag}_{feat_str}'
+    params_tag = ('+'.join(f'{k}={v}' for k, v in model_params.items())) if model_params else ''
+    final_dir_name = (
+        f'{args.model}_{int(avg_score_val)}_{expert_tag}_{feat_str}'
+        + (f'_{params_tag}' if params_tag else '')
+    )
     final_output_root = output_root.parent / final_dir_name
     if final_output_root.exists():
         shutil.rmtree(final_output_root)
