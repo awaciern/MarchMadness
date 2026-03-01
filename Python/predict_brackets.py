@@ -41,10 +41,11 @@ from sklearn.model_selection import train_test_split
 ALL_YEARS = [y for y in range(2012, 2026) if y != 2020]  # all completed years through 2025
 
 FEATURE_LIST = [
-    'WinPct__1', 'AdjEM__1', 'AdjO__1', 'AdjD__1', 'AdjT__1', 'Luck__1',
-    'SOS_AdjEM__1', 'Rk_NCSOS_AdjEM__1',
-    'WinPct__2', 'AdjEM__2', 'AdjO__2', 'AdjD__2', 'AdjT__2', 'Luck__2',
-    'SOS_AdjEM__2', 'Rk_NCSOS_AdjEM__2',
+    # KenPom stats (KP__ prefix)
+    'KP__WinPct__1', 'KP__AdjEM__1', 'KP__AdjO__1', 'KP__AdjD__1', 'KP__AdjT__1', 'KP__Luck__1',
+    'KP__SOS_AdjEM__1', 'KP__Rk_NCSOS_AdjEM__1',
+    'KP__WinPct__2', 'KP__AdjEM__2', 'KP__AdjO__2', 'KP__AdjD__2', 'KP__AdjT__2', 'KP__Luck__2',
+    'KP__SOS_AdjEM__2', 'KP__Rk_NCSOS_AdjEM__2',
 ]
 
 # Ordered unique base names (without __1/__2 suffix) derived from FEATURE_LIST.
@@ -56,9 +57,12 @@ for _f in FEATURE_LIST:
         _seen.add(_b)
         DEFAULT_FEATURE_BASES.append(_b)
 # All available base names: numeric defaults + categorical extras.
-FEATURE_BASES: List[str] = DEFAULT_FEATURE_BASES + ['Conf', 'Seed']
+# KP__Conf = KenPom conference (categorical, label-encoded)
+# Seed     = tournament seed from bracket data (non-prefixed, categorical)
+FEATURE_BASES: List[str] = DEFAULT_FEATURE_BASES + ['KP__Conf', 'Seed']
 # Features that require label encoding before being fed to the model.
-CATEGORICAL_BASES: frozenset = frozenset(['Conf', 'Seed'])
+# Uses the base name as returned by col.rsplit('__', 1)[0].
+CATEGORICAL_BASES: frozenset = frozenset(['KP__Conf', 'Seed'])
 
 MODEL_REGISTRY = {
     'logistic_lbfgs':     lambda: LogisticRegression(random_state=0, solver='lbfgs',     max_iter=1000),
@@ -122,11 +126,16 @@ def apply_label_encoders(df: pd.DataFrame, encoders: dict) -> pd.DataFrame:
 
 def attach_kenpom(df_matchups: pd.DataFrame, df_kp: pd.DataFrame) -> pd.DataFrame:
     """
-    Given a DataFrame with columns Team__1 and Team__2, merge in all KenPom
-    stats (suffixed __1 and __2).
+    Given a DataFrame with columns Team__1 and Team__2, merge in KenPom stats
+    with the KP__ source prefix and __1 / __2 team suffix.
+    Seed is dropped — seeds are tracked separately via team_seed_map.
     """
-    kp1 = df_kp.add_suffix('__1')
-    kp2 = df_kp.add_suffix('__2')
+    kp = df_kp.drop(columns=['Seed'], errors='ignore')
+    # Prefix every non-Team column with KP__
+    rename_map = {c: f'KP__{c}' for c in kp.columns if c != 'Team'}
+    kp = kp.rename(columns=rename_map)
+    kp1 = kp.add_suffix('__1')   # Team → Team__1, KP__AdjEM → KP__AdjEM__1
+    kp2 = kp.add_suffix('__2')
     df = df_matchups.merge(kp1, on='Team__1', how='inner')
     df = df.merge(kp2, on='Team__2', how='inner')
     return df.reset_index(drop=True)
@@ -276,10 +285,10 @@ def simulate_bracket(
             df_kp = load_kenpom(data_root, year)
             df_round = attach_kenpom(df_matchups, df_kp)
 
-            # Fill seeds from map in case KenPom has blank seeds (e.g. --no-seeds year).
-            if df_round['Seed__1'].isna().any() or df_round['Seed__2'].isna().any():
-                df_round['Seed__1'] = df_round['Team__1'].map(team_seed_map).fillna(df_round['Seed__1'])
-                df_round['Seed__2'] = df_round['Team__2'].map(team_seed_map).fillna(df_round['Seed__2'])
+            # Seed columns are not present in dynamically built rounds (KenPom Seed
+            # is dropped during attach_kenpom); populate from the Round 1 seed map.
+            df_round['Seed__1'] = df_round['Team__1'].map(team_seed_map)
+            df_round['Seed__2'] = df_round['Team__2'].map(team_seed_map)
 
             if not is_current:
                 df_round['Winning_Team'] = actual_winners
