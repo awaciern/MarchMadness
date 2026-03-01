@@ -20,6 +20,7 @@ Usage:
 
 import argparse
 import os
+import shutil
 from pathlib import Path
 from typing import List, Tuple
 
@@ -44,6 +45,15 @@ FEATURE_LIST = [
     'WinPct__2', 'AdjEM__2', 'AdjO__2', 'AdjD__2', 'AdjT__2', 'Luck__2',
     'SOS_AdjEM__2', 'Rk_NCSOS_AdjEM__2',
 ]
+
+# Ordered unique base names (without __1/__2 suffix) derived from FEATURE_LIST.
+_seen: set = set()
+FEATURE_BASES: List[str] = []
+for _f in FEATURE_LIST:
+    _b = _f.rsplit('__', 1)[0]
+    if _b not in _seen:
+        _seen.add(_b)
+        FEATURE_BASES.append(_b)
 
 MODEL_REGISTRY = {
     'logistic_lbfgs':     lambda: LogisticRegression(random_state=0, solver='lbfgs',     max_iter=1000),
@@ -165,6 +175,7 @@ def simulate_bracket(
     year: int,
     this_year: int = None,
     ff_pairings: List[Tuple[int, int]] = None,
+    feature_list: list = None,
 ) -> Tuple[list, list, list, list, int]:
     """
     Simulate filling out a bracket from Round 1 using the model.
@@ -179,6 +190,8 @@ def simulate_bracket(
     is_current = (this_year is not None and year == this_year)
     if ff_pairings is None:
         ff_pairings = [(0, 1), (2, 3)]
+    if feature_list is None:
+        feature_list = FEATURE_LIST
 
     pred_teams_by_round: list = []
     pred_seeds_by_round: list = []
@@ -242,7 +255,7 @@ def simulate_bracket(
                 df_round['Winning_Team'] = actual_winners
 
         # Predict.
-        X = df_round[FEATURE_LIST]
+        X = df_round[feature_list]
         preds = model.predict(X)
         df_round = df_round.copy()
         df_round['Pred_Win__1'] = preds
@@ -357,10 +370,26 @@ def main():
             'Format: "i-j,k-l", e.g. "0-2,1-3".  Default: "0-1,2-3".'
         ),
     )
+    parser.add_argument(
+        '--features',
+        nargs='+',
+        default=FEATURE_BASES,
+        choices=FEATURE_BASES,
+        metavar='FEATURE',
+        help=(
+            'Space-separated list of base feature names to use for training and prediction. '
+            '__1 and __2 suffixes are added automatically for each team. '
+            f'Choices: {{{", ".join(FEATURE_BASES)}}}. '
+            'Default: all features.'
+        ),
+    )
     args = parser.parse_args()
 
-    data_root   = Path(args.data_root)
-    output_root = Path(args.output_root) / 'Predictions' / args.model
+    data_root    = Path(args.data_root)
+    # Expand base names to __1 and __2 columns, preserving order.
+    feature_list = [f'{b}__{i}' for b in args.features for i in (1, 2)]
+    # Write to a pending folder; renamed to model+score+features at the end.
+    output_root  = Path(args.output_root) / 'Predictions' / f'__{args.model}__pending'
     output_root.mkdir(parents=True, exist_ok=True)
 
     this_year = args.this_year
@@ -377,7 +406,7 @@ def main():
     # Train model once on a random train/test split of all historical data.
     # -----------------------------------------------------------------------
     df_all = load_combined_games(data_root)
-    X_all, y_all = df_all[FEATURE_LIST], df_all['Win__1']
+    X_all, y_all = df_all[feature_list], df_all['Win__1']
     X_tr, X_te, y_tr, y_te = train_test_split(X_all, y_all, test_size=0.33, random_state=42)
     model = build_and_train_model(args.model, X_tr, y_tr)
     print(f'Model: {args.model}')
@@ -413,6 +442,7 @@ def main():
             year=year,
             this_year=this_year,
             ff_pairings=ff_pairings,
+            feature_list=feature_list,
         )
 
         if not is_current:
@@ -452,6 +482,23 @@ def main():
     summary_str = '\n'.join(summary_lines)
     print(f'\n{summary_str}')
     (output_root / 'summary.txt').write_text(summary_str)
+
+    # Rename the pending folder to a descriptive name: model_score_features
+    avg_score_val = total_score / num_eval_years if num_eval_years else 0
+    seen_bases: set = set()
+    feat_parts: List[str] = []
+    for f in feature_list:
+        base = f.rsplit('__', 1)[0]
+        if base not in seen_bases:
+            seen_bases.add(base)
+            feat_parts.append(base)
+    feat_str = '+'.join(feat_parts)
+    final_dir_name = f'{args.model}_{int(avg_score_val)}_{feat_str}'
+    final_output_root = output_root.parent / final_dir_name
+    if final_output_root.exists():
+        shutil.rmtree(final_output_root)
+    output_root.rename(final_output_root)
+    print(f'Results saved to: {final_output_root}')
 
 
 if __name__ == '__main__':
