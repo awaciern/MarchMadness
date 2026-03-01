@@ -109,9 +109,10 @@ def parse_block(block: list, no_seeds: bool, all_teams: bool):
     first = block[0]
     first_cols = first.split('\t')
 
-    # Determine if this is a tournament team (2-line header) or not (1-line header).
+    # Determine if this is a tournament/AQ team (2-line header) or a plain team (1-line header).
+    # Matches old "   1 seed, Finals\t..." format AND new 2026 "   (A) 36 Ohio St.\t..." format.
     is_tournament = (
-        len(block) > 1 and block[1].startswith(' ') and 'seed' in block[1].lower()
+        len(block) > 1 and block[1][:1] == ' '
     )
 
     if is_tournament:
@@ -147,12 +148,21 @@ def parse_block(block: list, no_seeds: bool, all_teams: bool):
         seed = ''
 
     # Flatten stat tokens from the remaining lines.
+    # Skip column-header repeat lines that appear at page breaks (e.g. "Rk\tTeam\tConf\t...").
     tokens = []
     for line in stat_lines:
+        if re.match(r'^Rk\t', line):
+            continue  # column header repeated at page break — skip
         for tok in line.split('\t'):
             tok = tok.strip()
             if tok:
                 tokens.append(tok)
+
+    # 2026+ format dropped ConfRec from the stat block (38 tokens instead of 39).
+    # Detect this by checking whether the first token looks like a W-L record or a float.
+    if tokens and '-' not in tokens[0] and not tokens[0].startswith('+'):
+        # First token is a numeric value (AdjO), not a W-L record — ConfRec absent.
+        tokens.insert(0, '')  # placeholder so STAT_SEQUENCE indices stay aligned
 
     if len(tokens) < len(STAT_SEQUENCE):
         return None  # malformed block
