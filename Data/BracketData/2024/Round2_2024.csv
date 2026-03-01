@@ -1,0 +1,17 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+UConn,1,75,Northwestern,9,58,UConn,True
+San Diego State,5,85,Yale,13,57,San Diego State,True
+Duquesne,11,63,Illinois,3,89,Illinois,False
+Washington State,7,56,Iowa State,2,67,Iowa State,False
+North Carolina,1,85,Michigan State,9,69,North Carolina,True
+Grand Canyon,12,61,Alabama,4,72,Alabama,False
+Clemson,6,72,Baylor,3,64,Clemson,True
+Dayton,7,68,Arizona,2,78,Arizona,False
+Houston,1,100,Texas A&M,9,95,Houston,True
+James Madison,12,55,Duke,4,93,Duke,False
+North Carolina State,11,79,Oakland,14,73,North Carolina State,True
+Colorado,10,77,Marquette,2,81,Marquette,False
+Purdue,1,106,Utah State,8,67,Purdue,True
+Gonzaga,5,89,Kansas,4,68,Gonzaga,True
+Oregon,11,73,Creighton,3,86,Creighton,False
+Texas,7,58,Tennessee,2,62,Tennessee,False

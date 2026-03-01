@@ -1,4 +1,8 @@
-Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+UMBC,16,43,Kansas State,9,50,Kansas State,False
+Kentucky,5,95,Buffalo,13,75,Kentucky,True
+Loyola Chicago,11,63,Tennessee,3,62,Loyola Chicago,True
+Nevada,7,75,Cincinnati,2,73,Nevada,True
 Xavier,1,70,Florida State,9,75,Florida State,False
 Ohio State,5,84,Gonzaga,4,90,Gonzaga,False
 Houston,6,63,Michigan,3,64,Michigan,False
@@ -7,10 +11,6 @@ Villanova,1,81,Alabama,9,58,Villanova,True
 West Virginia,5,94,Marshall,13,71,West Virginia,True
 Florida,6,66,Texas Tech,3,69,Texas Tech,False
 Butler,10,73,Purdue,2,76,Purdue,False
-UMBC,16,43,Kansas State,9,50,Kansas State,False
-Kentucky,5,95,Buffalo,13,75,Kentucky,True
-Loyola Chicago,11,63,Tennessee,3,62,Loyola Chicago,True
-Nevada,7,75,Cincinnati,2,73,Nevada,True
 Kansas,1,83,Seton Hall,8,79,Kansas,True
 Clemson,5,84,Auburn,4,53,Clemson,True
 Syracuse,11,55,Michigan State,3,53,Syracuse,True

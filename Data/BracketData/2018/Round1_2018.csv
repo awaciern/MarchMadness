@@ -1,4 +1,12 @@
-Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Virginia,1,54,UMBC,16,74,UMBC,False
+Creighton,8,59,Kansas State,9,69,Kansas State,False
+Kentucky,5,78,Davidson,12,73,Kentucky,True
+Arizona,4,68,Buffalo,13,89,Buffalo,False
+Miami (FL),6,62,Loyola Chicago,11,64,Loyola Chicago,False
+Tennessee,3,73,Wright State,14,47,Tennessee,True
+Nevada,7,87,Texas,10,83,Nevada,True
+Cincinnati,2,68,Georgia State,15,53,Cincinnati,True
 Xavier,1,102,Texas Southern,16,83,Xavier,True
 Missouri,8,54,Florida State,9,67,Florida State,False
 Ohio State,5,81,South Dakota State,12,73,Ohio State,True
@@ -15,16 +23,8 @@ Florida,6,77,St. Bonaventure,11,62,Florida,True
 Texas Tech,3,70,Stephen F. Austin,14,60,Texas Tech,True
 Arkansas,7,62,Butler,10,79,Butler,False
 Purdue,2,74,Cal State Fullerton,15,48,Purdue,True
-Virginia,1,54,UMBC,16,74,UMBC,False
-Creighton,8,59,Kansas State,9,69,Kansas State,False
-Kentucky,5,78,Davidson,12,73,Kentucky,True
-Arizona,4,68,Buffalo,13,89,Buffalo,False
-Miami (FL),6,62,Loyola Chicago,11,64,Loyola Chicago,False
-Tennessee,3,73,Wright State,14,47,Tennessee,True
-Nevada,7,87,Texas,10,83,Nevada,True
-Cincinnati,2,68,Georgia State,15,53,Cincinnati,True
 Kansas,1,76,Penn,16,60,Kansas,True
-Seton Hall,8,94,NC State,9,83,Seton Hall,True
+Seton Hall,8,94,North Carolina State,9,83,Seton Hall,True
 Clemson,5,79,New Mexico State,12,68,Clemson,True
 Auburn,4,62,College of Charleston,13,58,Auburn,True
 TCU,6,52,Syracuse,11,57,Syracuse,False

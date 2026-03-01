@@ -1,4 +1,4 @@
-Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1,Year,Round
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win,Year,Round
 Gonzaga,1,98.0,Norfolk State,16,55.0,Gonzaga,True,2021,1
 Oklahoma,8,72.0,Missouri,9,68.0,Oklahoma,True,2021,1
 Creighton,5,63.0,UC Santa Barbara,12,62.0,Creighton,True,2021,1

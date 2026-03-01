@@ -1,12 +1,4 @@
-Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
-Gonzaga,1,87,Fairleigh Dickinson,16,49,Gonzaga,True
-Syracuse,8,69,Baylor,9,78,Baylor,False
-Marquette,5,64,Murray State,12,83,Murray State,False
-Florida State,4,76,Vermont,13,69,Florida State,True
-Buffalo,6,91,Arizona State,11,74,Buffalo,True
-Texas Tech,3,72,Northern Kentucky,14,57,Texas Tech,True
-Nevada,7,61,Florida,10,70,Florida,False
-Michigan,2,74,Montana,15,55,Michigan,True
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
 Duke,1,85,North Dakota State,16,62,Duke,True
 VCU,8,58,UCF,9,73,UCF,False
 Mississippi State,5,76,Liberty,12,80,Liberty,False
@@ -15,10 +7,18 @@ Maryland,6,79,Belmont,11,77,Maryland,True
 LSU,3,79,Yale,14,74,LSU,True
 Louisville,7,76,Minnesota,10,86,Minnesota,False
 Michigan State,2,76,Bradley,15,65,Michigan State,True
+Gonzaga,1,87,Fairleigh Dickinson,16,49,Gonzaga,True
+Syracuse,8,69,Baylor,9,78,Baylor,False
+Marquette,5,64,Murray State,12,83,Murray State,False
+Florida State,4,76,Vermont,13,69,Florida State,True
+Buffalo,6,91,Arizona State,11,74,Buffalo,True
+Texas Tech,3,72,Northern Kentucky,14,57,Texas Tech,True
+Nevada,7,61,Florida,10,70,Florida,False
+Michigan,2,74,Montana,15,55,Michigan,True
 Virginia,1,71,Gardner-Webb,16,56,Virginia,True
 Ole Miss,8,72,Oklahoma,9,95,Oklahoma,False
 Wisconsin,5,54,Oregon,12,72,Oregon,False
-Kansas State,4,64,California-Irvine,13,70,UC Irvine,False
+Kansas State,4,64,California-Irvine,13,70,California-Irvine,False
 Villanova,6,61,Saint Mary's,11,57,Villanova,True
 Purdue,3,61,Old Dominion,14,48,Purdue,True
 Cincinnati,7,72,Iowa,10,79,Iowa,False

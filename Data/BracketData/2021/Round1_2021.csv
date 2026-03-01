@@ -1,11 +1,11 @@
-Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
 Gonzaga,1,98.0,Norfolk State,16,55.0,Gonzaga,True
 Oklahoma,8,72.0,Missouri,9,68.0,Oklahoma,True
 Creighton,5,63.0,UC Santa Barbara,12,62.0,Creighton,True
 Virginia,4,58.0,Ohio,13,62.0,Ohio,False
 USC,6,72.0,Drake,11,56.0,USC,True
 Kansas,3,93.0,Eastern Washington,14,84.0,Kansas,True
-Oregon,7,,VCU,10,,Oregon,True
+Oregon,7,,VCU,10,,VCU,False
 Iowa,2,86.0,Grand Canyon,15,74.0,Iowa,True
 Michigan,1,82.0,Texas Southern,16,66.0,Michigan,True
 LSU,8,76.0,St. Bonaventure,9,61.0,LSU,True

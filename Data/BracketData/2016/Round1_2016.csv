@@ -1,4 +1,12 @@
-Team__1,Seed__1,Score__1,Team__2,Seed__2,Score__2,Winning_Team,Win__1
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win
+Kansas,1,105,Austin Peay,16,79,Kansas,True
+Colorado,8,67,UConn,9,74,UConn,False
+Maryland,5,79,South Dakota State,12,74,Maryland,True
+California,4,66,Hawaii,13,77,Hawaii,False
+Arizona,6,55,Wichita State,11,65,Wichita State,False
+Miami (FL),3,79,Buffalo,14,72,Miami (FL),True
+Iowa,7,72,Temple,10,70,Iowa,True
+Villanova,2,86,UNC Asheville,15,56,Villanova,True
 Oregon,1,91,Holy Cross,16,52,Oregon,True
 Saint Joseph's,8,78,Cincinnati,9,76,Saint Joseph's,True
 Baylor,5,75,Yale,12,79,Yale,False
@@ -15,14 +23,6 @@ Notre Dame,6,70,Michigan,11,63,Notre Dame,True
 West Virginia,3,56,Stephen F. Austin,14,70,Stephen F. Austin,False
 Wisconsin,7,47,Pittsburgh,10,43,Wisconsin,True
 Xavier,2,71,Weber State,15,53,Xavier,True
-Kansas,1,105,Austin Peay,16,79,Kansas,True
-Colorado,8,67,UConn,9,74,UConn,False
-Maryland,5,79,South Dakota State,12,74,Maryland,True
-California,4,66,Hawaii,13,77,Hawaii,False
-Arizona,6,55,Wichita State,11,65,Wichita State,False
-Miami (FL),3,79,Buffalo,14,72,Miami (FL),True
-Iowa,7,72,Temple,10,70,Iowa,True
-Villanova,2,86,UNC Asheville,15,56,Villanova,True
 Virginia,1,81,Hampton,16,45,Virginia,True
 Texas Tech,8,61,Butler,9,71,Butler,False
 Purdue,5,83,Little Rock,12,85,Little Rock,False
