@@ -27,6 +27,7 @@ from typing import List, Tuple
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
@@ -48,12 +49,16 @@ FEATURE_LIST = [
 
 # Ordered unique base names (without __1/__2 suffix) derived from FEATURE_LIST.
 _seen: set = set()
-FEATURE_BASES: List[str] = []
+DEFAULT_FEATURE_BASES: List[str] = []
 for _f in FEATURE_LIST:
     _b = _f.rsplit('__', 1)[0]
     if _b not in _seen:
         _seen.add(_b)
-        FEATURE_BASES.append(_b)
+        DEFAULT_FEATURE_BASES.append(_b)
+# All available base names: numeric defaults + categorical extras.
+FEATURE_BASES: List[str] = DEFAULT_FEATURE_BASES + ['Conf', 'Seed']
+# Features that require label encoding before being fed to the model.
+CATEGORICAL_BASES: frozenset = frozenset(['Conf', 'Seed'])
 
 MODEL_REGISTRY = {
     'logistic_lbfgs':     lambda: LogisticRegression(random_state=0, solver='lbfgs',     max_iter=1000),
@@ -91,6 +96,28 @@ def load_bracket_round(data_root: Path, year: int, rnd: int) -> pd.DataFrame:
 
 def load_kenpom(data_root: Path, year: int) -> pd.DataFrame:
     return pd.read_csv(data_root / 'Data' / 'KenPomData' / f'{year}.csv')
+
+
+def fit_label_encoders(df: pd.DataFrame, cat_cols: List[str]) -> dict:
+    """Fit one LabelEncoder per categorical column.  Returns {col: LabelEncoder}."""
+    encoders = {}
+    for col in cat_cols:
+        le = LabelEncoder()
+        le.fit(df[col].astype(str))
+        encoders[col] = le
+    return encoders
+
+
+def apply_label_encoders(df: pd.DataFrame, encoders: dict) -> pd.DataFrame:
+    """Return a copy of df with each categorical column replaced by integer codes.
+    Values not seen during fit (including NaN / blank seeds) are encoded as -1."""
+    df = df.copy()
+    for col, le in encoders.items():
+        if col not in df.columns:
+            continue
+        class_map = {v: i for i, v in enumerate(le.classes_)}
+        df[col] = df[col].astype(str).map(class_map).fillna(-1).astype(int)
+    return df
 
 
 def attach_kenpom(df_matchups: pd.DataFrame, df_kp: pd.DataFrame) -> pd.DataFrame:
@@ -176,6 +203,7 @@ def simulate_bracket(
     this_year: int = None,
     ff_pairings: List[Tuple[int, int]] = None,
     feature_list: list = None,
+    cat_encoders: dict = None,
 ) -> Tuple[list, list, list, list, int]:
     """
     Simulate filling out a bracket from Round 1 using the model.
@@ -192,6 +220,8 @@ def simulate_bracket(
         ff_pairings = [(0, 1), (2, 3)]
     if feature_list is None:
         feature_list = FEATURE_LIST
+    if cat_encoders is None:
+        cat_encoders = {}
 
     pred_teams_by_round: list = []
     pred_seeds_by_round: list = []
@@ -255,6 +285,8 @@ def simulate_bracket(
                 df_round['Winning_Team'] = actual_winners
 
         # Predict.
+        if cat_encoders:
+            df_round = apply_label_encoders(df_round, cat_encoders)
         X = df_round[feature_list]
         preds = model.predict(X)
         df_round = df_round.copy()
@@ -373,13 +405,13 @@ def main():
     parser.add_argument(
         '--features',
         nargs='+',
-        default=FEATURE_BASES,
+        default=DEFAULT_FEATURE_BASES,
         choices=FEATURE_BASES,
         metavar='FEATURE',
         help=(
             'Space-separated list of base feature names to use for training and prediction. '
             f'Choices: {{{", ".join(FEATURE_BASES)}}}. '
-            'Default: all features.'
+            'Default: all numeric features (Conf and Seed are opt-in categorical extras).'
         ),
     )
     args = parser.parse_args()
@@ -387,6 +419,8 @@ def main():
     data_root    = Path(args.data_root)
     # Expand base names to __1 and __2 columns, preserving order.
     feature_list = [f'{b}__{i}' for b in args.features for i in (1, 2)]
+    # Identify which expanded columns need label encoding.
+    cat_cols = [c for c in feature_list if c.rsplit('__', 1)[0] in CATEGORICAL_BASES]
     # Write to a pending folder; renamed to model+score+features at the end.
     output_root  = Path(args.output_root) / 'Predictions' / f'__{args.model}__pending'
     output_root.mkdir(parents=True, exist_ok=True)
@@ -405,6 +439,10 @@ def main():
     # Train model once on a random train/test split of all historical data.
     # -----------------------------------------------------------------------
     df_all = load_combined_games(data_root)
+    # Fit label encoders on training data for any categorical features, then encode.
+    cat_encoders = fit_label_encoders(df_all, cat_cols) if cat_cols else {}
+    if cat_encoders:
+        df_all = apply_label_encoders(df_all, cat_encoders)
     X_all, y_all = df_all[feature_list], df_all['Win__1']
     X_tr, X_te, y_tr, y_te = train_test_split(X_all, y_all, test_size=0.33, random_state=42)
     model = build_and_train_model(args.model, X_tr, y_tr)
@@ -442,6 +480,7 @@ def main():
             this_year=this_year,
             ff_pairings=ff_pairings,
             feature_list=feature_list,
+            cat_encoders=cat_encoders,
         )
 
         if not is_current:
