@@ -1,10 +1,11 @@
 OVERALL PERFORMANCE
-Train Score = 0.7142857142857143
-ROUND 1: 276 for 384, 71.88%, 2760 points
-ROUND 2: 122 for 192, 63.54%, 2440 points
-ROUND 3: 49 for 96, 51.04%, 1960 points
-ROUND 4: 18 for 48, 37.50%, 1440 points
-ROUND 5: 7 for 24, 29.17%, 1120 points
-ROUND 6: 3 for 12, 25.00%, 960 points
-ALL ROUNDS: 475 for 756, 62.83%
-AVG BRACKET SCORE = 890.00
+  Round 1: 287/384 (74.7%), 2870 pts
+  Round 2: 125/192 (65.1%), 2500 pts
+  Round 3: 49/96 (51.0%), 1960 pts
+  Round 4: 19/48 (39.6%), 1520 pts
+  Round 5: 7/24 (29.2%), 1120 pts
+  Round 6: 3/12 (25.0%), 960 pts
+  All rounds: 490/756 (64.8%)
+  Avg bracket score: 910.8
+  Train accuracy: 0.7115
+  Test  accuracy: 0.7560

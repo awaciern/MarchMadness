@@ -1,0 +1,64 @@
+Team1,Team1_Seed,Team1_Score,Team2,Team2_Seed,Team2_Score,WinningTeam,Team1_Win,Year,Round
+Auburn,1,83,Alabama St.,16,63,Auburn,True,2025,1
+Louisville,8,75,Creighton,9,89,Creighton,False,2025,1
+Michigan,5,68,UC San Diego,12,65,Michigan,True,2025,1
+Texas A&M,4,80,Yale,13,71,Texas A&M,True,2025,1
+Ole Miss,6,71,North Carolina,11,64,Ole Miss,True,2025,1
+Iowa St.,3,82,Lipscomb,14,55,Iowa St.,True,2025,1
+Marquette,7,66,New Mexico,10,75,New Mexico,False,2025,1
+Michigan St.,2,87,Bryant,15,62,Michigan St.,True,2025,1
+Florida,1,95,Norfolk St.,16,69,Florida,True,2025,1
+UConn,8,67,Oklahoma,9,59,UConn,True,2025,1
+Memphis,5,70,Colorado St.,12,78,Colorado St.,False,2025,1
+Maryland,4,81,Grand Canyon,13,49,Maryland,True,2025,1
+Missouri,6,57,Drake,11,67,Drake,False,2025,1
+Texas Tech,3,82,UNC Wilmington,14,72,Texas Tech,True,2025,1
+Kansas,7,72,Arkansas,10,79,Arkansas,False,2025,1
+St. John's,2,83,Omaha,15,53,St. John's,True,2025,1
+Duke,1,93,Mount St. Mary's,16,49,Duke,True,2025,1
+Mississippi St.,8,72,Baylor,9,75,Baylor,False,2025,1
+Oregon,5,81,Liberty,12,52,Oregon,True,2025,1
+Arizona,4,93,Akron,13,65,Arizona,True,2025,1
+BYU,6,80,VCU,11,71,BYU,True,2025,1
+Wisconsin,3,85,Montana,14,66,Wisconsin,True,2025,1
+Saint Mary's,7,59,Vanderbilt,10,56,Saint Mary's,True,2025,1
+Alabama,2,90,Robert Morris,15,81,Alabama,True,2025,1
+Houston,1,78,SIU Edwardsville,16,40,Houston,True,2025,1
+Gonzaga,8,89,Georgia,9,68,Gonzaga,True,2025,1
+Clemson,5,67,McNeese,12,69,McNeese,False,2025,1
+Purdue,4,75,High Point,13,63,Purdue,True,2025,1
+Illinois,6,86,Xavier,11,73,Illinois,True,2025,1
+Kentucky,3,76,Troy,14,57,Kentucky,True,2025,1
+UCLA,7,72,Utah St.,10,47,UCLA,True,2025,1
+Tennessee,2,77,Wofford,15,62,Tennessee,True,2025,1
+Auburn,1,82,Creighton,9,70,Auburn,True,2025,2
+Michigan,5,91,Texas A&M,4,79,Michigan,True,2025,2
+Ole Miss,6,91,Iowa St.,3,78,Ole Miss,True,2025,2
+New Mexico,10,63,Michigan St.,2,71,Michigan St.,False,2025,2
+Florida,1,77,UConn,8,75,Florida,True,2025,2
+Colorado St.,12,71,Maryland,4,72,Maryland,False,2025,2
+Drake,11,64,Texas Tech,3,77,Texas Tech,False,2025,2
+Arkansas,10,75,St. John's,2,66,Arkansas,True,2025,2
+Duke,1,89,Baylor,9,66,Duke,True,2025,2
+Oregon,5,83,Arizona,4,87,Arizona,False,2025,2
+BYU,6,91,Wisconsin,3,89,BYU,True,2025,2
+Saint Mary's,7,66,Alabama,2,80,Alabama,False,2025,2
+Houston,1,81,Gonzaga,8,76,Houston,True,2025,2
+McNeese,12,62,Purdue,4,76,Purdue,False,2025,2
+Illinois,6,75,Kentucky,3,84,Kentucky,False,2025,2
+UCLA,7,58,Tennessee,2,67,Tennessee,False,2025,2
+Auburn,1,78,Michigan,5,65,Auburn,True,2025,3
+Ole Miss,6,70,Michigan St.,2,73,Michigan St.,False,2025,3
+Florida,1,87,Maryland,4,71,Florida,True,2025,3
+Texas Tech,3,85,Arkansas,10,83,Texas Tech,True,2025,3
+Duke,1,100,Arizona,4,93,Duke,True,2025,3
+BYU,6,88,Alabama,2,113,Alabama,False,2025,3
+Houston,1,62,Purdue,4,60,Houston,True,2025,3
+Kentucky,3,65,Tennessee,2,78,Tennessee,False,2025,3
+Auburn,1,70,Michigan St.,2,64,Auburn,True,2025,4
+Florida,1,84,Texas Tech,3,79,Florida,True,2025,4
+Duke,1,85,Alabama,2,65,Duke,True,2025,4
+Houston,1,69,Tennessee,2,50,Houston,True,2025,4
+Auburn,1,73,Florida,1,79,Florida,False,2025,5
+Duke,1,67,Houston,1,70,Houston,False,2025,5
+Florida,1,65,Houston,1,63,Florida,True,2025,6
