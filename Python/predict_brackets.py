@@ -40,29 +40,46 @@ from sklearn.model_selection import train_test_split
 
 ALL_YEARS = [y for y in range(2012, 2026) if y != 2020]  # all completed years through 2025
 
-FEATURE_LIST = [
-    # KenPom stats (KP__ prefix)
-    'KP__WinPct__1', 'KP__AdjEM__1', 'KP__AdjO__1', 'KP__AdjD__1', 'KP__AdjT__1', 'KP__Luck__1',
-    'KP__SOS_AdjEM__1', 'KP__Rk_NCSOS_AdjEM__1',
-    'KP__WinPct__2', 'KP__AdjEM__2', 'KP__AdjO__2', 'KP__AdjD__2', 'KP__AdjT__2', 'KP__Luck__2',
-    'KP__SOS_AdjEM__2', 'KP__Rk_NCSOS_AdjEM__2',
+# Features present in both KenPom and BartTorvik.
+# --expert controls which source's copy (KP__ or BT__ prefix) is used.
+COMMON_BASES: List[str] = [
+    'WinPct', 'Wins', 'Losses',
+    'AdjO', 'Rk_AdjO', 'AdjD', 'Rk_AdjD', 'AdjT', 'Rk_AdjT',
+    'Conf',
 ]
 
-# Ordered unique base names (without __1/__2 suffix) derived from FEATURE_LIST.
-_seen: set = set()
-DEFAULT_FEATURE_BASES: List[str] = []
-for _f in FEATURE_LIST:
-    _b = _f.rsplit('__', 1)[0]
-    if _b not in _seen:
-        _seen.add(_b)
-        DEFAULT_FEATURE_BASES.append(_b)
-# All available base names: numeric defaults + categorical extras.
-# KP__Conf = KenPom conference (categorical, label-encoded)
-# Seed     = tournament seed from bracket data (non-prefixed, categorical)
-FEATURE_BASES: List[str] = DEFAULT_FEATURE_BASES + ['KP__Conf', 'Seed']
-# Features that require label encoding before being fed to the model.
-# Uses the base name as returned by col.rsplit('__', 1)[0].
-CATEGORICAL_BASES: frozenset = frozenset(['KP__Conf', 'Seed'])
+# KenPom-exclusive bases (always KP__ prefix regardless of --expert).
+KP_ONLY_BASES: List[str] = [
+    'AdjEM', 'Rk_AdjEM',
+    'Luck', 'Rk_Luck',
+    'SOS_AdjEM', 'Rk_SOS_AdjEM',
+    'SOS_AdjO', 'Rk_SOS_AdjO',
+    'SOS_AdjD', 'Rk_SOS_AdjD',
+    'NCSOS_AdjEM', 'Rk_NCSOS_AdjEM',
+]
+
+# BartTorvik-exclusive bases (always BT__ prefix regardless of --expert).
+BT_ONLY_BASES: List[str] = [
+    'ConfWinPct', 'ConfWins', 'ConfLosses',
+    'Barthag', 'Rk_Barthag',
+    'EFG%', 'Rk_EFG%', 'EFGD%', 'Rk_EFGD%',
+    'TOR', 'Rk_TOR', 'TORD', 'Rk_TORD',
+    'ORB', 'Rk_ORB', 'DRB', 'Rk_DRB',
+    'FTR', 'Rk_FTR', 'FTRD', 'Rk_FTRD',
+    '2P%', 'Rk_2P%', '2P%D', 'Rk_2P%D',
+    '3P%', 'Rk_3P%', '3P%D', 'Rk_3P%D',
+    '3PR', 'Rk_3PR', '3PRD', 'Rk_3PRD',
+    'WAB', 'Rk_WAB',
+]
+
+# Full list of valid unprefixed base names for --features.
+ALL_FEATURE_BASES: List[str] = COMMON_BASES + KP_ONLY_BASES + BT_ONLY_BASES + ['Seed']
+
+# Default feature selection.
+DEFAULT_FEATURE_BASES: List[str] = ['WinPct', 'AdjO', 'AdjD', 'SOS_AdjEM']
+
+# Base names that require label encoding (resolved before prefix is applied).
+CATEGORICAL_BASE_NAMES: frozenset = frozenset(['Conf', 'Seed'])
 
 MODEL_REGISTRY = {
     'logistic_lbfgs':     lambda: LogisticRegression(random_state=0, solver='lbfgs',     max_iter=1000),
@@ -102,6 +119,26 @@ def load_kenpom(data_root: Path, year: int) -> pd.DataFrame:
     return pd.read_csv(data_root / 'Data' / 'KenPomData' / f'{year}.csv')
 
 
+def load_barttorvik(data_root: Path, year: int) -> pd.DataFrame:
+    return pd.read_csv(data_root / 'Data' / 'BartTorvikData' / f'{year}.csv')
+
+
+def resolve_feature_col(base: str, expert: str) -> str:
+    """
+    Map an unprefixed feature base name to its prefixed column base.
+    Common features (in both sources) use KP__ or BT__ per *expert*.
+    KenPom-only features always use KP__; BartTorvik-only always use BT__.
+    'Seed' is bracket metadata and carries no source prefix.
+    """
+    if base == 'Seed':
+        return 'Seed'
+    if base in COMMON_BASES:
+        return f'{"KP" if expert == "kenpom" else "BT"}__{base}'
+    if base in KP_ONLY_BASES:
+        return f'KP__{base}'
+    return f'BT__{base}'
+
+
 def fit_label_encoders(df: pd.DataFrame, cat_cols: List[str]) -> dict:
     """Fit one LabelEncoder per categorical column.  Returns {col: LabelEncoder}."""
     encoders = {}
@@ -131,13 +168,28 @@ def attach_kenpom(df_matchups: pd.DataFrame, df_kp: pd.DataFrame) -> pd.DataFram
     Seed is dropped — seeds are tracked separately via team_seed_map.
     """
     kp = df_kp.drop(columns=['Seed'], errors='ignore')
-    # Prefix every non-Team column with KP__
     rename_map = {c: f'KP__{c}' for c in kp.columns if c != 'Team'}
     kp = kp.rename(columns=rename_map)
     kp1 = kp.add_suffix('__1')   # Team → Team__1, KP__AdjEM → KP__AdjEM__1
     kp2 = kp.add_suffix('__2')
     df = df_matchups.merge(kp1, on='Team__1', how='inner')
     df = df.merge(kp2, on='Team__2', how='inner')
+    return df.reset_index(drop=True)
+
+
+def attach_barttorvik(df_matchups: pd.DataFrame, df_bt: pd.DataFrame) -> pd.DataFrame:
+    """
+    Given a DataFrame with columns Team__1 and Team__2, merge in BartTorvik stats
+    with the BT__ source prefix and __1 / __2 team suffix.
+    Seed is dropped — seeds are tracked separately via team_seed_map.
+    """
+    bt = df_bt.drop(columns=['Seed'], errors='ignore')
+    rename_map = {c: f'BT__{c}' for c in bt.columns if c != 'Team'}
+    bt = bt.rename(columns=rename_map)
+    bt1 = bt.add_suffix('__1')
+    bt2 = bt.add_suffix('__2')
+    df = df_matchups.merge(bt1, on='Team__1', how='inner')
+    df = df.merge(bt2, on='Team__2', how='inner')
     return df.reset_index(drop=True)
 
 
@@ -228,9 +280,14 @@ def simulate_bracket(
     if ff_pairings is None:
         ff_pairings = [(0, 1), (2, 3)]
     if feature_list is None:
-        feature_list = FEATURE_LIST
+        feature_list = [
+            f'KP__{b}__{i}' for b in DEFAULT_FEATURE_BASES for i in (1, 2)
+        ]
     if cat_encoders is None:
         cat_encoders = {}
+
+    # Only load/attach BartTorvik stats if any selected feature requires them.
+    needs_bt = any(f.startswith('BT__') for f in feature_list)
 
     pred_teams_by_round: list = []
     pred_seeds_by_round: list = []
@@ -284,9 +341,12 @@ def simulate_bracket(
             df_matchups = pd.DataFrame(matchup_teams, columns=['Team__1', 'Team__2'])
             df_kp = load_kenpom(data_root, year)
             df_round = attach_kenpom(df_matchups, df_kp)
+            if needs_bt:
+                df_bt = load_barttorvik(data_root, year)
+                df_round = attach_barttorvik(df_round, df_bt)
 
-            # Seed columns are not present in dynamically built rounds (KenPom Seed
-            # is dropped during attach_kenpom); populate from the Round 1 seed map.
+            # Seed columns are not present in dynamically built rounds (Seed is
+            # dropped during attach); populate from the Round 1 seed map.
             df_round['Seed__1'] = df_round['Team__1'].map(team_seed_map)
             df_round['Seed__2'] = df_round['Team__2'].map(team_seed_map)
 
@@ -418,24 +478,50 @@ def main():
         ),
     )
     parser.add_argument(
+        '--expert',
+        default='kenpom',
+        choices=['kenpom', 'barttorvik'],
+        help=(
+            'Stats source to use for features common to both KenPom and BartTorvik '
+            '(WinPct, AdjO, AdjD, AdjT, Conf, Wins, Losses, and their rank variants). '
+            'KenPom-only or BartTorvik-only features always use their own source. '
+            'Default: kenpom.'
+        ),
+    )
+    parser.add_argument(
         '--features',
         nargs='+',
         default=DEFAULT_FEATURE_BASES,
-        choices=FEATURE_BASES,
+        choices=ALL_FEATURE_BASES,
         metavar='FEATURE',
         help=(
-            'Space-separated list of base feature names to use for training and prediction. '
-            f'Choices: {{{", ".join(FEATURE_BASES)}}}. '
-            'Default: all numeric features (Conf and Seed are opt-in categorical extras).'
+            'Space-separated list of unprefixed base feature names. '
+            'Common features (source chosen by --expert): '
+            f'{COMMON_BASES}. '
+            'KenPom-only (always KP__ prefix): '
+            f'{KP_ONLY_BASES}. '
+            'BartTorvik-only (always BT__ prefix): '
+            f'{str(BT_ONLY_BASES).replace("%", "%%")}. '
+            'Categorical opt-ins: Conf, Seed. '
+            f'Default: {DEFAULT_FEATURE_BASES}.'
         ),
     )
     args = parser.parse_args()
 
-    data_root    = Path(args.data_root)
-    # Expand base names to __1 and __2 columns, preserving order.
-    feature_list = [f'{b}__{i}' for b in args.features for i in (1, 2)]
-    # Identify which expanded columns need label encoding.
-    cat_cols = [c for c in feature_list if c.rsplit('__', 1)[0] in CATEGORICAL_BASES]
+    expert    = args.expert
+    data_root = Path(args.data_root)
+    # Resolve each base name to its source-prefixed column, then expand __1/__2.
+    feature_list = [
+        f'{resolve_feature_col(b, expert)}__{i}'
+        for b in args.features for i in (1, 2)
+    ]
+    # Identify categorical columns for label encoding.
+    cat_col_set = {
+        f'{resolve_feature_col(b, expert)}__{i}'
+        for b in args.features if b in CATEGORICAL_BASE_NAMES
+        for i in (1, 2)
+    }
+    cat_cols = [c for c in feature_list if c in cat_col_set]
     # Write to a pending folder; renamed to model+score+features at the end.
     output_root  = Path(args.output_root) / 'Predictions' / f'__{args.model}__pending'
     output_root.mkdir(parents=True, exist_ok=True)
@@ -454,6 +540,13 @@ def main():
     # Train model once on a random train/test split of all historical data.
     # -----------------------------------------------------------------------
     df_all = load_combined_games(data_root)
+    # Drop rows where any selected feature is NaN (e.g. BT__ columns that are
+    # missing for non-tournament teams when using --expert barttorvik).
+    pre_drop = len(df_all)
+    df_all = df_all.dropna(subset=feature_list)
+    dropped = pre_drop - len(df_all)
+    if dropped:
+        print(f'Note: dropped {dropped}/{pre_drop} training rows with NaN in selected features.')
     # Fit label encoders on training data for any categorical features, then encode.
     cat_encoders = fit_label_encoders(df_all, cat_cols) if cat_cols else {}
     if cat_encoders:
@@ -536,17 +629,23 @@ def main():
     print(f'\n{summary_str}')
     (output_root / 'summary.txt').write_text(summary_str)
 
-    # Rename the pending folder to a descriptive name: model_score_features
+    # Rename the pending folder to a descriptive name: model_score_expert_features
     avg_score_val = total_score / num_eval_years if num_eval_years else 0
+    expert_tag = 'KP' if expert == 'kenpom' else 'BT'
     seen_bases: set = set()
     feat_parts: List[str] = []
     for f in feature_list:
-        base = f.rsplit('__', 1)[0]
-        if base not in seen_bases:
-            seen_bases.add(base)
-            feat_parts.append(base)
+        # Strip __1/__2 suffix, then strip KP__/BT__ source prefix.
+        col_base = f.rsplit('__', 1)[0]
+        for pfx in ('KP__', 'BT__'):
+            if col_base.startswith(pfx):
+                col_base = col_base[len(pfx):]
+                break
+        if col_base not in seen_bases:
+            seen_bases.add(col_base)
+            feat_parts.append(col_base)
     feat_str = '+'.join(feat_parts)
-    final_dir_name = f'{args.model}_{int(avg_score_val)}_{feat_str}'
+    final_dir_name = f'{args.model}_{int(avg_score_val)}_{expert_tag}_{feat_str}'
     final_output_root = output_root.parent / final_dir_name
     if final_output_root.exists():
         shutil.rmtree(final_output_root)

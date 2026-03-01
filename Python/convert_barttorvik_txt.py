@@ -37,8 +37,8 @@ HEADINGS = [
     'Rk', 'Team', 'Seed', 'Conf', 'G', 'Rec', 'ConfRec',
     'Wins', 'Losses', 'WinPct',
     'ConfWins', 'ConfLosses', 'ConfWinPct',
-    'AdjOE', 'Rk_AdjOE',
-    'AdjDE', 'Rk_AdjDE',
+    'AdjO', 'Rk_AdjO',
+    'AdjD', 'Rk_AdjD',
     'Barthag', 'Rk_Barthag',
     'EFG%', 'Rk_EFG%',
     'EFGD%', 'Rk_EFGD%',
@@ -63,8 +63,8 @@ HEADINGS = [
 # Total of 41 tokens: ConfRec + 20×(value, rank).
 STAT_SEQUENCE = [
     'ConfRec',
-    'AdjOE', 'Rk_AdjOE',
-    'AdjDE', 'Rk_AdjDE',
+    'AdjO', 'Rk_AdjO',
+    'AdjD', 'Rk_AdjD',
     'Barthag', 'Rk_Barthag',
     'EFG%', 'Rk_EFG%',
     'EFGD%', 'Rk_EFGD%',
