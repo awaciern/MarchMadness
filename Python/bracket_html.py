@@ -154,13 +154,14 @@ def format_bracket_html(
             t2_top = (lg * 2 + 1) * _SH
             is_w1  = (g['t1'] == pred_w)
             is_w2  = (g['t2'] == pred_w)
+            lose_prob = (1 - prob) if (prob is not None and prob == prob) else None
             r1_items.append(_place(t1_top, _card(
                 g['t1'], g['s1'],
-                prob if is_w1 else None,
+                prob if is_w1 else lose_prob,
                 corr if is_w1 else None, is_w1)))
             r1_items.append(_place(t2_top, _card(
                 g['t2'], g['s2'],
-                prob if is_w2 else None,
+                prob if is_w2 else lose_prob,
                 corr if is_w2 else None, is_w2)))
 
         # R2 – show 16 R1 winners per half (8 per region) entering Round 2.
@@ -174,9 +175,10 @@ def format_bracket_html(
                     continue
                 r2_idx = r2_off + ri * 4 + k // 2
                 if r2_idx < len(pred_teams_by_round[1]):
-                    adv  = (pred_teams_by_round[0][t_idx] == pred_teams_by_round[1][r2_idx])
-                    prob = pred_probs_by_round[1][r2_idx] if adv else None
-                    corr = gc(1, r2_idx) if adv else None
+                    adv   = (pred_teams_by_round[0][t_idx] == pred_teams_by_round[1][r2_idx])
+                    win_p = pred_probs_by_round[1][r2_idx]
+                    prob  = win_p if adv else ((1 - win_p) if (win_p is not None and win_p == win_p) else None)
+                    corr  = gc(1, r2_idx) if adv else None
                 else:
                     adv = prob = corr = None
                 top = half_top(0, ri, k)
@@ -194,9 +196,10 @@ def format_bracket_html(
                     continue
                 r3_idx = r3_off + ri * 2 + k // 2
                 if r3_idx < len(pred_teams_by_round[2]):
-                    adv  = (pred_teams_by_round[1][t_idx] == pred_teams_by_round[2][r3_idx])
-                    prob = pred_probs_by_round[2][r3_idx] if adv else None
-                    corr = gc(2, r3_idx) if adv else None
+                    adv   = (pred_teams_by_round[1][t_idx] == pred_teams_by_round[2][r3_idx])
+                    win_p = pred_probs_by_round[2][r3_idx]
+                    prob  = win_p if adv else ((1 - win_p) if (win_p is not None and win_p == win_p) else None)
+                    corr  = gc(2, r3_idx) if adv else None
                 else:
                     adv = prob = corr = None
                 top = half_top(1, ri, k)
@@ -214,9 +217,10 @@ def format_bracket_html(
                     continue
                 r4_idx = r4_off + ri
                 if r4_idx < len(pred_teams_by_round[3]):
-                    adv  = (pred_teams_by_round[2][t_idx] == pred_teams_by_round[3][r4_idx])
-                    prob = pred_probs_by_round[3][r4_idx] if adv else None
-                    corr = gc(3, r4_idx) if adv else None
+                    adv   = (pred_teams_by_round[2][t_idx] == pred_teams_by_round[3][r4_idx])
+                    win_p = pred_probs_by_round[3][r4_idx]
+                    prob  = win_p if adv else ((1 - win_p) if (win_p is not None and win_p == win_p) else None)
+                    corr  = gc(3, r4_idx) if adv else None
                 else:
                     adv = prob = corr = None
                 top = half_top(2, ri, k)
@@ -246,9 +250,10 @@ def format_bracket_html(
             return ''
         team = pred_teams_by_round[3][r4_idx]
         seed = pred_seeds_by_round[3][r4_idx]
-        adv  = (team == ff_winner_team) if ff_winner_team else False
-        prob = pred_probs_by_round[4][ff_win_rnd_idx] if adv else None
-        corr = gc(4, ff_win_rnd_idx) if adv else None
+        adv   = (team == ff_winner_team) if ff_winner_team else False
+        win_p = pred_probs_by_round[4][ff_win_rnd_idx]
+        prob  = win_p if adv else ((1 - win_p) if (win_p is not None and win_p == win_p) else None)
+        corr  = gc(4, ff_win_rnd_idx) if adv else None
         return _card(team, seed, prob, corr, adv)
 
     ff0_i, ff0_j = ff_pairings[0]
@@ -273,9 +278,10 @@ def format_bracket_html(
             continue
         team = pred_teams_by_round[4][ff_w_idx]
         seed = pred_seeds_by_round[4][ff_w_idx]
-        adv  = (team == champ_winner) if champ_winner else False
-        prob = pred_probs_by_round[5][0] if adv else None
-        corr = gc(5, 0) if adv else None
+        adv   = (team == champ_winner) if champ_winner else False
+        win_p = pred_probs_by_round[5][0]
+        prob  = win_p if adv else ((1 - win_p) if (win_p is not None and win_p == win_p) else None)
+        corr  = gc(5, 0) if adv else None
         champ_col.append(_place(slot_top, _card(
             team, seed, prob, corr, adv, extra_cls='champ' if adv else '')))
 
