@@ -32,6 +32,7 @@ import pickle
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -57,9 +58,67 @@ from predict_brackets import (
 # Constants
 # ---------------------------------------------------------------------------
 
-ROUND_LABELS = ['R16', 'S16', 'E8', 'FF', 'Final', 'Champ']
-ROUND_FULL   = ['Second Round', 'Sweet 16', 'Elite Eight',
-                'Final Four', 'Championship', 'Champion']
+ROUND_LABELS  = ['R32', 'R16', 'E8', 'FF', 'Final', 'Champ']
+ROUND_FULL    = ['Round of 32', 'Sweet 16', 'Elite Eight',
+                 'Final Four', 'Championship', 'Champion']
+# Actual-result display labels (extended with first-round exit)
+ACTUAL_LABELS = ['R1'] + ROUND_LABELS  # index 0 = first-round exit
+_ACTUAL_ORDER = {lbl: i for i, lbl in enumerate(ACTUAL_LABELS)}
+
+# Colors for actual-result cells in HTML
+_ACTUAL_CSS = {
+    'Champ': 'act-champ',
+    'Final': 'act-final',
+    'FF':    'act-ff',
+    'E8':    'act-e8',
+    'R16':   'act-r16',
+    'R32':   'act-r32',
+    'R1':    'act-r1',
+}
+
+
+# ---------------------------------------------------------------------------
+# Actual results
+# ---------------------------------------------------------------------------
+
+def get_actual_results(data_root: Path, year: int) -> dict:
+    """
+    Return {team_name: label} where label is the furthest round the team
+    actually advanced to in `year`.  Teams that lost in Round 1 are mapped
+    to 'R1'.  Returns an empty dict if no bracket data is available.
+
+    Labels follow ROUND_LABELS: 'R32', 'R16', 'E8', 'FF', 'Final', 'Champ'.
+    (R32 = won first-round game; R16 = made Sweet 16; etc.)
+    """
+    _rnd_to_label = {i + 1: lbl for i, lbl in enumerate(ROUND_LABELS)}  # 1→R32 … 6→Champ
+    actual: dict = {}
+
+    # Seed all participants from Round 1
+    try:
+        r1_df = load_bracket_round(data_root, year, 1)
+    except Exception:
+        return {}
+
+    for _, row in r1_df.iterrows():
+        actual.setdefault(row['Team__1'], 'R1')
+        actual.setdefault(row['Team__2'], 'R1')
+
+    # Walk rounds 1-6, updating each winner's furthest label
+    for rnd in range(1, 7):
+        try:
+            df = load_bracket_round(data_root, year, rnd)
+        except Exception:
+            break
+        if 'Winning_Team' not in df.columns:
+            break
+        label = _rnd_to_label.get(rnd)
+        if label is None:
+            break
+        for team in df['Winning_Team'].dropna():
+            if team in actual:
+                actual[team] = label
+
+    return actual
 
 
 # ---------------------------------------------------------------------------
@@ -241,9 +300,19 @@ def _fmt_pct(v: float) -> str:
     return f'{v:.1%}'
 
 
-def to_html(df: pd.DataFrame, year: int, num_iters: int, model_key: str) -> str:
+def to_html(
+    df: pd.DataFrame,
+    year: int,
+    num_iters: int,
+    model_key: str,
+    actual: Optional[dict] = None,
+) -> str:
+    has_actual = bool(actual)
+    extra_th   = '<th class="act-hdr">Actual</th>' if has_actual else ''
     header_cells = ''.join(
-        f'<th>{h}</th>' for h in ['#', 'Seed', 'Team'] + ROUND_FULL
+        f'<th>{h}</th>' for h in ['#', 'Seed', 'Team']
+    ) + extra_th + ''.join(
+        f'<th>{h}</th>' for h in ROUND_FULL
     )
     rows_html = ''
     for rank, (_, row) in enumerate(df.iterrows(), start=1):
@@ -251,7 +320,15 @@ def to_html(df: pd.DataFrame, year: int, num_iters: int, model_key: str) -> str:
             seed = int(float(row['Seed']))
         except (ValueError, TypeError):
             seed = '?'
-        cells = f'<td class="rank">{rank}</td><td class="seed">[{seed}]</td><td class="team">{row["Team"]}</td>'
+        cells = (
+            f'<td class="rank">{rank}</td>'
+            f'<td class="seed">[{seed}]</td>'
+            f'<td class="team">{row["Team"]}</td>'
+        )
+        if has_actual:
+            act_lbl = actual.get(row['Team'], '')
+            act_cls = _ACTUAL_CSS.get(act_lbl, 'act-r1') if act_lbl else ''
+            cells += f'<td class="actual {act_cls}">{act_lbl}</td>'
         for lbl in ROUND_LABELS:
             v = row[lbl]
             if v >= 0.50:
@@ -279,13 +356,22 @@ table {{ border-collapse: collapse; }}
 th {{ background: #1e293b; color: #64748b; font-size: 10px; text-transform: uppercase;
       letter-spacing: .6px; padding: 8px 12px; border-bottom: 2px solid #334155;
       text-align: right; white-space: nowrap; }}
-th:nth-child(2), th:nth-child(3) {{ text-align: left; }}
+th:nth-child(2), th:nth-child(3), th:nth-child(4) {{ text-align: left; }}
+.act-hdr {{ color: #a78bfa !important; }}
 td {{ padding: 5px 12px; border-bottom: 1px solid #1e293b; text-align: right;
       font-variant-numeric: tabular-nums; white-space: nowrap; }}
 tr:hover td {{ background: #1e293b; }}
-.rank {{ color: #475569; font-size: 10px; text-align: right; }}
-.seed {{ color: #64748b; font-size: 10px; text-align: left; }}
-.team {{ color: #e2e8f0; font-weight: 500; text-align: left; min-width: 160px; }}
+.rank   {{ color: #475569; font-size: 10px; text-align: right; }}
+.seed   {{ color: #64748b; font-size: 10px; text-align: left; }}
+.team   {{ color: #e2e8f0; font-weight: 500; text-align: left; min-width: 160px; }}
+.actual {{ font-weight: 600; text-align: left; min-width: 52px; }}
+.act-champ {{ color: #fbbf24; }}
+.act-final {{ color: #f97316; }}
+.act-ff    {{ color: #a78bfa; }}
+.act-e8    {{ color: #38bdf8; }}
+.act-s16   {{ color: #86efac; }}
+.act-r32   {{ color: #94a3b8; }}
+.act-r1    {{ color: #475569; }}
 .p-high {{ color: #86efac; font-weight: 700; }}
 .p-med  {{ color: #fde68a; }}
 .p-low  {{ color: #94a3b8; }}
@@ -305,10 +391,14 @@ tr:hover td {{ background: #1e293b; }}
 </body></html>'''
 
 
-def to_terminal(df: pd.DataFrame):
-    team_w = max(df['Team'].str.len().max(), 4)
-    hdr = f"{'#':>3}  {'Seed':>4}  {'Team':<{team_w}}" + \
-          ''.join(f'  {lbl:>7}' for lbl in ROUND_LABELS)
+def to_terminal(df: pd.DataFrame, actual: Optional[dict] = None):
+    team_w  = max(df['Team'].str.len().max(), 4)
+    act_col = bool(actual)
+    act_w   = 6  # width for 'Actual' column
+    hdr = f"{'#':>3}  {'Seed':>4}  {'Team':<{team_w}}"
+    if act_col:
+        hdr += f"  {'Actual':<{act_w}}"
+    hdr += ''.join(f'  {lbl:>7}' for lbl in ROUND_LABELS)
     print(hdr)
     print('-' * len(hdr))
     for rank, (_, row) in enumerate(df.iterrows(), start=1):
@@ -317,6 +407,9 @@ def to_terminal(df: pd.DataFrame):
         except (ValueError, TypeError):
             seed = '?'
         line = f'{rank:>3}  {seed:>4}  {row["Team"]:<{team_w}}'
+        if act_col:
+            act_lbl = actual.get(row['Team'], '')
+            line += f'  {act_lbl:<{act_w}}'
         line += ''.join(f'  {_fmt_pct(row[lbl]):>7}' for lbl in ROUND_LABELS)
         print(line)
 
@@ -424,9 +517,18 @@ def main():
         seed=args.seed,
     )
 
-    # --- Print to terminal ------------------------------------------------
+    # --- Actual results (only for historical years with bracket data) ------
+    actual: dict = {}
+    if args.year in ALL_YEARS:
+        actual = get_actual_results(data_root, args.year)
+        if actual:
+            print(f'Loaded actual results for {args.year}.')
+        else:
+            print(f'No actual bracket data found for {args.year}.')
     print()
-    to_terminal(df_results)
+
+    # --- Print to terminal ------------------------------------------------
+    to_terminal(df_results, actual or None)
 
     # --- Write output files -----------------------------------------------
     if args.output_dir:
@@ -441,7 +543,7 @@ def main():
     csv_out  = out_dir / f'{stem}.csv'
 
     html_out.write_text(
-        to_html(df_results, args.year, args.num_iters, model_key),
+        to_html(df_results, args.year, args.num_iters, model_key, actual or None),
         encoding='utf-8',
     )
     df_results.to_csv(csv_out, index=False)
