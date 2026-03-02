@@ -253,10 +253,13 @@ def run_simulations(
     rng = np.random.default_rng(seed)
     round_wins: dict = defaultdict(lambda: defaultdict(int))  # team → rnd → count
 
+    _prog_interval = max(1, num_iters // 100)
     print(f'Running {num_iters:,} simulations for {year}...', flush=True)
     for i in range(num_iters):
-        if (i + 1) % 200 == 0 or i == 0:
-            print(f'  {i + 1:>{len(str(num_iters))}}/{num_iters}', end='\r', flush=True)
+        if (i + 1) % _prog_interval == 0 or i + 1 == num_iters:
+            # PROGRESS: prefix is parsed by the web UI for the progress bar;
+            # \r keeps the terminal display clean (overwrites same line).
+            print(f'PROGRESS:{i+1}/{num_iters}', end='\r', flush=True)
 
         # Pre-draw Round 1 randoms (same rng stream for reproducibility)
         draws_r1 = rng.random(len(r1_teams1))

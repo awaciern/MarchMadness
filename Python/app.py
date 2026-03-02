@@ -80,6 +80,71 @@ MODELS = [
     ('gpc',                 'Gaussian Process'),
 ]
 
+FEATURE_DESCRIPTIONS = {
+    # ---- Common (source chosen by Expert) --------------------------------
+    'WinPct':         'Win percentage (wins / total games)',
+    'Wins':           'Total wins in the season',
+    'Losses':         'Total losses in the season',
+    'AdjO':           'Adjusted Offensive Efficiency — points scored per 100 possessions vs. average defense',
+    'Rk_AdjO':        'National ranking for Adjusted Offensive Efficiency',
+    'AdjD':           'Adjusted Defensive Efficiency — points allowed per 100 possessions vs. average offense (lower is better)',
+    'Rk_AdjD':        'National ranking for Adjusted Defensive Efficiency (lower rank = better defense)',
+    'AdjT':           'Adjusted Tempo — estimated possessions per 40 minutes vs. average opponent',
+    'Rk_AdjT':        'National ranking for Adjusted Tempo',
+    'Conf':           'Athletic conference affiliation',
+    # ---- KenPom-only -----------------------------------------------------
+    'AdjEM':          "KenPom's Adjusted Efficiency Margin = AdjO minus AdjD (primary overall team rating)",
+    'Rk_AdjEM':       'National ranking for Adjusted Efficiency Margin',
+    'Luck':           "KenPom's Luck rating — how much a team over/under-performed its expected win percentage",
+    'Rk_Luck':        'National ranking for Luck rating',
+    'SOS_AdjEM':      'Strength of Schedule — average AdjEM of all opponents faced',
+    'Rk_SOS_AdjEM':   'National ranking for Strength of Schedule',
+    'SOS_AdjO':       'Opponent average Adjusted Offensive Efficiency (how tough your schedule was on defense)',
+    'Rk_SOS_AdjO':    'National ranking for Opponent Offensive Efficiency faced',
+    'SOS_AdjD':       'Opponent average Adjusted Defensive Efficiency (how tough your schedule was on offense)',
+    'Rk_SOS_AdjD':    'National ranking for Opponent Defensive Efficiency faced',
+    'NCSOS_AdjEM':    'Non-Conference Strength of Schedule — average AdjEM of non-conference opponents',
+    'Rk_NCSOS_AdjEM': 'National ranking for Non-Conference Strength of Schedule',
+    # ---- BartTorvik-only -------------------------------------------------
+    'ConfWinPct':     'Win percentage in conference games only',
+    'ConfWins':       'Wins in conference games only',
+    'ConfLosses':     'Losses in conference games only',
+    'Barthag':        "BartTorvik's Power Rating — probability of beating an average D1 team on a neutral court",
+    'Rk_Barthag':     'National ranking for Barthag Power Rating',
+    'EFG%':           'Effective Field Goal % — accounts for 3-pointers being worth more: (FGM + 0.5x3PM) / FGA',
+    'Rk_EFG%':        'National ranking for Effective Field Goal %',
+    'EFGD%':          'Opponent Effective Field Goal % allowed (defensive eFG%)',
+    'Rk_EFGD%':       'National ranking for Opponent Effective Field Goal % (lower = better perimeter defense)',
+    'TOR':            'Turnover Rate — turnovers committed per 100 possessions (lower is better)',
+    'Rk_TOR':         'National ranking for Turnover Rate (lower rank = fewer turnovers)',
+    'TORD':           'Opponent Turnover Rate — turnovers forced per 100 possessions (higher is better)',
+    'Rk_TORD':        'National ranking for Opponent Turnover Rate (higher rank = more turnovers forced)',
+    'ORB':            'Offensive Rebound Rate — percentage of available offensive rebounds grabbed',
+    'Rk_ORB':         'National ranking for Offensive Rebound Rate',
+    'DRB':            'Defensive Rebound Rate — percentage of available defensive rebounds secured',
+    'Rk_DRB':         'National ranking for Defensive Rebound Rate',
+    'FTR':            'Free Throw Rate — free throw attempts per field goal attempt (how often a team draws fouls)',
+    'Rk_FTR':         'National ranking for Free Throw Rate',
+    'FTRD':           'Opponent Free Throw Rate — how often opponents get to the free throw line against you',
+    'Rk_FTRD':        'National ranking for Opponent Free Throw Rate (lower = better at limiting opponent FTs)',
+    '2P%':            'Two-point field goal percentage',
+    'Rk_2P%':         'National ranking for Two-Point Field Goal %',
+    '2P%D':           'Opponent two-point field goal % allowed (interior defense)',
+    'Rk_2P%D':        'National ranking for Opponent Two-Point % (lower = better interior defense)',
+    '3P%':            'Three-point field goal percentage',
+    'Rk_3P%':         'National ranking for Three-Point Field Goal %',
+    '3P%D':           'Opponent three-point field goal % allowed (perimeter defense)',
+    'Rk_3P%D':        'National ranking for Opponent Three-Point % (lower = better perimeter defense)',
+    '3PR':            'Three-Point Attempt Rate — share of all field goal attempts that are 3-pointers',
+    'Rk_3PR':         'National ranking for Three-Point Attempt Rate',
+    '3PRD':           'Opponent Three-Point Attempt Rate — share of opponent shot attempts that are 3-pointers',
+    'Rk_3PRD':        'National ranking for Opponent Three-Point Attempt Rate',
+    'WAB':            'Wins Above Bubble — wins relative to how a bubble-level team would perform against the same schedule',
+    'Rk_WAB':         'National ranking for Wins Above Bubble',
+    # ---- Bracket metadata ------------------------------------------------
+    'Seed':           'Tournament seed (1 = top seed, 16 = lowest seed in each region)',
+}
+
 ALL_YEARS = [y for y in range(2012, THIS_YEAR + 1) if y != 2020]
 
 # ---------------------------------------------------------------------------
@@ -158,10 +223,10 @@ def run_job(job_id: str, cmd: list):
             line = line.rstrip('\n')
             job.lines.append(line)
             job.queue.put(line)
-            # Detect "Results saved to: ..." to capture output dir
-            if line.startswith('Results saved to:'):
-                path_str = line.split('Results saved to:', 1)[1].strip()
-                job.output_dir = Path(path_str)
+            # Detect pickle save line to capture output dir
+            if 'Model pickle saved to:' in line:
+                path_str = line.split('Model pickle saved to:', 1)[1].strip()
+                job.output_dir = Path(path_str).parent
         proc.wait()
         job.status = 'done' if proc.returncode == 0 else 'error'
     except Exception as exc:
@@ -188,6 +253,7 @@ def index():
         bt_only_bases=BT_ONLY_BASES,
         metadata_bases=METADATA_BASES,
         default_features=DEFAULT_FEATURES,
+        feature_descs=FEATURE_DESCRIPTIONS,
     )
 
 
@@ -734,6 +800,15 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
   font-size: 10px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .6px; color: #64748b; margin-bottom: 6px;
 }
+/* ---- simulation progress bar ---- */
+#sim-progress-wrap { margin-bottom: 12px; }
+.sim-prog-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+.sim-prog-label { font-size: 10px; color: #64748b; }
+#sim-progress-text { font-size: 11px; color: #93c5fd; font-family: monospace; }
+.sim-prog-track { background:#1e293b; border-radius:4px; overflow:hidden; height:8px; border:1px solid #334155; }
+#sim-progress-bar { height:100%; background:linear-gradient(90deg,#1d4ed8,#3b82f6); width:0%; transition:width .15s ease; border-radius:4px; }
+/* ---- feature chip tooltip custom cursor ---- */
+label.feat-chip[title] { cursor: help; }
 </style>
 </head>
 <body>
@@ -795,7 +870,7 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
       <div class="feat-section-title">Common</div>
       <div class="feat-grid" id="feat-common">
         {% for f in common_bases %}
-        <label class="feat-chip {% if f in default_features %}selected{% endif %}">
+        <label class="feat-chip {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}
         </label>
@@ -807,7 +882,7 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
       <div class="feat-section-title">KenPom-only</div>
       <div class="feat-grid" id="feat-kp">
         {% for f in kp_only_bases %}
-        <label class="feat-chip kp-only {% if f in default_features %}selected{% endif %}">
+        <label class="feat-chip kp-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}
         </label>
@@ -819,7 +894,7 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
       <div class="feat-section-title">BartTorvik-only</div>
       <div class="feat-grid" id="feat-bt">
         {% for f in bt_only_bases %}
-        <label class="feat-chip bt-only {% if f in default_features %}selected{% endif %}">
+        <label class="feat-chip bt-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}
         </label>
@@ -831,7 +906,7 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
       <div class="feat-section-title">Bracket Metadata</div>
       <div class="feat-grid" id="feat-meta">
         {% for f in metadata_bases %}
-        <label class="feat-chip meta {% if f in default_features %}selected{% endif %}">
+        <label class="feat-chip meta {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}
         </label>
@@ -879,6 +954,13 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
           <div><label>Iterations</label><input type="number" id="sim-iters" value="1000" min="100" max="100000"></div>
           <div><label>Seed (opt.)</label><input type="number" id="sim-seed" placeholder="random"></div>
           <button id="sim-btn" onclick="runSimulation()">&#9654; Simulate</button>
+        </div>
+        <div id="sim-progress-wrap" style="display:none">
+          <div class="sim-prog-header">
+            <span class="sim-prog-label">Simulating&hellip;</span>
+            <span id="sim-progress-text">0 / 0</span>
+          </div>
+          <div class="sim-prog-track"><div id="sim-progress-bar"></div></div>
         </div>
         <div id="sim-log"></div>
         <div id="sim-prev" style="display:none">
@@ -1028,6 +1110,11 @@ function runSimulation() {
   badge.style.display = '';
   badge.className = 'status-badge status-running';
   badge.textContent = 'Running\u2026';
+  // Reset + show progress bar
+  const progWrap = document.getElementById('sim-progress-wrap');
+  document.getElementById('sim-progress-bar').style.width = '0%';
+  document.getElementById('sim-progress-text').textContent = '0 / ' + numIters.toLocaleString();
+  progWrap.style.display = '';
 
   fetch('/simulate', {
     method: 'POST',
@@ -1050,19 +1137,33 @@ function runSimulation() {
 }
 
 function startSimStream(jobId) {
-  const simLog = document.getElementById('sim-log');
-  const badge  = document.getElementById('sim-status-badge');
+  const simLog   = document.getElementById('sim-log');
+  const badge    = document.getElementById('sim-status-badge');
+  const progBar  = document.getElementById('sim-progress-bar');
+  const progTxt  = document.getElementById('sim-progress-text');
+  const progWrap = document.getElementById('sim-progress-wrap');
   const es = new EventSource('/sim_stream/' + jobId);
 
   es.onmessage = function(e) {
     const msg = JSON.parse(e.data);
     if (msg.type === 'line') {
+      // Intercept PROGRESS: lines for the bar — don't show in log
+      if (msg.text.startsWith('PROGRESS:')) {
+        const parts = msg.text.slice(9).split('/');
+        const done  = parseInt(parts[0]);
+        const total = parseInt(parts[1]);
+        const pct   = total > 0 ? (done / total * 100) : 0;
+        progBar.style.width = pct + '%';
+        progTxt.textContent = done.toLocaleString() + ' / ' + total.toLocaleString();
+        return;
+      }
       simLog.textContent += msg.text + '\n';
       simLog.scrollTop = simLog.scrollHeight;
       return;
     }
     if (msg.type === 'done') {
       es.close();
+      progWrap.style.display = 'none';
       document.getElementById('sim-btn').disabled = false;
       if (msg.status === 'done') {
         badge.className = 'status-badge status-done';
@@ -1076,6 +1177,7 @@ function startSimStream(jobId) {
     }
     if (msg.type === 'timeout') {
       es.close();
+      progWrap.style.display = 'none';
       badge.className = 'status-badge status-error';
       badge.textContent = 'Timeout';
       document.getElementById('sim-btn').disabled = false;
@@ -1083,6 +1185,7 @@ function startSimStream(jobId) {
   };
   es.onerror = function() {
     es.close();
+    progWrap.style.display = 'none';
     badge.className = 'status-badge status-error';
     badge.textContent = 'Disconnected';
     document.getElementById('sim-btn').disabled = false;
