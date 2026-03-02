@@ -33,7 +33,7 @@ from typing import List, Tuple
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
@@ -190,6 +190,72 @@ def apply_label_encoders(df: pd.DataFrame, encoders: dict) -> pd.DataFrame:
     return df
 
 
+# ---------------------------------------------------------------------------
+# Per-year normalisation helpers
+# ---------------------------------------------------------------------------
+
+def fit_year_scalers(df: pd.DataFrame, num_cols: List[str]) -> dict:
+    """
+    Fit a StandardScaler for each year on the supplied numeric columns.
+
+    Returns a norm_info dict:
+        {
+            'by_year':  {year: fitted_StandardScaler, …},
+            'fallback': StandardScaler fitted on all data combined,
+            'cols':     list of column names actually present
+        }
+    The fallback is used for any year not seen during fitting (e.g. a future year).
+    """
+    avail = [c for c in num_cols if c in df.columns]
+    if not avail:
+        return {'by_year': {}, 'fallback': None, 'cols': []}
+    by_year: dict = {}
+    for year, grp in df.groupby('Year'):
+        sc = StandardScaler()
+        sc.fit(grp[avail])
+        by_year[year] = sc
+    fallback = StandardScaler()
+    fallback.fit(df[avail])
+    return {'by_year': by_year, 'fallback': fallback, 'cols': avail}
+
+
+def apply_year_norm(df: pd.DataFrame, norm_info: dict) -> pd.DataFrame:
+    """
+    Apply per-year Z-score normalisation to a DataFrame that contains a 'Year'
+    column.  Each row is scaled by the scaler fitted for its year.
+    """
+    if norm_info is None:
+        return df
+    cols = [c for c in norm_info['cols'] if c in df.columns]
+    if not cols:
+        return df
+    df = df.copy()
+    for year, grp in df.groupby('Year'):
+        sc = norm_info['by_year'].get(year, norm_info['fallback'])
+        if sc is None:
+            continue
+        df.loc[grp.index, cols] = sc.transform(grp[cols])
+    return df
+
+
+def apply_year_norm_single(df: pd.DataFrame, year: int, norm_info: dict) -> pd.DataFrame:
+    """
+    Apply the normalisation scaler for a single known *year* to a DataFrame
+    that does NOT have a 'Year' column (e.g. per-round bracket data).
+    """
+    if norm_info is None:
+        return df
+    cols = [c for c in norm_info['cols'] if c in df.columns]
+    if not cols:
+        return df
+    sc = norm_info['by_year'].get(year, norm_info['fallback'])
+    if sc is None:
+        return df
+    df = df.copy()
+    df[cols] = sc.transform(df[cols])
+    return df
+
+
 def attach_kenpom(df_matchups: pd.DataFrame, df_kp: pd.DataFrame) -> pd.DataFrame:
     """
     Given a DataFrame with columns Team__1 and Team__2, merge in KenPom stats
@@ -300,6 +366,7 @@ def simulate_bracket(
     ff_pairings: List[Tuple[int, int]] = None,
     feature_list: list = None,
     cat_encoders: dict = None,
+    norm_info: dict = None,
 ) -> Tuple[list, list, list, list, list, int]:
     """
     Simulate filling out a bracket from Round 1 using the model.
@@ -396,6 +463,8 @@ def simulate_bracket(
         raw_seeds_2 = df_round['Seed__2'].copy() if 'Seed__2' in df_round.columns else None
         if cat_encoders:
             df_round = apply_label_encoders(df_round, cat_encoders)
+        if norm_info is not None:
+            df_round = apply_year_norm_single(df_round, year, norm_info)
         X = df_round[feature_list]
         preds = model.predict(X)
         # Win probability for the predicted winner (None if model lacks predict_proba).
@@ -536,6 +605,17 @@ def main():
             f'Default: {DEFAULT_FEATURE_BASES}.'
         ),
     )
+    parser.add_argument(
+        '--norm-years',
+        action='store_true',
+        default=False,
+        help=(
+            'Normalise numeric features within each year independently '
+            '(Z-score per year) before training and evaluation. '
+            'Prevents cross-year scale drift from influencing the model. '
+            'The output folder name will include a NY indicator (e.g. KPNY instead of KP).'
+        ),
+    )
     args = parser.parse_args()
 
     expert    = args.expert
@@ -582,6 +662,18 @@ def main():
     # Fit label encoders on the full dataset so all values are known.
     cat_encoders = fit_label_encoders(df_all_raw, cat_cols) if cat_cols else {}
 
+    # Per-year normalisation (optional) — fit scalers on numeric columns only.
+    norm_years = args.norm_years
+    norm_info: dict = None
+    if norm_years:
+        num_cols = [c for c in feature_list if c not in cat_col_set]
+        # Fit on data after label-encoding (scalers operate on encoded numerics).
+        df_for_norm = apply_label_encoders(df_all_raw, cat_encoders) if cat_encoders else df_all_raw
+        norm_info = fit_year_scalers(df_for_norm, num_cols)
+        print(f'Per-year normalisation: ON  ({len(norm_info["cols"])} numeric columns)')
+    else:
+        print(f'Per-year normalisation: OFF')
+
     print(f'Model type: {args.model}')
 
     # -----------------------------------------------------------------------
@@ -609,6 +701,11 @@ def main():
             df_train = apply_label_encoders(df_train, cat_encoders)
             if df_test_year is not None:
                 df_test_year = apply_label_encoders(df_test_year, cat_encoders)
+
+        if norm_info is not None:
+            df_train = apply_year_norm(df_train, norm_info)
+            if df_test_year is not None:
+                df_test_year = apply_year_norm(df_test_year, norm_info)
 
         X_tr = df_train[feature_list]
         y_tr = df_train['Win__1']
@@ -647,6 +744,7 @@ def main():
             ff_pairings=ff_pairings,
             feature_list=feature_list,
             cat_encoders=cat_encoders,
+            norm_info=norm_info,
         )
 
         if not is_current:
@@ -687,6 +785,8 @@ def main():
     df_trad = df_all_raw[df_all_raw['Year'].isin(ALL_YEARS)].copy()
     if cat_encoders:
         df_trad = apply_label_encoders(df_trad, cat_encoders)
+    if norm_info is not None:
+        df_trad = apply_year_norm(df_trad, norm_info)
     X_trad, y_trad = df_trad[feature_list], df_trad['Win__1']
     X_tr_t, X_te_t, y_tr_t, y_te_t = train_test_split(X_trad, y_trad, test_size=0.33, random_state=42)
     model_trad = build_and_train_model(args.model, X_tr_t, y_tr_t, model_params)
@@ -742,6 +842,8 @@ def main():
     # Rename the pending folder to a descriptive name: model_score_expert_features
     avg_score_val = total_score / num_eval_years if num_eval_years else 0
     expert_tag = 'KP' if expert == 'kenpom' else 'BT'
+    if norm_years:
+        expert_tag += 'NY'
     seen_bases: set = set()
     feat_parts: List[str] = []
     for f in feature_list:
@@ -776,6 +878,8 @@ def main():
         df_full = df_all_raw.copy()
         if cat_encoders:
             df_full = apply_label_encoders(df_full, cat_encoders)
+        if norm_info is not None:
+            df_full = apply_year_norm(df_full, norm_info)
         full_model = build_and_train_model(args.model, df_full[feature_list], df_full['Win__1'], model_params)
 
     pickle_payload = {
@@ -785,6 +889,7 @@ def main():
         'expert':       expert,
         'feature_list': feature_list,
         'cat_encoders': cat_encoders,
+        'norm_info':    norm_info,
     }
     pickle_path = final_output_root / 'model.pkl'
     with open(pickle_path, 'wb') as fh:

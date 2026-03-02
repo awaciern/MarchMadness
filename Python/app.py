@@ -151,7 +151,7 @@ ALL_YEARS = [y for y in range(2012, THIS_YEAR + 1) if y != 2020]
 # Saved-model scanner
 # ---------------------------------------------------------------------------
 
-_SAVED_PATTERN = re.compile(r'^(.+?)_(\d+)_(KP|BT)_(.+)$')
+_SAVED_PATTERN = re.compile(r'^(.+?)_(\d+)_(KP|KPNY|BT|BTNY)_(.+)$')
 
 def scan_saved_models():
     """
@@ -177,13 +177,14 @@ def scan_saved_models():
             feat_str = rest[:pm.start()]
         years = [y for y in ALL_YEARS if (d / f'{y}.html').exists()]
         results.append({
-            'dir_name': d.name,
-            'score':    score,
-            'model':    model_key,
-            'expert':   expert_tag,
-            'features': feat_str,
-            'params':   params_str,
-            'years':    years,
+            'dir_name':   d.name,
+            'score':      score,
+            'model':      model_key,
+            'expert':     expert_tag,
+            'norm_years': expert_tag.endswith('NY'),
+            'features':   feat_str,
+            'params':     params_str,
+            'years':      years,
         })
     results.sort(key=lambda x: x['score'], reverse=True)
     return results
@@ -278,6 +279,8 @@ def run_prediction():
     ]
     if params:
         cmd += ['--model-params'] + params.split()
+    if data.get('norm_years'):
+        cmd.append('--norm-years')
 
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = Job()
@@ -756,6 +759,7 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
   padding: 1px 6px; font-size: 10px; font-weight: 600; margin-right: 3px;
 }
 .tag-kp { background: #1e3a5f; color: #93c5fd; }
+.tag-ny { background: #2d1b4e; color: #c4b5fd; margin-left: 3px; }
 .tag-bt { background: #500724; color: #f9a8d4; }
 .feat-tags { color: #64748b; font-size: 10px; }
 
@@ -914,6 +918,11 @@ label.feat-chip[title] { cursor: help; }
       </div>
     </div>
 
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;margin-top:4px">
+      <input type="checkbox" id="norm-years-check" style="accent-color:#3b82f6;cursor:pointer;width:14px;height:14px">
+      <span style="font-size:13px;color:#e2e8f0">Normalize within year</span>
+      <span style="font-size:10px;color:#475569">(Z-score each feature per year before training)</span>
+    </div>
     <button id="run-btn" onclick="runPrediction()">&#9654; Run Prediction</button>
   </div>
 
@@ -999,9 +1008,11 @@ function loadSavedModels() {
       models.forEach(function(m, i) {
         const tr = document.createElement('tr');
         tr.className = 'model-row';
-        const expertTag = m.expert === 'KP'
+        const baseTag = (m.expert === 'KP' || m.expert === 'KPNY')
           ? '<span class="tag tag-kp">KP</span>'
           : '<span class="tag tag-bt">BT</span>';
+        const nyTag = m.norm_years ? '<span class="tag tag-ny">NY</span>' : '';
+        const expertTag = baseTag + nyTag;
         tr.innerHTML =
           '<td style="color:#475569">' + (i + 1) + '</td>' +
           '<td class="score-cell">' + m.score + '</td>' +
@@ -1225,9 +1236,10 @@ function runPrediction() {
   const features = getSelectedFeatures();
   if (!features.length) { alert('Select at least one feature.'); return; }
 
-  const model  = document.getElementById('model-select').value;
-  const expert = document.querySelector('input[name="expert"]:checked').value;
-  const params = document.getElementById('params-input').value.trim();
+  const model     = document.getElementById('model-select').value;
+  const expert    = document.querySelector('input[name="expert"]:checked').value;
+  const params    = document.getElementById('params-input').value.trim();
+  const normYears = document.getElementById('norm-years-check').checked;
 
   // Reset UI
   document.getElementById('log-box').innerHTML = '';
@@ -1238,7 +1250,7 @@ function runPrediction() {
   fetch('/run', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ model, expert, params, features }),
+    body: JSON.stringify({ model, expert, params, features, norm_years: normYears }),
   })
   .then(r => r.json())
   .then(data => {
