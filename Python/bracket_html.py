@@ -130,11 +130,20 @@ def format_bracket_html(
     # Build one half (left or right) -------------------------------------------
     def build_half(game_off, r1_off, r2_off, r3_off, r4_off, is_left):
         """
+        Each column shows the teams *entering* that round (prev-round winners),
+        with the predicted round winner highlighted and the loser shown as 'out'.
+        This creates the visual advancement effect across the bracket.
+
         game_off : index of first R1 game in r1_games for this half (0 or 16)
         rX_off   : slice start in pred_teams_by_round[X-1] for this half
         is_left  : if True, column order R1→R4; if False, R4→R1 (mirrored)
+
+        Positioning formula half_top(r, region, k):
+          r=0 → 8 items/region, spaced every 2 slots  (R2 col)
+          r=1 → 4 items/region, spaced every 4 slots  (R3 col)
+          r=2 → 2 items/region, spaced every 8 slots  (R4 col)
         """
-        # R1 – show both teams for each of 16 games
+        # R1 – show both teams for each of 16 games; winner highlighted by R1 result
         r1_items = []
         for lg in range(16):
             g      = r1_games[game_off + lg]
@@ -154,40 +163,66 @@ def format_bracket_html(
                 prob if is_w2 else None,
                 corr if is_w2 else None, is_w2)))
 
-        # R2 – 8 advancing teams per half (4 per region)
+        # R2 – show 16 R1 winners per half (8 per region) entering Round 2.
+        #      Pairs: games (2j, 2j+1) produce R2 winner at r2_off + ri*4 + j.
+        #      Winner highlighted by R2 result; loser shown as 'out'.
         r2_items = []
         for ri in range(2):
-            for k in range(4):
-                idx = r2_off + ri * 4 + k
-                if idx >= len(pred_teams_by_round[1]):
+            for k in range(8):
+                t_idx = r1_off + ri * 8 + k
+                if t_idx >= len(pred_teams_by_round[0]):
                     continue
-                top = half_top(1, ri, k)
+                r2_idx = r2_off + ri * 4 + k // 2
+                if r2_idx < len(pred_teams_by_round[1]):
+                    adv  = (pred_teams_by_round[0][t_idx] == pred_teams_by_round[1][r2_idx])
+                    prob = pred_probs_by_round[1][r2_idx] if adv else None
+                    corr = gc(1, r2_idx) if adv else None
+                else:
+                    adv = prob = corr = None
+                top = half_top(0, ri, k)
                 r2_items.append(_place(top, _card(
-                    pred_teams_by_round[1][idx], pred_seeds_by_round[1][idx],
-                    pred_probs_by_round[1][idx], gc(1, idx))))
+                    pred_teams_by_round[0][t_idx], pred_seeds_by_round[0][t_idx],
+                    prob, corr, bool(adv) if adv is not None else False)))
 
-        # R3 – 4 advancing teams per half (2 per region)
+        # R3 – show 8 R2 winners per half (4 per region) entering Sweet 16.
+        #      Pairs: (2j, 2j+1) produce R3 winner at r3_off + ri*2 + j.
         r3_items = []
         for ri in range(2):
-            for k in range(2):
-                idx = r3_off + ri * 2 + k
-                if idx >= len(pred_teams_by_round[2]):
+            for k in range(4):
+                t_idx = r2_off + ri * 4 + k
+                if t_idx >= len(pred_teams_by_round[1]):
                     continue
-                top = half_top(2, ri, k)
+                r3_idx = r3_off + ri * 2 + k // 2
+                if r3_idx < len(pred_teams_by_round[2]):
+                    adv  = (pred_teams_by_round[1][t_idx] == pred_teams_by_round[2][r3_idx])
+                    prob = pred_probs_by_round[2][r3_idx] if adv else None
+                    corr = gc(2, r3_idx) if adv else None
+                else:
+                    adv = prob = corr = None
+                top = half_top(1, ri, k)
                 r3_items.append(_place(top, _card(
-                    pred_teams_by_round[2][idx], pred_seeds_by_round[2][idx],
-                    pred_probs_by_round[2][idx], gc(2, idx))))
+                    pred_teams_by_round[1][t_idx], pred_seeds_by_round[1][t_idx],
+                    prob, corr, bool(adv) if adv is not None else False)))
 
-        # R4 – 2 advancing teams per half (1 per region)
+        # R4 – show 4 R3 winners per half (2 per region) entering Elite Eight.
+        #      Each region pair (k=0,1) produces 1 R4 winner at r4_off + ri.
         r4_items = []
         for ri in range(2):
-            idx = r4_off + ri
-            if idx >= len(pred_teams_by_round[3]):
-                continue
-            top = half_top(3, ri, 0)
-            r4_items.append(_place(top, _card(
-                pred_teams_by_round[3][idx], pred_seeds_by_round[3][idx],
-                pred_probs_by_round[3][idx], gc(3, idx))))
+            for k in range(2):
+                t_idx = r3_off + ri * 2 + k
+                if t_idx >= len(pred_teams_by_round[2]):
+                    continue
+                r4_idx = r4_off + ri
+                if r4_idx < len(pred_teams_by_round[3]):
+                    adv  = (pred_teams_by_round[2][t_idx] == pred_teams_by_round[3][r4_idx])
+                    prob = pred_probs_by_round[3][r4_idx] if adv else None
+                    corr = gc(3, r4_idx) if adv else None
+                else:
+                    adv = prob = corr = None
+                top = half_top(2, ri, k)
+                r4_items.append(_place(top, _card(
+                    pred_teams_by_round[2][t_idx], pred_seeds_by_round[2][t_idx],
+                    prob, corr, bool(adv) if adv is not None else False)))
 
         cols = [
             _col(r1_items, 'First Round',   200, HALF_H),
@@ -201,30 +236,48 @@ def format_bracket_html(
     right_cols = build_half(16, 16, 8, 4, 2, is_left=False)
 
     # Build center columns (Final Four + Championship) -------------------------
-    FF_WIN_TOP = 15 * _SH   # where FF winner card sits in FF columns
-    CHAMP_TOP  = 15 * _SH   # champion card in championship column
+    # Each column shows the teams *entering* that round, winner highlighted.
+    # FF entrant positions (midpoint of each half-region): 7*_SH, 23*_SH.
+    # Championship entrant positions straddle centre: 13*_SH, 17*_SH.
 
-    # Left FF column — show only the FF winner (E8 winners already shown in E8 col)
-    ff_left = []
-    if len(pred_teams_by_round[4]) > 0:
-        ff_left.append(_place(FF_WIN_TOP, _card(
-            pred_teams_by_round[4][0], pred_seeds_by_round[4][0],
-            pred_probs_by_round[4][0], gc(4, 0))))
+    def _ff_card(r4_idx, ff_winner_team, ff_win_rnd_idx):
+        """Card for an FF entrant (E8 winner). Highlighted if they won the FF game."""
+        if r4_idx >= len(pred_teams_by_round[3]):
+            return ''
+        team = pred_teams_by_round[3][r4_idx]
+        seed = pred_seeds_by_round[3][r4_idx]
+        adv  = (team == ff_winner_team) if ff_winner_team else False
+        prob = pred_probs_by_round[4][ff_win_rnd_idx] if adv else None
+        corr = gc(4, ff_win_rnd_idx) if adv else None
+        return _card(team, seed, prob, corr, adv)
 
-    # Right FF column — show only the FF winner
-    ff_right = []
-    if len(pred_teams_by_round[4]) > 1:
-        ff_right.append(_place(FF_WIN_TOP, _card(
-            pred_teams_by_round[4][1], pred_seeds_by_round[4][1],
-            pred_probs_by_round[4][1], gc(4, 1))))
+    ff0_i, ff0_j = ff_pairings[0]
+    ff1_i, ff1_j = ff_pairings[1]
+    ff_winner_0 = pred_teams_by_round[4][0] if len(pred_teams_by_round[4]) > 0 else None
+    ff_winner_1 = pred_teams_by_round[4][1] if len(pred_teams_by_round[4]) > 1 else None
 
-    # Championship column — show only the champion card (finalists are already
-    # visible as the advancing winner cards in ff_left / ff_right).
+    ff_left = [
+        _place(7  * _SH, _ff_card(ff0_i, ff_winner_0, 0)),
+        _place(23 * _SH, _ff_card(ff0_j, ff_winner_0, 0)),
+    ]
+    ff_right = [
+        _place(7  * _SH, _ff_card(ff1_i, ff_winner_1, 1)),
+        _place(23 * _SH, _ff_card(ff1_j, ff_winner_1, 1)),
+    ]
+
+    # Championship column — show the 2 FF winners as entrants; champion highlighted.
+    champ_winner = pred_teams_by_round[5][0] if len(pred_teams_by_round[5]) > 0 else None
     champ_col = []
-    if len(pred_teams_by_round[5]) > 0:
-        champ_col.append(_place(CHAMP_TOP, _card(
-            pred_teams_by_round[5][0], pred_seeds_by_round[5][0],
-            pred_probs_by_round[5][0], gc(5, 0), extra_cls='champ')))
+    for slot_top, ff_w_idx in [(13 * _SH, 0), (17 * _SH, 1)]:
+        if ff_w_idx >= len(pred_teams_by_round[4]):
+            continue
+        team = pred_teams_by_round[4][ff_w_idx]
+        seed = pred_seeds_by_round[4][ff_w_idx]
+        adv  = (team == champ_winner) if champ_winner else False
+        prob = pred_probs_by_round[5][0] if adv else None
+        corr = gc(5, 0) if adv else None
+        champ_col.append(_place(slot_top, _card(
+            team, seed, prob, corr, adv, extra_cls='champ' if adv else '')))
 
     center_cols = [
         _col(ff_left,   'Final Four',    160, HALF_H),
