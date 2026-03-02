@@ -14,6 +14,7 @@ Usage:
 import json
 import os
 import queue
+import re
 import subprocess
 import threading
 import uuid
@@ -78,6 +79,48 @@ MODELS = [
 ]
 
 ALL_YEARS = [y for y in range(2012, THIS_YEAR + 1) if y != 2020]
+
+# ---------------------------------------------------------------------------
+# Saved-model scanner
+# ---------------------------------------------------------------------------
+
+_SAVED_PATTERN = re.compile(r'^(.+?)_(\d+)_(KP|BT)_(.+)$')
+
+def scan_saved_models():
+    """
+    Scan PREDICTIONS_DIR for completed model folders (not __pending__ dirs).
+    Returns a list of dicts sorted by score descending.
+    """
+    results = []
+    if not PREDICTIONS_DIR.is_dir():
+        return results
+    for d in PREDICTIONS_DIR.iterdir():
+        if not d.is_dir() or d.name.startswith('__'):
+            continue
+        m = _SAVED_PATTERN.match(d.name)
+        if not m:
+            continue
+        model_key, score_str, expert_tag, rest = m.groups()
+        score = int(score_str)
+        # Split features from optional params (params contain '=')
+        feat_str, params_str = rest, ''
+        pm = re.search(r'_([^_]+=.+)$', rest)
+        if pm:
+            params_str = pm.group(1)
+            feat_str = rest[:pm.start()]
+        years = [y for y in ALL_YEARS if (d / f'{y}.html').exists()]
+        results.append({
+            'dir_name': d.name,
+            'score':    score,
+            'model':    model_key,
+            'expert':   expert_tag,
+            'features': feat_str,
+            'params':   params_str,
+            'years':    years,
+        })
+    results.sort(key=lambda x: x['score'], reverse=True)
+    return results
+
 
 # ---------------------------------------------------------------------------
 # In-memory job store
@@ -244,6 +287,29 @@ def bracket(job_id, year):
     if not job.output_dir:
         abort(404)
     html_file = job.output_dir / f'{year}.html'
+    if not html_file.exists():
+        abort(404)
+    return send_file(str(html_file), mimetype='text/html')
+
+
+@app.route('/saved_models')
+def saved_models_route():
+    return jsonify(scan_saved_models())
+
+
+@app.route('/saved_results/<path:dir_name>')
+def saved_results(dir_name):
+    d = PREDICTIONS_DIR / dir_name
+    if not d.is_dir():
+        abort(404)
+    summary = (d / 'summary.txt').read_text() if (d / 'summary.txt').exists() else ''
+    years = [y for y in ALL_YEARS if (d / f'{y}.html').exists()]
+    return jsonify({'summary': summary, 'years': years, 'dir_name': dir_name})
+
+
+@app.route('/saved_bracket/<path:dir_name>/<int:year>')
+def saved_bracket(dir_name, year):
+    html_file = PREDICTIONS_DIR / dir_name / f'{year}.html'
     if not html_file.exists():
         abort(404)
     return send_file(str(html_file), mimetype='text/html')
@@ -481,12 +547,58 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
 
 /* ---- idle state ---- */
 #results-section { display: none; }
+
+/* ---- saved models table ---- */
+.saved-section { margin-bottom: 24px; }
+.saved-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.saved-table th {
+  text-align: left; padding: 6px 10px;
+  color: #64748b; font-size: 10px;
+  text-transform: uppercase; letter-spacing: .6px;
+  border-bottom: 1px solid #334155;
+}
+.saved-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #1a2744;
+  color: #cbd5e1; vertical-align: middle;
+}
+.saved-table tr.model-row { cursor: pointer; transition: background .1s; }
+.saved-table tr.model-row:hover  { background: #1e293b; }
+.saved-table tr.model-row.active { background: #172554; }
+.score-cell { font-weight: 700; font-size: 14px; color: #fbbf24; white-space: nowrap; }
+.tag {
+  display: inline-block; border-radius: 4px;
+  padding: 1px 6px; font-size: 10px; font-weight: 600; margin-right: 3px;
+}
+.tag-kp { background: #1e3a5f; color: #93c5fd; }
+.tag-bt { background: #500724; color: #f9a8d4; }
+.feat-tags { color: #64748b; font-size: 10px; }
 </style>
 </head>
 <body>
 
-<h1>&#127944; March Madness Bracket Predictor</h1>
+<h1>&#127936; March Madness Bracket Predictor</h1>
 <p class="subtitle">Configure a model below, then run the evaluation across all historical years (2012–2025) plus a {{ THIS_YEAR }} prediction.</p>
+
+<!-- ===== SAVED MODELS ===== -->
+<div class="panel-card saved-section">
+  <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Existing Models</span>
+    <span id="saved-count" style="color:#475569;font-size:11px"></span>
+  </div>
+  <div id="saved-empty" style="color:#475569;font-size:12px;display:none">No saved models found in Predictions/.</div>
+  <table class="saved-table" id="saved-table" style="display:none">
+    <thead><tr>
+      <th style="width:30px">#</th>
+      <th style="width:70px">Score</th>
+      <th>Model</th>
+      <th style="width:60px">Expert</th>
+      <th>Features</th>
+      <th>Params</th>
+    </tr></thead>
+    <tbody id="saved-tbody"></tbody>
+  </table>
+</div>
 
 <div class="layout">
   <!-- ===== FORM ===== -->
@@ -599,6 +711,74 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
 </div>
 
 <script>
+// ---- Saved models ----
+let activeSavedRow = null;
+
+function loadSavedModels() {
+  fetch('/saved_models')
+    .then(r => r.json())
+    .then(models => {
+      const tbody = document.getElementById('saved-tbody');
+      const table = document.getElementById('saved-table');
+      const empty = document.getElementById('saved-empty');
+      const countEl = document.getElementById('saved-count');
+      tbody.innerHTML = '';
+      if (!models.length) {
+        empty.style.display = '';
+        return;
+      }
+      countEl.textContent = models.length + ' model' + (models.length !== 1 ? 's' : '');
+      table.style.display = '';
+      empty.style.display = 'none';
+      models.forEach(function(m, i) {
+        const tr = document.createElement('tr');
+        tr.className = 'model-row';
+        const expertTag = m.expert === 'KP'
+          ? '<span class="tag tag-kp">KP</span>'
+          : '<span class="tag tag-bt">BT</span>';
+        tr.innerHTML =
+          '<td style="color:#475569">' + (i + 1) + '</td>' +
+          '<td class="score-cell">' + m.score + '</td>' +
+          '<td>' + m.model.replace(/_/g, '\u00a0') + '</td>' +
+          '<td>' + expertTag + '</td>' +
+          '<td class="feat-tags">' + m.features.replace(/\+/g, ' &middot; ') + '</td>' +
+          '<td style="color:#64748b;font-size:10px">' + (m.params || '\u2014') + '</td>';
+        tr.addEventListener('click', function() {
+          if (activeSavedRow) activeSavedRow.classList.remove('active');
+          tr.classList.add('active');
+          activeSavedRow = tr;
+          loadSavedResults(m.dir_name);
+        });
+        tbody.appendChild(tr);
+      });
+    });
+}
+
+function loadSavedResults(dirName) {
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('log-box').innerHTML = '';
+  setStatus('Loading\u2026', 'status-running');
+  fetch('/saved_results/' + dirName)
+    .then(r => r.json())
+    .then(function(data) {
+      setStatus('Done', 'status-done');
+      document.getElementById('summary-box').textContent = data.summary || '(no summary)';
+      const grid = document.getElementById('year-links');
+      grid.innerHTML = '';
+      (data.years || []).forEach(function(y) {
+        const a = document.createElement('a');
+        a.href = '/saved_bracket/' + dirName + '/' + y;
+        a.target = '_blank';
+        a.textContent = y === 2026 ? y + ' \u2605' : String(y);
+        a.className = 'year-btn' + (y === 2026 ? ' current' : '');
+        grid.appendChild(a);
+      });
+      document.getElementById('results-section').style.display = 'block';
+    });
+}
+
+loadSavedModels();
+
 // Sync chip appearance with checkbox state on every change
 document.querySelectorAll('.feat-chip').forEach(chip => {
   chip.querySelector('input[type="checkbox"]').addEventListener('change', function() {
