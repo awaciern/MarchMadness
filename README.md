@@ -1,6 +1,6 @@
 # MarchMadness
 
-Trains scikit-learn models on KenPom efficiency stats to predict NCAA tournament brackets, scores historical predictions, and fills out brackets for the current year before the tournament begins.
+Trains scikit-learn models on KenPom/BartTorvik efficiency stats to predict NCAA tournament brackets, scores historical predictions, and fills out brackets for the current year before the tournament begins. Includes a web UI (`app.py`) for interactive model building and result exploration.
 
 ---
 
@@ -229,6 +229,42 @@ python3 Python/predict_brackets.py --model svc --model-params kernel=rbf C=1.0
 ```
 
 Model parameters are appended to the output folder name: `Predictions/<model>_<score>_<KP|BT>_<features>_<param1=val1>+<param2=val2>/`
+
+---
+
+### `Python/app.py` — Web UI
+
+A browser-based interface for building models and exploring results without using the command line.
+
+```bash
+python3 Python/app.py
+# Open http://localhost:5050
+```
+
+#### Features
+
+**Create & run a model**
+
+The left-hand form mirrors all `predict_brackets.py` options:
+
+| Field | Description |
+|---|---|
+| Model Type | Choose from all 7 supported models |
+| Model Parameters | Optional `key=value` pairs (e.g. `n_estimators=200 random_state=42`) |
+| Stats Source | KenPom or BartTorvik for common features |
+| Features | Click-to-toggle chip grid; color-coded by source (blue = common, purple = KenPom-only, pink = BartTorvik-only, green = metadata) |
+
+Clicking **Run Prediction** executes `predict_brackets.py --this-year 2026` in the background. A live log streams output line-by-line in the right panel as it runs.
+
+**View results**
+
+Once a run completes (or when clicking any saved model):
+- **Year links** — click any year to open its full HTML bracket visual in a new tab; the current year (2026) is highlighted with a star
+- **Summary** — displays `summary.txt` showing per-round accuracy, avg bracket score, and train/test accuracy across all years
+
+**Existing models table**
+
+A sortable table at the top of the page lists every folder in `Predictions/` (sorted by bracket score, highest first). Each row shows rank, score, model type, expert source, features, and any custom parameters. Clicking a row loads that model's summary and year links instantly without re-running anything.
 
 ---
 
