@@ -476,14 +476,14 @@ def _card(team, seed, prob=None, correct=None, is_winner=True, extra_cls='') -> 
     p_html = f'<span class="p"> {prob:.0%}</span>' if (prob is not None and prob == prob) else ''
     mark = ''
     if is_winner:
-        if correct is True:
+        if correct is None:
+            cls = 'adv'
+        elif bool(correct):
             cls = 'ok'
             mark = ' ✓'
-        elif correct is False:
+        else:
             cls = 'ng'
             mark = ' ✗'
-        else:
-            cls = 'adv'
     else:
         cls = 'out'
     return (f'<div class="c {cls} {extra_cls}">'
@@ -627,52 +627,26 @@ def format_bracket_html(
     right_cols = build_half(16, 16, 8, 4, 2, is_left=False)
 
     # Build center columns (Final Four + Championship) -------------------------
-    # R4 winner vertical positions within each half: region 0 → 7*SH, region 1 → 23*SH
-    R4_TOPS = [7 * _SH, 23 * _SH, 7 * _SH, 23 * _SH]  # per R4 index (0-3)
+    FF_WIN_TOP = 15 * _SH   # where FF winner card sits in FF columns
+    CHAMP_TOP  = 15 * _SH   # champion card in championship column
 
-    ff0_i, ff0_j = ff_pairings[0]   # left-side FF participants (R4 indices)
-    ff1_i, ff1_j = ff_pairings[1]   # right-side FF participants (R4 indices)
-
-    FF_WIN_TOP  = 15 * _SH   # where FF winner card sits in FF columns
-    FINAL0_TOP  = 13 * _SH   # top finalist in championship column
-    FINAL1_TOP  = 17 * _SH   # bottom finalist in championship column
-    CHAMP_TOP   = 15 * _SH   # champion card in championship column
-
-    def r4_card(idx):
-        return _card(
-            pred_teams_by_round[3][idx], pred_seeds_by_round[3][idx],
-            pred_probs_by_round[3][idx], gc(3, idx))
-
-    # Left FF column
+    # Left FF column — show only the FF winner (E8 winners already shown in E8 col)
     ff_left = []
-    for slot_top, p_idx in zip([7 * _SH, 23 * _SH], [ff0_i, ff0_j]):
-        if p_idx < len(pred_teams_by_round[3]):
-            ff_left.append(_place(slot_top, r4_card(p_idx)))
     if len(pred_teams_by_round[4]) > 0:
         ff_left.append(_place(FF_WIN_TOP, _card(
             pred_teams_by_round[4][0], pred_seeds_by_round[4][0],
             pred_probs_by_round[4][0], gc(4, 0))))
 
-    # Right FF column
+    # Right FF column — show only the FF winner
     ff_right = []
-    for slot_top, p_idx in zip([7 * _SH, 23 * _SH], [ff1_i, ff1_j]):
-        if p_idx < len(pred_teams_by_round[3]):
-            ff_right.append(_place(slot_top, r4_card(p_idx)))
     if len(pred_teams_by_round[4]) > 1:
         ff_right.append(_place(FF_WIN_TOP, _card(
             pred_teams_by_round[4][1], pred_seeds_by_round[4][1],
             pred_probs_by_round[4][1], gc(4, 1))))
 
-    # Championship column
+    # Championship column — show only the champion card (the two finalists are
+    # already displayed as the advancing winner cards in ff_left / ff_right).
     champ_col = []
-    if len(pred_teams_by_round[4]) > 0:
-        champ_col.append(_place(FINAL0_TOP, _card(
-            pred_teams_by_round[4][0], pred_seeds_by_round[4][0],
-            pred_probs_by_round[4][0], gc(4, 0))))
-    if len(pred_teams_by_round[4]) > 1:
-        champ_col.append(_place(FINAL1_TOP, _card(
-            pred_teams_by_round[4][1], pred_seeds_by_round[4][1],
-            pred_probs_by_round[4][1], gc(4, 1))))
     if len(pred_teams_by_round[5]) > 0:
         champ_col.append(_place(CHAMP_TOP, _card(
             pred_teams_by_round[5][0], pred_seeds_by_round[5][0],
@@ -722,6 +696,8 @@ h1{{font-size:17px;color:#fbbf24;margin-bottom:3px}}
 .ok {{background:#14432a;color:#86efac;border-left-color:#22c55e}}
 .ng {{background:#450a0a;color:#fca5a5;border-left-color:#ef4444}}
 .champ{{background:#451a03;color:#fde68a;border:2px solid #f59e0b;font-weight:700}}
+.ok.champ{{background:#14432a;color:#86efac;border:2px solid #22c55e;font-weight:700}}
+.ng.champ{{background:#450a0a;color:#fca5a5;border:2px solid #ef4444;font-weight:700}}
 .s{{color:#6b7280;font-size:10px;margin-right:2px}}
 .p{{color:#f59e0b;font-size:9px}}
 </style></head>

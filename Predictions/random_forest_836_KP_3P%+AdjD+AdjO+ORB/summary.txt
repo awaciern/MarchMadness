@@ -1,0 +1,29 @@
+LEAVE-ONE-YEAR-OUT MODEL PERFORMANCE
+
+Per-year model accuracy:
+  2012: train=1.0000  test=0.7302  bracket=520 pts
+  2013: train=1.0000  test=0.7302  bracket=580 pts
+  2014: train=1.0000  test=0.5397  bracket=420 pts
+  2015: train=1.0000  test=0.5079  bracket=930 pts
+  2016: train=1.0000  test=0.7302  bracket=590 pts
+  2017: train=1.0000  test=0.7460  bracket=1050 pts
+  2018: train=1.0000  test=0.5873  bracket=570 pts
+  2019: train=1.0000  test=0.7460  bracket=980 pts
+  2021: train=1.0000  test=0.6190  bracket=940 pts
+  2022: train=1.0000  test=0.7302  bracket=530 pts
+  2023: train=1.0000  test=0.6825  bracket=1430 pts
+  2024: train=1.0000  test=0.7460  bracket=1220 pts
+  2025: train=1.0000  test=0.7143  bracket=1110 pts
+
+Bracket results:
+  Round 1: 281/416 (67.5%), 2810 pts
+  Round 2: 111/208 (53.4%), 2220 pts
+  Round 3: 42/104 (40.4%), 1680 pts
+  Round 4: 20/52 (38.5%), 1600 pts
+  Round 5: 10/26 (38.5%), 1600 pts
+  Round 6: 3/13 (23.1%), 960 pts
+  All rounds: 467/819 (57.0%)
+  Avg bracket score: 836.2
+
+TRADITIONAL 67/33 TRAIN-TEST SPLIT MODEL (for reference)
+  Train acc: 1.0000  |  Test acc: 0.7196
