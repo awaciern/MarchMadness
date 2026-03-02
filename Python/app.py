@@ -26,11 +26,13 @@ from flask import Flask, Response, jsonify, render_template_string, request, sen
 # Paths
 # ---------------------------------------------------------------------------
 
-REPO_ROOT       = Path(__file__).resolve().parents[1]
-PYTHON_EXE      = str(REPO_ROOT / 'env' / 'bin' / 'python3')
-PREDICT_SCRIPT  = str(Path(__file__).resolve().parent / 'predict_brackets.py')
-PREDICTIONS_DIR = REPO_ROOT / 'Predictions'
-THIS_YEAR       = 2026
+REPO_ROOT        = Path(__file__).resolve().parents[1]
+PYTHON_EXE       = str(REPO_ROOT / 'env' / 'bin' / 'python3')
+PREDICT_SCRIPT   = str(Path(__file__).resolve().parent / 'predict_brackets.py')
+SIMULATE_SCRIPT  = str(Path(__file__).resolve().parent / 'simulate_bracket.py')
+PREDICTIONS_DIR  = REPO_ROOT / 'Predictions'
+SIMULATIONS_DIR  = REPO_ROOT / 'Simulations'
+THIS_YEAR        = 2026
 
 # ---------------------------------------------------------------------------
 # Feature / model metadata (mirrored from predict_brackets.py)
@@ -316,6 +318,123 @@ def saved_bracket(dir_name, year):
 
 
 # ---------------------------------------------------------------------------
+# Simulation routes
+# ---------------------------------------------------------------------------
+
+sim_jobs: dict = {}
+
+
+def run_sim_job(job_id: str, cmd: list):
+    job = sim_jobs[job_id]
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=str(REPO_ROOT),
+        )
+        for line in proc.stdout:
+            line = line.rstrip('\n')
+            job.lines.append(line)
+            job.queue.put(line)
+            if 'HTML saved to:' in line:
+                job.output_dir = Path(line.split('HTML saved to:', 1)[1].strip())
+        proc.wait()
+        job.status = 'done' if proc.returncode == 0 else 'error'
+    except Exception as exc:
+        job.lines.append(f'[ERROR] {exc}')
+        job.queue.put(f'[ERROR] {exc}')
+        job.status = 'error'
+    finally:
+        job.queue.put(None)
+
+
+@app.route('/simulate', methods=['POST'])
+def simulate():
+    data      = request.get_json()
+    dir_name  = (data.get('dir_name') or '').strip()
+    year      = int(data.get('year', THIS_YEAR))
+    num_iters = int(data.get('num_iters', 1000))
+    seed      = data.get('seed')
+
+    pkl_path = PREDICTIONS_DIR / dir_name / 'model.pkl'
+    if not pkl_path.exists():
+        return jsonify({
+            'error': f'model.pkl not found in {dir_name}.\nRe-run the prediction to generate it.'
+        }), 400
+
+    cmd = [
+        PYTHON_EXE, SIMULATE_SCRIPT,
+        '--model', str(pkl_path),
+        '--year',  str(year),
+        '--num-iters', str(num_iters),
+    ]
+    if seed is not None:
+        cmd += ['--seed', str(seed)]
+
+    job_id = str(uuid.uuid4())[:8]
+    sim_jobs[job_id] = Job()
+    t = threading.Thread(target=run_sim_job, args=(job_id, cmd), daemon=True)
+    t.start()
+    return jsonify({'job_id': job_id})
+
+
+@app.route('/sim_stream/<job_id>')
+def sim_stream(job_id):
+    if job_id not in sim_jobs:
+        abort(404)
+
+    def generate():
+        job = sim_jobs[job_id]
+        while True:
+            try:
+                line = job.queue.get(timeout=300)
+            except queue.Empty:
+                yield 'data: {"type":"timeout"}\n\n'
+                break
+            if line is None:
+                payload = {
+                    'type':      'done',
+                    'status':    job.status,
+                    'html_path': str(job.output_dir) if job.output_dir else None,
+                }
+                yield f'data: {json.dumps(payload)}\n\n'
+                break
+            yield f'data: {json.dumps({"type": "line", "text": line})}\n\n'
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
+
+
+@app.route('/sim_list/<path:dir_name>')
+def sim_list_route(dir_name):
+    sim_dir = SIMULATIONS_DIR / dir_name
+    files = []
+    if sim_dir.is_dir():
+        files = [
+            f.name for f in sorted(
+                sim_dir.glob('*iters.html'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+        ]
+    return jsonify({'files': files, 'dir_name': dir_name})
+
+
+@app.route('/sim_html/<path:dir_name>/<path:filename>')
+def sim_html_route(dir_name, filename):
+    html_file = SIMULATIONS_DIR / dir_name / filename
+    if not html_file.exists():
+        abort(404)
+    return send_file(str(html_file), mimetype='text/html')
+
+
+# ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
 
@@ -573,6 +692,48 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
 .tag-kp { background: #1e3a5f; color: #93c5fd; }
 .tag-bt { background: #500724; color: #f9a8d4; }
 .feat-tags { color: #64748b; font-size: 10px; }
+
+/* ---- simulation card ---- */
+.sim-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+.sim-form > div { display: flex; flex-direction: column; }
+.sim-form label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: #94a3b8; margin-bottom: 4px; }
+.sim-form select, .sim-form input[type="number"] {
+  background: #0f172a; border: 1px solid #334155; border-radius: 6px;
+  color: #e2e8f0; padding: 7px 9px; font-size: 12px; outline: none;
+}
+.sim-form select:focus, .sim-form input[type="number"]:focus { border-color: #3b82f6; }
+#sim-year  { width: 90px; }
+#sim-iters { width: 90px; }
+#sim-seed  { width: 80px; }
+#sim-btn {
+  background: #0f4c81; color: #bfdbfe; border: 1px solid #1d4ed8;
+  border-radius: 6px; padding: 7px 18px; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: background .15s; white-space: nowrap;
+}
+#sim-btn:hover:not(:disabled) { background: #1d4ed8; color: #eff6ff; }
+#sim-btn:disabled { opacity: .5; cursor: not-allowed; }
+#sim-log {
+  background: #020617; border-radius: 6px; padding: 8px 10px;
+  font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 10px; color: #94a3b8; max-height: 160px;
+  overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  display: none; margin-bottom: 10px;
+}
+.sim-file-link {
+  display: inline-block; background: #0f172a; border: 1px solid #1d4ed8;
+  border-radius: 6px; padding: 5px 14px; font-size: 11px; color: #93c5fd;
+  text-decoration: none; transition: border-color .15s, color .15s;
+}
+.sim-file-link:hover { border-color: #60a5fa; color: #bfdbfe; }
+#no-pkl-warning {
+  color: #fca5a5; font-size: 11px; background: #450a0a;
+  border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; display: none;
+  white-space: pre-wrap;
+}
+.sim-prev-title {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .6px; color: #64748b; margin-bottom: 6px;
+}
 </style>
 </head>
 <body>
@@ -706,13 +867,36 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
         <div id="summary-box"></div>
       </div>
 
+      <!-- Simulation card -->
+      <div class="panel-card" id="sim-card">
+        <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span>&#127922; Monte Carlo Simulation</span>
+          <span id="sim-status-badge" class="status-badge" style="display:none"></span>
+        </div>
+        <div id="no-pkl-warning"></div>
+        <div class="sim-form">
+          <div><label>Year</label><select id="sim-year"></select></div>
+          <div><label>Iterations</label><input type="number" id="sim-iters" value="1000" min="100" max="100000"></div>
+          <div><label>Seed (opt.)</label><input type="number" id="sim-seed" placeholder="random"></div>
+          <button id="sim-btn" onclick="runSimulation()">&#9654; Simulate</button>
+        </div>
+        <div id="sim-log"></div>
+        <div id="sim-prev" style="display:none">
+          <div class="sim-prev-title">Previous Simulations</div>
+          <div id="sim-links" class="year-grid"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
 
 <script>
+const ALL_YEARS = {{ ALL_YEARS_JSON }};
+
 // ---- Saved models ----
-let activeSavedRow = null;
+let activeSavedRow  = null;
+let currentDirName  = null;
 
 function loadSavedModels() {
   fetch('/saved_models')
@@ -774,10 +958,136 @@ function loadSavedResults(dirName) {
         grid.appendChild(a);
       });
       document.getElementById('results-section').style.display = 'block';
+      loadSimCard(dirName);
     });
 }
 
 loadSavedModels();
+
+// ---- Simulation ----
+function loadSimCard(dirName) {
+  currentDirName = dirName;
+  // Reset state
+  document.getElementById('no-pkl-warning').style.display = 'none';
+  document.getElementById('sim-log').style.display = 'none';
+  document.getElementById('sim-log').innerHTML = '';
+  document.getElementById('sim-status-badge').style.display = 'none';
+  document.getElementById('sim-btn').disabled = false;
+
+  // Populate year selector from ALL_YEARS
+  const sel = document.getElementById('sim-year');
+  sel.innerHTML = '';
+  ALL_YEARS.forEach(function(y) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y === {{ THIS_YEAR }} ? y + ' \u2605' : String(y);
+    if (y === {{ THIS_YEAR }}) opt.selected = true;
+    sel.appendChild(opt);
+  });
+
+  // Load previous simulation runs
+  loadSimPrev(dirName);
+}
+
+function loadSimPrev(dirName) {
+  fetch('/sim_list/' + encodeURIComponent(dirName))
+    .then(r => r.json())
+    .then(function(data) {
+      const links = document.getElementById('sim-links');
+      const prev  = document.getElementById('sim-prev');
+      links.innerHTML = '';
+      if (data.files && data.files.length) {
+        data.files.forEach(function(fname) {
+          const a = document.createElement('a');
+          a.href = '/sim_html/' + encodeURIComponent(dirName) + '/' + fname;
+          a.target = '_blank';
+          a.textContent = fname.replace('_', ' ').replace('iters.html', ' iters');
+          a.className = 'sim-file-link';
+          links.appendChild(a);
+        });
+        prev.style.display = '';
+      } else {
+        prev.style.display = 'none';
+      }
+    });
+}
+
+function runSimulation() {
+  if (!currentDirName) return;
+  const year     = parseInt(document.getElementById('sim-year').value);
+  const numIters = parseInt(document.getElementById('sim-iters').value) || 1000;
+  const seedRaw  = document.getElementById('sim-seed').value.trim();
+  const seed     = seedRaw !== '' ? parseInt(seedRaw) : null;
+
+  document.getElementById('sim-btn').disabled = true;
+  document.getElementById('no-pkl-warning').style.display = 'none';
+  const simLog = document.getElementById('sim-log');
+  simLog.innerHTML = '';
+  simLog.style.display = '';
+  const badge = document.getElementById('sim-status-badge');
+  badge.style.display = '';
+  badge.className = 'status-badge status-running';
+  badge.textContent = 'Running\u2026';
+
+  fetch('/simulate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ dir_name: currentDirName, year, num_iters: numIters, seed }),
+  })
+  .then(r => r.json())
+  .then(function(data) {
+    if (data.error) {
+      const warn = document.getElementById('no-pkl-warning');
+      warn.textContent = data.error;
+      warn.style.display = '';
+      simLog.style.display = 'none';
+      badge.style.display = 'none';
+      document.getElementById('sim-btn').disabled = false;
+      return;
+    }
+    startSimStream(data.job_id);
+  });
+}
+
+function startSimStream(jobId) {
+  const simLog = document.getElementById('sim-log');
+  const badge  = document.getElementById('sim-status-badge');
+  const es = new EventSource('/sim_stream/' + jobId);
+
+  es.onmessage = function(e) {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'line') {
+      simLog.textContent += msg.text + '\n';
+      simLog.scrollTop = simLog.scrollHeight;
+      return;
+    }
+    if (msg.type === 'done') {
+      es.close();
+      document.getElementById('sim-btn').disabled = false;
+      if (msg.status === 'done') {
+        badge.className = 'status-badge status-done';
+        badge.textContent = 'Done';
+        loadSimPrev(currentDirName);
+      } else {
+        badge.className = 'status-badge status-error';
+        badge.textContent = 'Error';
+      }
+      return;
+    }
+    if (msg.type === 'timeout') {
+      es.close();
+      badge.className = 'status-badge status-error';
+      badge.textContent = 'Timeout';
+      document.getElementById('sim-btn').disabled = false;
+    }
+  };
+  es.onerror = function() {
+    es.close();
+    badge.className = 'status-badge status-error';
+    badge.textContent = 'Disconnected';
+    document.getElementById('sim-btn').disabled = false;
+  };
+}
 
 // Sync chip appearance with checkbox state on every change
 document.querySelectorAll('.feat-chip').forEach(chip => {
@@ -899,6 +1209,9 @@ function fetchResults(jobId) {
 
       document.getElementById('results-section').style.display = 'block';
       document.getElementById('run-btn').disabled = false;
+
+      // Load simulation card for this model's output dir
+      if (data.dir_name) loadSimCard(data.dir_name);
     });
 }
 </script>
@@ -906,8 +1219,9 @@ function fetchResults(jobId) {
 </html>
 """
 
-# Inject THIS_YEAR into the template context
+# Inject THIS_YEAR and ALL_YEARS into the template
 INDEX_HTML = INDEX_HTML.replace('{{ THIS_YEAR }}', str(THIS_YEAR))
+INDEX_HTML = INDEX_HTML.replace('{{ ALL_YEARS_JSON }}', json.dumps(ALL_YEARS))
 
 # ---------------------------------------------------------------------------
 # Entry point
