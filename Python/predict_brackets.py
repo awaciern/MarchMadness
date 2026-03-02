@@ -25,6 +25,7 @@ Usage:
 
 import argparse
 import os
+import pickle
 import shutil
 from pathlib import Path
 from typing import List, Tuple
@@ -763,7 +764,32 @@ def main():
     if final_output_root.exists():
         shutil.rmtree(final_output_root)
     output_root.rename(final_output_root)
-    print(f'Results saved to: {final_output_root}')
+    # -----------------------------------------------------------------------
+    # Save the full-data model as a pickle so it can be re-instantiated.
+    # If --this-year was supplied the current-year model was already trained on
+    # all historical data; otherwise train a fresh model on the full dataset now.
+    # -----------------------------------------------------------------------
+    if this_year is not None:
+        # Reuse the last model trained (the current-year one, trained on all data).
+        full_model = model
+    else:
+        df_full = df_all_raw.copy()
+        if cat_encoders:
+            df_full = apply_label_encoders(df_full, cat_encoders)
+        full_model = build_and_train_model(args.model, df_full[feature_list], df_full['Win__1'], model_params)
+
+    pickle_payload = {
+        'model':        full_model,
+        'model_key':    args.model,
+        'model_params': model_params,
+        'expert':       expert,
+        'feature_list': feature_list,
+        'cat_encoders': cat_encoders,
+    }
+    pickle_path = final_output_root / 'model.pkl'
+    with open(pickle_path, 'wb') as fh:
+        pickle.dump(pickle_payload, fh)
+    print(f'Model pickle saved to: {pickle_path}')
 
 
 if __name__ == '__main__':
