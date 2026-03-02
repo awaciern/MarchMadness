@@ -38,6 +38,7 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import train_test_split
 from bracket_html import format_bracket_html
 
@@ -341,7 +342,7 @@ def parse_ff_pairings_arg(arg: str) -> List[Tuple[int, int]]:
 # ---------------------------------------------------------------------------
 
 def build_and_train_model(model_key: str, X_train: pd.DataFrame, y_train: pd.Series,
-                          model_params: dict = None):
+                          model_params: dict = None, calibrate: bool = False):
     if model_key not in MODEL_REGISTRY:
         raise ValueError(f"Unknown model '{model_key}'. Options: {list(MODEL_REGISTRY)}")
     params = dict(model_params or {})
@@ -351,6 +352,12 @@ def build_and_train_model(model_key: str, X_train: pd.DataFrame, y_train: pd.Ser
         params['probability'] = True
     estimator = MODEL_REGISTRY[model_key](**params)
     estimator.fit(X_train, y_train)
+    if calibrate:
+        # Wrap with Platt scaling (sigmoid) fitted on the same training data.
+        # cv='prefit' tells sklearn the base estimator is already trained.
+        cal = CalibratedClassifierCV(estimator, method='sigmoid', cv='prefit')
+        cal.fit(X_train, y_train)
+        return cal
     return estimator
 
 
@@ -616,6 +623,16 @@ def main():
             'The output folder name will include a NY indicator (e.g. KPNY instead of KP).'
         ),
     )
+    parser.add_argument(
+        '--calibrate',
+        action='store_true',
+        default=False,
+        help=(
+            'Apply Platt scaling (sigmoid calibration) to the trained model to produce '
+            'better-calibrated win probabilities. Fitted on the same training data used '
+            'to train the base model. Output folder name will include a CAL indicator.'
+        ),
+    )
     args = parser.parse_args()
 
     expert    = args.expert
@@ -664,6 +681,7 @@ def main():
 
     # Per-year normalisation (optional) — fit scalers on numeric columns only.
     norm_years = args.norm_years
+    calibrate  = args.calibrate
     norm_info: dict = None
     if norm_years:
         num_cols = [c for c in feature_list if c not in cat_col_set]
@@ -673,6 +691,7 @@ def main():
         print(f'Per-year normalisation: ON  ({len(norm_info["cols"])} numeric columns)')
     else:
         print(f'Per-year normalisation: OFF')
+    print(f'Probability calibration: {"ON (Platt sigmoid)" if calibrate else "OFF"}')
 
     print(f'Model type: {args.model}')
 
@@ -709,7 +728,7 @@ def main():
 
         X_tr = df_train[feature_list]
         y_tr = df_train['Win__1']
-        model = build_and_train_model(args.model, X_tr, y_tr, model_params)
+        model = build_and_train_model(args.model, X_tr, y_tr, model_params, calibrate=calibrate)
 
         train_acc = model.score(X_tr, y_tr)
         if not is_current:
@@ -789,7 +808,7 @@ def main():
         df_trad = apply_year_norm(df_trad, norm_info)
     X_trad, y_trad = df_trad[feature_list], df_trad['Win__1']
     X_tr_t, X_te_t, y_tr_t, y_te_t = train_test_split(X_trad, y_trad, test_size=0.33, random_state=42)
-    model_trad = build_and_train_model(args.model, X_tr_t, y_tr_t, model_params)
+    model_trad = build_and_train_model(args.model, X_tr_t, y_tr_t, model_params, calibrate=calibrate)
     trad_train_acc = model_trad.score(X_tr_t, y_tr_t)
     trad_test_acc  = model_trad.score(X_te_t, y_te_t)
     print(f'  Train acc: {trad_train_acc:.4f}  |  Test acc: {trad_test_acc:.4f}')
@@ -844,6 +863,8 @@ def main():
     expert_tag = 'KP' if expert == 'kenpom' else 'BT'
     if norm_years:
         expert_tag += 'NY'
+    if calibrate:
+        expert_tag += 'CAL'
     seen_bases: set = set()
     feat_parts: List[str] = []
     for f in feature_list:
@@ -880,7 +901,7 @@ def main():
             df_full = apply_label_encoders(df_full, cat_encoders)
         if norm_info is not None:
             df_full = apply_year_norm(df_full, norm_info)
-        full_model = build_and_train_model(args.model, df_full[feature_list], df_full['Win__1'], model_params)
+        full_model = build_and_train_model(args.model, df_full[feature_list], df_full['Win__1'], model_params, calibrate=calibrate)
 
     pickle_payload = {
         'model':        full_model,

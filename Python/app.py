@@ -151,7 +151,7 @@ ALL_YEARS = [y for y in range(2012, THIS_YEAR + 1) if y != 2020]
 # Saved-model scanner
 # ---------------------------------------------------------------------------
 
-_SAVED_PATTERN = re.compile(r'^(.+?)_(\d+)_(KP|KPNY|BT|BTNY)_(.+)$')
+_SAVED_PATTERN = re.compile(r'^(.+?)_(\d+)_((?:KP|BT)\w*)_(.+)$')
 
 def scan_saved_models():
     """
@@ -181,7 +181,8 @@ def scan_saved_models():
             'score':      score,
             'model':      model_key,
             'expert':     expert_tag,
-            'norm_years': expert_tag.endswith('NY'),
+            'norm_years': 'NY' in expert_tag,
+            'calibrated': 'CAL' in expert_tag,
             'features':   feat_str,
             'params':     params_str,
             'years':      years,
@@ -281,6 +282,8 @@ def run_prediction():
         cmd += ['--model-params'] + params.split()
     if data.get('norm_years'):
         cmd.append('--norm-years')
+    if data.get('calibrate'):
+        cmd.append('--calibrate')
 
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = Job()
@@ -760,6 +763,7 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
 }
 .tag-kp { background: #1e3a5f; color: #93c5fd; }
 .tag-ny { background: #2d1b4e; color: #c4b5fd; margin-left: 3px; }
+.tag-cal { background: #3b1a0a; color: #fdba74; margin-left: 3px; }
 .tag-bt { background: #500724; color: #f9a8d4; }
 .feat-tags { color: #64748b; font-size: 10px; }
 
@@ -918,10 +922,15 @@ label.feat-chip[title] { cursor: help; }
       </div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;margin-top:4px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;margin-top:4px">
       <input type="checkbox" id="norm-years-check" style="accent-color:#3b82f6;cursor:pointer;width:14px;height:14px">
       <span style="font-size:13px;color:#e2e8f0">Normalize within year</span>
       <span style="font-size:10px;color:#475569">(Z-score each feature per year before training)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <input type="checkbox" id="calibrate-check" style="accent-color:#f97316;cursor:pointer;width:14px;height:14px">
+      <span style="font-size:13px;color:#e2e8f0">Calibrate probabilities</span>
+      <span style="font-size:10px;color:#475569">(Platt scaling &mdash; corrects over/under-confident win probs)</span>
     </div>
     <button id="run-btn" onclick="runPrediction()">&#9654; Run Prediction</button>
   </div>
@@ -1008,11 +1017,12 @@ function loadSavedModels() {
       models.forEach(function(m, i) {
         const tr = document.createElement('tr');
         tr.className = 'model-row';
-        const baseTag = (m.expert === 'KP' || m.expert === 'KPNY')
+        const baseTag = m.expert.startsWith('KP')
           ? '<span class="tag tag-kp">KP</span>'
           : '<span class="tag tag-bt">BT</span>';
-        const nyTag = m.norm_years ? '<span class="tag tag-ny">NY</span>' : '';
-        const expertTag = baseTag + nyTag;
+        const nyTag  = m.norm_years  ? '<span class="tag tag-ny">NY</span>'   : '';
+        const calTag = m.calibrated  ? '<span class="tag tag-cal">CAL</span>' : '';
+        const expertTag = baseTag + nyTag + calTag;
         tr.innerHTML =
           '<td style="color:#475569">' + (i + 1) + '</td>' +
           '<td class="score-cell">' + m.score + '</td>' +
@@ -1240,6 +1250,7 @@ function runPrediction() {
   const expert    = document.querySelector('input[name="expert"]:checked').value;
   const params    = document.getElementById('params-input').value.trim();
   const normYears = document.getElementById('norm-years-check').checked;
+  const calibrate = document.getElementById('calibrate-check').checked;
 
   // Reset UI
   document.getElementById('log-box').innerHTML = '';
@@ -1250,7 +1261,7 @@ function runPrediction() {
   fetch('/run', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ model, expert, params, features, norm_years: normYears }),
+    body: JSON.stringify({ model, expert, params, features, norm_years: normYears, calibrate }),
   })
   .then(r => r.json())
   .then(data => {
