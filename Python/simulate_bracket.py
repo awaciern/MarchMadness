@@ -1,0 +1,454 @@
+"""
+simulate_bracket.py
+
+Monte Carlo simulation of an NCAA tournament bracket using a saved model pickle.
+
+For each iteration, games are decided probabilistically: the model's predicted
+win probability for Team__1 is used as the coin-flip weight rather than always
+picking the favourite.  Running many iterations gives each team an empirical
+probability of advancing to every round.
+
+Output
+------
+- Terminal: formatted table sorted by championship likelihood
+- <output_dir>/<year>_<N>iters.html  — styled HTML table
+- <output_dir>/<year>_<N>iters.csv   — flat CSV
+
+Default output directory: Simulations/<model_folder_name>/
+
+Usage
+-----
+    python3 Python/simulate_bracket.py \\
+        --model Predictions/random_forest_767_KP_.../model.pkl \\
+        --year 2024 --num-iters 10000
+
+    python3 Python/simulate_bracket.py \\
+        --model Predictions/.../model.pkl --year 2026 --num-iters 5000 \\
+        --final-four-pairings "0-2,1-3" --seed 42
+"""
+
+import argparse
+import pickle
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+# ---------------------------------------------------------------------------
+# Import helpers from predict_brackets.py (same package directory)
+# ---------------------------------------------------------------------------
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from predict_brackets import (
+    load_bracket_round,
+    load_kenpom,
+    load_barttorvik,
+    attach_kenpom,
+    attach_barttorvik,
+    apply_label_encoders,
+    derive_ff_pairings_from_data,
+    parse_ff_pairings_arg,
+    ALL_YEARS,
+)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+ROUND_LABELS = ['R16', 'S16', 'E8', 'FF', 'Final', 'Champ']
+ROUND_FULL   = ['Second Round', 'Sweet 16', 'Elite Eight',
+                'Final Four', 'Championship', 'Champion']
+
+
+# ---------------------------------------------------------------------------
+# Core simulation
+# ---------------------------------------------------------------------------
+
+def _simulate_one(
+    model,
+    r1_teams1: list,
+    r1_teams2: list,
+    r1_proba: np.ndarray,
+    df_kp: pd.DataFrame,
+    df_bt,                  # pd.DataFrame or None
+    feature_list: list,
+    cat_encoders: dict,
+    team_seed_map: dict,
+    ff_pairings: list,
+    needs_bt: bool,
+    draws_r1: np.ndarray,   # pre-drawn randoms for round 1
+    rng: np.random.Generator,
+) -> dict:
+    """
+    Run one complete bracket simulation.
+    Returns {round_number: [winning_team_names]} for rounds 1–6.
+    """
+    results = {}
+    prev_winners: list = []
+
+    for rnd in range(1, 7):
+        if rnd == 1:
+            teams1 = r1_teams1
+            teams2 = r1_teams2
+            proba  = r1_proba
+            draws  = draws_r1
+        else:
+            # Build matchups from previous round's winners
+            if rnd == 5:
+                matchup_teams = [
+                    (prev_winners[ff_pairings[0][0]], prev_winners[ff_pairings[0][1]]),
+                    (prev_winners[ff_pairings[1][0]], prev_winners[ff_pairings[1][1]]),
+                ]
+            else:
+                matchup_teams = [
+                    (prev_winners[i], prev_winners[i + 1])
+                    for i in range(0, len(prev_winners), 2)
+                ]
+
+            df_match = pd.DataFrame(matchup_teams, columns=['Team__1', 'Team__2'])
+            df_rnd = attach_kenpom(df_match, df_kp)
+            if needs_bt and df_bt is not None:
+                df_rnd = attach_barttorvik(df_rnd, df_bt)
+            df_rnd['Seed__1'] = df_rnd['Team__1'].map(team_seed_map)
+            df_rnd['Seed__2'] = df_rnd['Team__2'].map(team_seed_map)
+
+            df_enc = apply_label_encoders(df_rnd, cat_encoders) if cat_encoders else df_rnd
+            proba  = model.predict_proba(df_enc[feature_list])
+            teams1 = df_rnd['Team__1'].tolist()
+            teams2 = df_rnd['Team__2'].tolist()
+            draws  = rng.random(len(teams1))
+
+        winners = [
+            teams1[k] if draws[k] < proba[k, 1] else teams2[k]
+            for k in range(len(teams1))
+        ]
+        results[rnd] = winners
+        prev_winners = winners
+
+    return results
+
+
+def run_simulations(
+    model,
+    data_root: Path,
+    year: int,
+    ff_pairings: list,
+    feature_list: list,
+    cat_encoders: dict,
+    num_iters: int,
+    seed: int = None,
+) -> pd.DataFrame:
+    """
+    Run `num_iters` Monte Carlo bracket simulations for `year`.
+
+    Returns a DataFrame (64 rows) with columns:
+        Team, Seed, R16, S16, E8, FF, Final, Champ
+    Values are probabilities (0–1), sorted by Champ desc → FF desc → … → R16 desc.
+    """
+    needs_bt = any(f.startswith('BT__') for f in feature_list)
+
+    # --- Load fixed data --------------------------------------------------
+    r1_df_raw = load_bracket_round(data_root, year, 1)
+
+    # Build team → seed map from Round 1
+    team_seed_map: dict = {}
+    for _, row in r1_df_raw.iterrows():
+        team_seed_map[row['Team__1']] = row['Seed__1']
+        team_seed_map[row['Team__2']] = row['Seed__2']
+
+    # All 64 teams in bracket order (Team__1, Team__2 per game)
+    all_teams: list = []
+    for _, row in r1_df_raw.iterrows():
+        for t in (row['Team__1'], row['Team__2']):
+            if t not in all_teams:
+                all_teams.append(t)
+
+    # Pre-load stat files once
+    df_kp = load_kenpom(data_root, year)
+    df_bt = load_barttorvik(data_root, year) if needs_bt else None
+
+    # Pre-compute Round 1 feature matrix & probabilities (matchups are fixed)
+    df_r1_kp = attach_kenpom(r1_df_raw[['Team__1', 'Team__2']].copy(), df_kp)
+    if needs_bt and df_bt is not None:
+        df_r1_kp = attach_barttorvik(df_r1_kp, df_bt)
+    df_r1_kp['Seed__1'] = df_r1_kp['Team__1'].map(team_seed_map)
+    df_r1_kp['Seed__2'] = df_r1_kp['Team__2'].map(team_seed_map)
+    df_r1_enc = apply_label_encoders(df_r1_kp, cat_encoders) if cat_encoders else df_r1_kp
+    r1_proba  = model.predict_proba(df_r1_enc[feature_list])
+
+    # Aligned team lists for Round 1 (same row order as r1_proba)
+    r1_teams1 = df_r1_kp['Team__1'].tolist()
+    r1_teams2 = df_r1_kp['Team__2'].tolist()
+
+    # Verify model has predict_proba
+    if not hasattr(model, 'predict_proba'):
+        raise RuntimeError(
+            'The saved model does not support predict_proba. '
+            'Re-run predict_brackets.py to generate a probability-capable model '
+            '(e.g. for SVC, pass probability=True).'
+        )
+
+    # --- Run simulations --------------------------------------------------
+    rng = np.random.default_rng(seed)
+    round_wins: dict = defaultdict(lambda: defaultdict(int))  # team → rnd → count
+
+    print(f'Running {num_iters:,} simulations for {year}...', flush=True)
+    for i in range(num_iters):
+        if (i + 1) % 200 == 0 or i == 0:
+            print(f'  {i + 1:>{len(str(num_iters))}}/{num_iters}', end='\r', flush=True)
+
+        # Pre-draw Round 1 randoms (same rng stream for reproducibility)
+        draws_r1 = rng.random(len(r1_teams1))
+        sim = _simulate_one(
+            model, r1_teams1, r1_teams2, r1_proba,
+            df_kp, df_bt, feature_list, cat_encoders,
+            team_seed_map, ff_pairings, needs_bt, draws_r1, rng,
+        )
+        for rnd, winners in sim.items():
+            for team in winners:
+                round_wins[team][rnd] += 1
+
+    print(f'  {num_iters}/{num_iters} — done.    ', flush=True)
+
+    # --- Build results DataFrame ------------------------------------------
+    rows = []
+    for team in all_teams:
+        row = {'Team': team, 'Seed': team_seed_map.get(team, '?')}
+        for rnd, lbl in enumerate(ROUND_LABELS, start=1):
+            row[lbl] = round_wins[team][rnd] / num_iters
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+
+    # Sort: Champ desc, then FF, E8, S16, R16 desc
+    df = df.sort_values(list(reversed(ROUND_LABELS)), ascending=False).reset_index(drop=True)
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Output formatting
+# ---------------------------------------------------------------------------
+
+def _fmt_pct(v: float) -> str:
+    if v == 0:
+        return '—'
+    if v >= 0.9995:
+        return '100%'
+    if v < 0.0005:
+        return '<0.1%'
+    return f'{v:.1%}'
+
+
+def to_html(df: pd.DataFrame, year: int, num_iters: int, model_key: str) -> str:
+    header_cells = ''.join(
+        f'<th>{h}</th>' for h in ['#', 'Seed', 'Team'] + ROUND_FULL
+    )
+    rows_html = ''
+    for rank, (_, row) in enumerate(df.iterrows(), start=1):
+        try:
+            seed = int(float(row['Seed']))
+        except (ValueError, TypeError):
+            seed = '?'
+        cells = f'<td class="rank">{rank}</td><td class="seed">[{seed}]</td><td class="team">{row["Team"]}</td>'
+        for lbl in ROUND_LABELS:
+            v = row[lbl]
+            if v >= 0.50:
+                cls = 'p-high'
+            elif v >= 0.15:
+                cls = 'p-med'
+            elif v > 0:
+                cls = 'p-low'
+            else:
+                cls = 'p-zero'
+            cells += f'<td class="{cls}">{_fmt_pct(v)}</td>'
+        rows_html += f'<tr>{cells}</tr>\n'
+
+    return f'''<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>{year} Monte Carlo Simulation \u2013 {model_key}</title>
+<style>
+*, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: "Segoe UI", Arial, sans-serif; font-size: 12px;
+       background: #0f172a; color: #e2e8f0; padding: 24px; }}
+h1 {{ font-size: 18px; color: #fbbf24; margin-bottom: 4px; }}
+.meta {{ color: #64748b; font-size: 11px; margin-bottom: 16px; }}
+table {{ border-collapse: collapse; }}
+th {{ background: #1e293b; color: #64748b; font-size: 10px; text-transform: uppercase;
+      letter-spacing: .6px; padding: 8px 12px; border-bottom: 2px solid #334155;
+      text-align: right; white-space: nowrap; }}
+th:nth-child(2), th:nth-child(3) {{ text-align: left; }}
+td {{ padding: 5px 12px; border-bottom: 1px solid #1e293b; text-align: right;
+      font-variant-numeric: tabular-nums; white-space: nowrap; }}
+tr:hover td {{ background: #1e293b; }}
+.rank {{ color: #475569; font-size: 10px; text-align: right; }}
+.seed {{ color: #64748b; font-size: 10px; text-align: left; }}
+.team {{ color: #e2e8f0; font-weight: 500; text-align: left; min-width: 160px; }}
+.p-high {{ color: #86efac; font-weight: 700; }}
+.p-med  {{ color: #fde68a; }}
+.p-low  {{ color: #94a3b8; }}
+.p-zero {{ color: #334155; }}
+</style></head>
+<body>
+<h1>{year} NCAA Tournament \u2014 Monte Carlo Simulation</h1>
+<div class="meta">
+  Model: <strong style="color:#e2e8f0">{model_key}</strong>
+  &nbsp;|&nbsp; Iterations: <strong style="color:#e2e8f0">{num_iters:,}</strong>
+  &nbsp;|&nbsp; Values show probability of advancing to each round
+</div>
+<table>
+  <thead><tr>{header_cells}</tr></thead>
+  <tbody>{rows_html}</tbody>
+</table>
+</body></html>'''
+
+
+def to_terminal(df: pd.DataFrame):
+    team_w = max(df['Team'].str.len().max(), 4)
+    hdr = f"{'#':>3}  {'Seed':>4}  {'Team':<{team_w}}" + \
+          ''.join(f'  {lbl:>7}' for lbl in ROUND_LABELS)
+    print(hdr)
+    print('-' * len(hdr))
+    for rank, (_, row) in enumerate(df.iterrows(), start=1):
+        try:
+            seed = int(float(row['Seed']))
+        except (ValueError, TypeError):
+            seed = '?'
+        line = f'{rank:>3}  {seed:>4}  {row["Team"]:<{team_w}}'
+        line += ''.join(f'  {_fmt_pct(row[lbl]):>7}' for lbl in ROUND_LABELS)
+        print(line)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Monte Carlo bracket simulation using a saved model pickle.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument(
+        '--model', '-m', required=True,
+        help='Path to the model .pkl file (inside a Predictions/<dir>/ folder).',
+    )
+    parser.add_argument(
+        '--year', '-y', type=int, required=True,
+        help='Tournament year to simulate.',
+    )
+    parser.add_argument(
+        '--num-iters', '-n', type=int, default=1000,
+        help='Number of Monte Carlo iterations (default: 1000).',
+    )
+    parser.add_argument(
+        '--output-dir', '-o', default=None,
+        help='Output directory. Default: Simulations/<model_folder>/ under repo root.',
+    )
+    parser.add_argument(
+        '--final-four-pairings', default=None,
+        help=(
+            'Override FF bracket pairings as "i-j,k-l" (e.g. "0-2,1-3"). '
+            'Past years auto-derive from data; unknown years default to "0-1,2-3".'
+        ),
+    )
+    parser.add_argument(
+        '--data-root', '-d', default=None,
+        help='Repo root containing Data/. Inferred from pickle path if omitted.',
+    )
+    parser.add_argument(
+        '--seed', type=int, default=None,
+        help='Integer RNG seed for reproducibility.',
+    )
+    args = parser.parse_args()
+
+    # --- Load pickle ------------------------------------------------------
+    pkl_path = Path(args.model).resolve()
+    if not pkl_path.exists():
+        print(f'ERROR: pickle not found: {pkl_path}', file=sys.stderr)
+        sys.exit(1)
+
+    with open(pkl_path, 'rb') as fh:
+        payload = pickle.load(fh)
+
+    model        = payload['model']
+    model_key    = payload['model_key']
+    feature_list = payload['feature_list']
+    cat_encoders = payload.get('cat_encoders', {})
+
+    # --- Infer data root --------------------------------------------------
+    # Expected layout: <repo_root>/Predictions/<model_dir>/model.pkl
+    if args.data_root:
+        data_root = Path(args.data_root).resolve()
+    else:
+        data_root = pkl_path.parent.parent.parent
+        if not (data_root / 'Data').is_dir():
+            print(
+                'ERROR: could not infer repo root from pickle path. '
+                'Use --data-root.',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    # --- FF pairings ------------------------------------------------------
+    if args.final_four_pairings:
+        ff_pairings = parse_ff_pairings_arg(args.final_four_pairings)
+    elif args.year in ALL_YEARS:
+        try:
+            ff_pairings = derive_ff_pairings_from_data(data_root, args.year)
+        except Exception as e:
+            print(f'WARNING: could not derive FF pairings ({e}), using 0-1,2-3')
+            ff_pairings = [(0, 1), (2, 3)]
+    else:
+        ff_pairings = [(0, 1), (2, 3)]
+
+    print(f'Model:        {model_key}')
+    print(f'Year:         {args.year}')
+    print(f'Iterations:   {args.num_iters:,}')
+    print(f'FF pairings:  {ff_pairings}')
+    if args.seed is not None:
+        print(f'RNG seed:     {args.seed}')
+    print()
+
+    # --- Run simulations --------------------------------------------------
+    df_results = run_simulations(
+        model=model,
+        data_root=data_root,
+        year=args.year,
+        ff_pairings=ff_pairings,
+        feature_list=feature_list,
+        cat_encoders=cat_encoders,
+        num_iters=args.num_iters,
+        seed=args.seed,
+    )
+
+    # --- Print to terminal ------------------------------------------------
+    print()
+    to_terminal(df_results)
+
+    # --- Write output files -----------------------------------------------
+    if args.output_dir:
+        out_dir = Path(args.output_dir)
+    else:
+        out_dir = data_root / 'Simulations' / pkl_path.parent.name
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    stem     = f'{args.year}_{args.num_iters}iters'
+    html_out = out_dir / f'{stem}.html'
+    csv_out  = out_dir / f'{stem}.csv'
+
+    html_out.write_text(
+        to_html(df_results, args.year, args.num_iters, model_key),
+        encoding='utf-8',
+    )
+    df_results.to_csv(csv_out, index=False)
+
+    print(f'\nHTML saved to: {html_out}')
+    print(f'CSV  saved to: {csv_out}')
+
+
+if __name__ == '__main__':
+    main()
