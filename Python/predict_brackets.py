@@ -38,6 +38,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.model_selection import train_test_split
+from bracket_html import format_bracket_html
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -450,40 +451,6 @@ def simulate_bracket(
 # Output formatting
 # ---------------------------------------------------------------------------
 
-def format_pred_file(
-    pred_teams_by_round,
-    pred_seeds_by_round,
-    pred_probs_by_round,
-    correct_by_round,
-    num_correct_by_round,
-    total_score,
-    is_current: bool,
-) -> str:
-    lines = []
-    num_correct_total = 0
-    for rnd_idx in range(6):
-        parts = []
-        n = len(pred_teams_by_round[rnd_idx])
-        if not is_current:
-            n_cor = num_correct_by_round[rnd_idx]
-            round_score = n_cor * (2 ** rnd_idx) * 10
-            num_correct_total += n_cor
-            parts.append(f'{n_cor} for {n}')
-            parts.append(str(round_score))
-        for j in range(n):
-            prob = pred_probs_by_round[rnd_idx][j]
-            prob_tag = f'({prob:.2f})' if prob is not None else ''
-            entry = f'[{pred_seeds_by_round[rnd_idx][j]}]{pred_teams_by_round[rnd_idx][j]}{prob_tag}'
-            if not is_current:
-                entry += f'({int(correct_by_round[rnd_idx][j])})'
-            parts.append(entry)
-        lines.append(','.join(parts))
-    result = '\n'.join(lines)
-    if not is_current:
-        result += f'\n{num_correct_total} for 63,{total_score}'
-    return result
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -694,10 +661,23 @@ def main():
             'bracket_score': score if not is_current else None,
         })
 
-        # Write prediction file.
-        pred_str = format_pred_file(pred_teams, pred_seeds, pred_probs, correct, n_correct, score, is_current)
-        out_path = output_root / f'{year}.csv'
-        out_path.write_text(pred_str)
+        # Write prediction file (HTML bracket).
+        html_str = format_bracket_html(
+            data_root=data_root,
+            year=year,
+            pred_teams_by_round=pred_teams,
+            pred_seeds_by_round=pred_seeds,
+            pred_probs_by_round=pred_probs,
+            correct_by_round=correct,
+            num_correct_by_round=n_correct,
+            total_score=score,
+            is_current=is_current,
+            model_key=args.model,
+            feat_bases=args.features,
+            ff_pairings=ff_pairings,
+        )
+        out_path = output_root / f'{year}.html'
+        out_path.write_text(html_str, encoding='utf-8')
 
     # -----------------------------------------------------------------------
     # Traditional random train/test split model (for reference comparison).
