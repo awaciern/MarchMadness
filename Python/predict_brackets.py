@@ -220,6 +220,22 @@ def fit_year_scalers(df: pd.DataFrame, num_cols: List[str]) -> dict:
     return {'by_year': by_year, 'fallback': fallback, 'cols': avail}
 
 
+def fit_global_scaler(df: pd.DataFrame, num_cols: List[str]) -> dict:
+    """
+    Fit a single StandardScaler across all years (global normalisation).
+
+    Returns a norm_info dict in the same format as fit_year_scalers, but
+    with an empty by_year dict so the global fallback scaler is always used.
+    This is the --norm-all counterpart to --norm-years.
+    """
+    avail = [c for c in num_cols if c in df.columns]
+    if not avail:
+        return {'by_year': {}, 'fallback': None, 'cols': []}
+    sc = StandardScaler()
+    sc.fit(df[avail])
+    return {'by_year': {}, 'fallback': sc, 'cols': avail}
+
+
 def apply_year_norm(df: pd.DataFrame, norm_info: dict) -> pd.DataFrame:
     """
     Apply per-year Z-score normalisation to a DataFrame that contains a 'Year'
@@ -624,6 +640,16 @@ def main():
         ),
     )
     parser.add_argument(
+        '--norm-all',
+        action='store_true',
+        default=False,
+        help=(
+            'Normalise numeric features across all years using a single global '
+            'StandardScaler. Mutually exclusive with --norm-years. '
+            'Output folder name will include a NA indicator (e.g. KPNA instead of KP).'
+        ),
+    )
+    parser.add_argument(
         '--calibrate',
         action='store_true',
         default=False,
@@ -679,18 +705,25 @@ def main():
     # Fit label encoders on the full dataset so all values are known.
     cat_encoders = fit_label_encoders(df_all_raw, cat_cols) if cat_cols else {}
 
-    # Per-year normalisation (optional) — fit scalers on numeric columns only.
+    # Normalisation (optional) — fit scalers on numeric columns only.
     norm_years = args.norm_years
+    norm_all   = args.norm_all
     calibrate  = args.calibrate
+    if norm_years and norm_all:
+        parser.error('--norm-years and --norm-all are mutually exclusive.')
     norm_info: dict = None
     if norm_years:
         num_cols = [c for c in feature_list if c not in cat_col_set]
-        # Fit on data after label-encoding (scalers operate on encoded numerics).
         df_for_norm = apply_label_encoders(df_all_raw, cat_encoders) if cat_encoders else df_all_raw
         norm_info = fit_year_scalers(df_for_norm, num_cols)
-        print(f'Per-year normalisation: ON  ({len(norm_info["cols"])} numeric columns)')
+        print(f'Normalisation:           per-year Z-score  ({len(norm_info["cols"])} numeric columns)')
+    elif norm_all:
+        num_cols = [c for c in feature_list if c not in cat_col_set]
+        df_for_norm = apply_label_encoders(df_all_raw, cat_encoders) if cat_encoders else df_all_raw
+        norm_info = fit_global_scaler(df_for_norm, num_cols)
+        print(f'Normalisation:           global Z-score    ({len(norm_info["cols"])} numeric columns)')
     else:
-        print(f'Per-year normalisation: OFF')
+        print(f'Normalisation:           OFF')
     print(f'Probability calibration: {"ON (Platt sigmoid)" if calibrate else "OFF"}')
 
     print(f'Model type: {args.model}')
@@ -863,6 +896,8 @@ def main():
     expert_tag = 'KP' if expert == 'kenpom' else 'BT'
     if norm_years:
         expert_tag += 'NY'
+    elif norm_all:
+        expert_tag += 'NA'
     if calibrate:
         expert_tag += 'CAL'
     seen_bases: set = set()

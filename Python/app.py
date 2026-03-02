@@ -182,6 +182,7 @@ def scan_saved_models():
             'model':      model_key,
             'expert':     expert_tag,
             'norm_years': 'NY' in expert_tag,
+            'norm_all':   'NA' in expert_tag,
             'calibrated': 'CAL' in expert_tag,
             'features':   feat_str,
             'params':     params_str,
@@ -282,6 +283,8 @@ def run_prediction():
         cmd += ['--model-params'] + params.split()
     if data.get('norm_years'):
         cmd.append('--norm-years')
+    if data.get('norm_all'):
+        cmd.append('--norm-all')
     if data.get('calibrate'):
         cmd.append('--calibrate')
 
@@ -762,7 +765,8 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
   padding: 1px 6px; font-size: 10px; font-weight: 600; margin-right: 3px;
 }
 .tag-kp { background: #1e3a5f; color: #93c5fd; }
-.tag-ny { background: #2d1b4e; color: #c4b5fd; margin-left: 3px; }
+.tag-ny  { background: #2d1b4e; color: #c4b5fd; margin-left: 3px; }
+.tag-na  { background: #0c2a1a; color: #6ee7b7; margin-left: 3px; }
 .tag-cal { background: #3b1a0a; color: #fdba74; margin-left: 3px; }
 .tag-bt { background: #500724; color: #f9a8d4; }
 .feat-tags { color: #64748b; font-size: 10px; }
@@ -923,9 +927,14 @@ label.feat-chip[title] { cursor: help; }
     </div>
 
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;margin-top:4px">
-      <input type="checkbox" id="norm-years-check" style="accent-color:#3b82f6;cursor:pointer;width:14px;height:14px">
+      <input type="checkbox" id="norm-years-check" onchange="if(this.checked)document.getElementById('norm-all-check').checked=false" style="accent-color:#3b82f6;cursor:pointer;width:14px;height:14px">
       <span style="font-size:13px;color:#e2e8f0">Normalize within year</span>
       <span style="font-size:10px;color:#475569">(Z-score each feature per year before training)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <input type="checkbox" id="norm-all-check" onchange="if(this.checked)document.getElementById('norm-years-check').checked=false" style="accent-color:#10b981;cursor:pointer;width:14px;height:14px">
+      <span style="font-size:13px;color:#e2e8f0">Normalize across all years</span>
+      <span style="font-size:10px;color:#475569">(single global Z-score scaler across all years)</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <input type="checkbox" id="calibrate-check" style="accent-color:#f97316;cursor:pointer;width:14px;height:14px">
@@ -1021,8 +1030,9 @@ function loadSavedModels() {
           ? '<span class="tag tag-kp">KP</span>'
           : '<span class="tag tag-bt">BT</span>';
         const nyTag  = m.norm_years  ? '<span class="tag tag-ny">NY</span>'   : '';
+        const naTag  = m.norm_all    ? '<span class="tag tag-na">NA</span>'   : '';
         const calTag = m.calibrated  ? '<span class="tag tag-cal">CAL</span>' : '';
-        const expertTag = baseTag + nyTag + calTag;
+        const expertTag = baseTag + nyTag + naTag + calTag;
         tr.innerHTML =
           '<td style="color:#475569">' + (i + 1) + '</td>' +
           '<td class="score-cell">' + m.score + '</td>' +
@@ -1250,6 +1260,7 @@ function runPrediction() {
   const expert    = document.querySelector('input[name="expert"]:checked').value;
   const params    = document.getElementById('params-input').value.trim();
   const normYears = document.getElementById('norm-years-check').checked;
+  const normAll   = document.getElementById('norm-all-check').checked;
   const calibrate = document.getElementById('calibrate-check').checked;
 
   // Reset UI
@@ -1261,7 +1272,7 @@ function runPrediction() {
   fetch('/run', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ model, expert, params, features, norm_years: normYears, calibrate }),
+    body: JSON.stringify({ model, expert, params, features, norm_years: normYears, norm_all: normAll, calibrate }),
   })
   .then(r => r.json())
   .then(data => {
