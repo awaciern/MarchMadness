@@ -76,6 +76,7 @@ MODELS = [
     ('svc',                 'Support Vector Machine (SVC)'),
     ('decision_tree',       'Decision Tree'),
     ('random_forest',       'Random Forest'),
+    ('gradient_boosting',   'Gradient Boosting'),
     ('adaboost',            'AdaBoost'),
     ('gpc',                 'Gaussian Process'),
 ]

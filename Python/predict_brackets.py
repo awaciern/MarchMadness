@@ -36,9 +36,10 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.frozen import FrozenEstimator
 from sklearn.model_selection import train_test_split
 from bracket_html import format_bracket_html
 
@@ -90,13 +91,14 @@ DEFAULT_FEATURE_BASES: List[str] = ['WinPct', 'AdjO', 'AdjD', 'SOS_AdjEM']
 CATEGORICAL_BASE_NAMES: frozenset = frozenset(['Conf', 'Seed'])
 
 MODEL_REGISTRY = {
-    'logistic_regression': LogisticRegression,
-    'knn':                 KNeighborsClassifier,
-    'svc':                 SVC,
-    'decision_tree':       DecisionTreeClassifier,
-    'random_forest':       RandomForestClassifier,
-    'adaboost':            AdaBoostClassifier,
-    'gpc':                 GaussianProcessClassifier,
+    'logistic_regression':    LogisticRegression,
+    'knn':                    KNeighborsClassifier,
+    'svc':                    SVC,
+    'decision_tree':          DecisionTreeClassifier,
+    'random_forest':          RandomForestClassifier,
+    'gradient_boosting':      GradientBoostingClassifier,
+    'adaboost':               AdaBoostClassifier,
+    'gpc':                    GaussianProcessClassifier,
 }
 
 # ---------------------------------------------------------------------------
@@ -370,8 +372,8 @@ def build_and_train_model(model_key: str, X_train: pd.DataFrame, y_train: pd.Ser
     estimator.fit(X_train, y_train)
     if calibrate:
         # Wrap with Platt scaling (sigmoid) fitted on the same training data.
-        # cv='prefit' tells sklearn the base estimator is already trained.
-        cal = CalibratedClassifierCV(estimator, method='sigmoid', cv='prefit')
+        # FrozenEstimator signals that the base estimator is already fitted.
+        cal = CalibratedClassifierCV(FrozenEstimator(estimator), method='sigmoid')
         cal.fit(X_train, y_train)
         return cal
     return estimator
