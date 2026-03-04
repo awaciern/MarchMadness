@@ -66,6 +66,36 @@ BT_ONLY_BASES = [
     'WAB', 'Rk_WAB',
 ]
 
+BT2W_BASES = [
+    '2W_WinPct', '2W_Wins', '2W_Losses',
+    '2W_AdjO', '2W_Rk_AdjO', '2W_AdjD', '2W_Rk_AdjD', '2W_AdjT', '2W_Rk_AdjT',
+    '2W_ConfWinPct', '2W_ConfWins', '2W_ConfLosses',
+    '2W_Barthag', '2W_Rk_Barthag',
+    '2W_EFG%', '2W_Rk_EFG%', '2W_EFGD%', '2W_Rk_EFGD%',
+    '2W_TOR', '2W_Rk_TOR', '2W_TORD', '2W_Rk_TORD',
+    '2W_ORB', '2W_Rk_ORB', '2W_DRB', '2W_Rk_DRB',
+    '2W_FTR', '2W_Rk_FTR', '2W_FTRD', '2W_Rk_FTRD',
+    '2W_2P%', '2W_Rk_2P%', '2W_2P%D', '2W_Rk_2P%D',
+    '2W_3P%', '2W_Rk_3P%', '2W_3P%D', '2W_Rk_3P%D',
+    '2W_3PR', '2W_Rk_3PR', '2W_3PRD', '2W_Rk_3PRD',
+    '2W_WAB', '2W_Rk_WAB',
+]
+
+BTHOT_BASES = [
+    'HOT_WinPct', 'HOT_Wins', 'HOT_Losses',
+    'HOT_AdjO', 'HOT_Rk_AdjO', 'HOT_AdjD', 'HOT_Rk_AdjD', 'HOT_AdjT', 'HOT_Rk_AdjT',
+    'HOT_ConfWinPct', 'HOT_ConfWins', 'HOT_ConfLosses',
+    'HOT_Barthag', 'HOT_Rk_Barthag',
+    'HOT_EFG%', 'HOT_Rk_EFG%', 'HOT_EFGD%', 'HOT_Rk_EFGD%',
+    'HOT_TOR', 'HOT_Rk_TOR', 'HOT_TORD', 'HOT_Rk_TORD',
+    'HOT_ORB', 'HOT_Rk_ORB', 'HOT_DRB', 'HOT_Rk_DRB',
+    'HOT_FTR', 'HOT_Rk_FTR', 'HOT_FTRD', 'HOT_Rk_FTRD',
+    'HOT_2P%', 'HOT_Rk_2P%', 'HOT_2P%D', 'HOT_Rk_2P%D',
+    'HOT_3P%', 'HOT_Rk_3P%', 'HOT_3P%D', 'HOT_Rk_3P%D',
+    'HOT_3PR', 'HOT_Rk_3PR', 'HOT_3PRD', 'HOT_Rk_3PRD',
+    'HOT_WAB', 'HOT_Rk_WAB',
+]
+
 METADATA_BASES = ['Seed']
 
 DEFAULT_FEATURES = ['WinPct', 'AdjO', 'AdjD', 'SOS_AdjEM']
@@ -144,6 +174,96 @@ FEATURE_DESCRIPTIONS = {
     'Rk_WAB':         'National ranking for Wins Above Bubble',
     # ---- Bracket metadata ------------------------------------------------
     'Seed':           'Tournament seed (1 = top seed, 16 = lowest seed in each region)',
+    # ---- 2-week BartTorvik snapshot (BT2W__ prefix) ----------------------
+    '2W_WinPct':      '[2-week] Win percentage over the last two weeks',
+    '2W_Wins':        '[2-week] Total wins over the last two weeks',
+    '2W_Losses':      '[2-week] Total losses over the last two weeks',
+    '2W_AdjO':        '[2-week] Adjusted Offensive Efficiency — 2-week snapshot',
+    '2W_Rk_AdjO':     '[2-week] Ranking for Adjusted Offensive Efficiency',
+    '2W_AdjD':        '[2-week] Adjusted Defensive Efficiency — 2-week snapshot',
+    '2W_Rk_AdjD':     '[2-week] Ranking for Adjusted Defensive Efficiency',
+    '2W_AdjT':        '[2-week] Adjusted Tempo — 2-week snapshot',
+    '2W_Rk_AdjT':     '[2-week] Ranking for Adjusted Tempo',
+    '2W_ConfWinPct':  '[2-week] Conference win percentage over the last two weeks',
+    '2W_ConfWins':    '[2-week] Conference wins over the last two weeks',
+    '2W_ConfLosses':  '[2-week] Conference losses over the last two weeks',
+    '2W_Barthag':     '[2-week] BartTorvik Power Rating — 2-week snapshot',
+    '2W_Rk_Barthag':  '[2-week] Ranking for Barthag Power Rating',
+    '2W_EFG%':        '[2-week] Effective Field Goal % — 2-week snapshot',
+    '2W_Rk_EFG%':     '[2-week] Ranking for Effective Field Goal %',
+    '2W_EFGD%':       '[2-week] Opponent Effective Field Goal % allowed — 2-week snapshot',
+    '2W_Rk_EFGD%':    '[2-week] Ranking for Opponent Effective Field Goal %',
+    '2W_TOR':         '[2-week] Turnover Rate — 2-week snapshot',
+    '2W_Rk_TOR':      '[2-week] Ranking for Turnover Rate',
+    '2W_TORD':        '[2-week] Opponent Turnover Rate — 2-week snapshot',
+    '2W_Rk_TORD':     '[2-week] Ranking for Opponent Turnover Rate',
+    '2W_ORB':         '[2-week] Offensive Rebound Rate — 2-week snapshot',
+    '2W_Rk_ORB':      '[2-week] Ranking for Offensive Rebound Rate',
+    '2W_DRB':         '[2-week] Defensive Rebound Rate — 2-week snapshot',
+    '2W_Rk_DRB':      '[2-week] Ranking for Defensive Rebound Rate',
+    '2W_FTR':         '[2-week] Free Throw Rate — 2-week snapshot',
+    '2W_Rk_FTR':      '[2-week] Ranking for Free Throw Rate',
+    '2W_FTRD':        '[2-week] Opponent Free Throw Rate — 2-week snapshot',
+    '2W_Rk_FTRD':     '[2-week] Ranking for Opponent Free Throw Rate',
+    '2W_2P%':         '[2-week] Two-point field goal percentage — 2-week snapshot',
+    '2W_Rk_2P%':      '[2-week] Ranking for Two-Point %',
+    '2W_2P%D':        '[2-week] Opponent two-point % allowed — 2-week snapshot',
+    '2W_Rk_2P%D':     '[2-week] Ranking for Opponent Two-Point %',
+    '2W_3P%':         '[2-week] Three-point field goal percentage — 2-week snapshot',
+    '2W_Rk_3P%':      '[2-week] Ranking for Three-Point %',
+    '2W_3P%D':        '[2-week] Opponent three-point % allowed — 2-week snapshot',
+    '2W_Rk_3P%D':     '[2-week] Ranking for Opponent Three-Point %',
+    '2W_3PR':         '[2-week] Three-Point Attempt Rate — 2-week snapshot',
+    '2W_Rk_3PR':      '[2-week] Ranking for Three-Point Attempt Rate',
+    '2W_3PRD':        '[2-week] Opponent Three-Point Attempt Rate — 2-week snapshot',
+    '2W_Rk_3PRD':     '[2-week] Ranking for Opponent Three-Point Attempt Rate',
+    '2W_WAB':         '[2-week] Wins Above Bubble — 2-week snapshot',
+    '2W_Rk_WAB':      '[2-week] Ranking for Wins Above Bubble',
+    # ---- Hotness BartTorvik diff (BTHOT__ prefix) ------------------------
+    'HOT_WinPct':     '[Hotness] Win % change: 2-week minus season-long (+ = improving)',
+    'HOT_Wins':       '[Hotness] Wins difference: 2-week minus season-long',
+    'HOT_Losses':     '[Hotness] Losses difference: 2-week minus season-long',
+    'HOT_AdjO':       '[Hotness] AdjO change: 2-week minus season-long (+ = offense improving)',
+    'HOT_Rk_AdjO':    '[Hotness] AdjO rank change (negative = moving up the rankings)',
+    'HOT_AdjD':       '[Hotness] AdjD change: 2-week minus season-long (negative = defense improving)',
+    'HOT_Rk_AdjD':    '[Hotness] AdjD rank change',
+    'HOT_AdjT':       '[Hotness] Adjusted Tempo change',
+    'HOT_Rk_AdjT':    '[Hotness] Adjusted Tempo rank change',
+    'HOT_ConfWinPct': '[Hotness] Conference win % change',
+    'HOT_ConfWins':   '[Hotness] Conference wins change',
+    'HOT_ConfLosses': '[Hotness] Conference losses change',
+    'HOT_Barthag':    '[Hotness] Barthag power rating change (+ = getting stronger)',
+    'HOT_Rk_Barthag': '[Hotness] Barthag rank change',
+    'HOT_EFG%':       '[Hotness] Effective Field Goal % change',
+    'HOT_Rk_EFG%':    '[Hotness] Effective Field Goal % rank change',
+    'HOT_EFGD%':      '[Hotness] Opponent Effective Field Goal % change',
+    'HOT_Rk_EFGD%':   '[Hotness] Opponent Effective Field Goal % rank change',
+    'HOT_TOR':        '[Hotness] Turnover Rate change',
+    'HOT_Rk_TOR':     '[Hotness] Turnover Rate rank change',
+    'HOT_TORD':       '[Hotness] Opponent Turnover Rate change',
+    'HOT_Rk_TORD':    '[Hotness] Opponent Turnover Rate rank change',
+    'HOT_ORB':        '[Hotness] Offensive Rebound Rate change',
+    'HOT_Rk_ORB':     '[Hotness] Offensive Rebound Rate rank change',
+    'HOT_DRB':        '[Hotness] Defensive Rebound Rate change',
+    'HOT_Rk_DRB':     '[Hotness] Defensive Rebound Rate rank change',
+    'HOT_FTR':        '[Hotness] Free Throw Rate change',
+    'HOT_Rk_FTR':     '[Hotness] Free Throw Rate rank change',
+    'HOT_FTRD':       '[Hotness] Opponent Free Throw Rate change',
+    'HOT_Rk_FTRD':    '[Hotness] Opponent Free Throw Rate rank change',
+    'HOT_2P%':        '[Hotness] Two-point % change',
+    'HOT_Rk_2P%':     '[Hotness] Two-point % rank change',
+    'HOT_2P%D':       '[Hotness] Opponent two-point % change',
+    'HOT_Rk_2P%D':    '[Hotness] Opponent two-point % rank change',
+    'HOT_3P%':        '[Hotness] Three-point % change',
+    'HOT_Rk_3P%':     '[Hotness] Three-point % rank change',
+    'HOT_3P%D':       '[Hotness] Opponent three-point % change',
+    'HOT_Rk_3P%D':    '[Hotness] Opponent three-point % rank change',
+    'HOT_3PR':        '[Hotness] Three-Point Attempt Rate change',
+    'HOT_Rk_3PR':     '[Hotness] Three-Point Attempt Rate rank change',
+    'HOT_3PRD':       '[Hotness] Opponent Three-Point Attempt Rate change',
+    'HOT_Rk_3PRD':    '[Hotness] Opponent Three-Point Attempt Rate rank change',
+    'HOT_WAB':        '[Hotness] Wins Above Bubble change (+ = trending toward stronger performance)',
+    'HOT_Rk_WAB':     '[Hotness] Wins Above Bubble rank change',
 }
 
 ALL_YEARS = [y for y in range(2012, THIS_YEAR + 1) if y != 2020]
@@ -255,6 +375,8 @@ def index():
         common_bases=COMMON_BASES,
         kp_only_bases=KP_ONLY_BASES,
         bt_only_bases=BT_ONLY_BASES,
+        bt2w_bases=BT2W_BASES,
+        bthot_bases=BTHOT_BASES,
         metadata_bases=METADATA_BASES,
         default_features=DEFAULT_FEATURES,
         feature_descs=FEATURE_DESCRIPTIONS,
@@ -623,9 +745,11 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
   color: #93c5fd;
   background: #1e3a5f;
 }
-.feat-chip.kp-only.selected  { border-color: #8b5cf6; color: #c4b5fd; background: #2e1065; }
-.feat-chip.bt-only.selected  { border-color: #ec4899; color: #f9a8d4; background: #500724; }
-.feat-chip.meta.selected     { border-color: #22c55e; color: #86efac; background: #14432a; }
+.feat-chip.kp-only.selected   { border-color: #8b5cf6; color: #c4b5fd; background: #2e1065; }
+.feat-chip.bt-only.selected   { border-color: #ec4899; color: #f9a8d4; background: #500724; }
+.feat-chip.bt2w-only.selected { border-color: #f97316; color: #fed7aa; background: #431407; }
+.feat-chip.bthot-only.selected{ border-color: #14b8a6; color: #99f6e4; background: #042f2e; }
+.feat-chip.meta.selected      { border-color: #22c55e; color: #86efac; background: #14432a; }
 
 .feat-legend {
   display: flex;
@@ -640,6 +764,8 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
 .dot-common { background: #3b82f6; }
 .dot-kp     { background: #8b5cf6; }
 .dot-bt     { background: #ec4899; }
+.dot-bt2w   { background: #f97316; }
+.dot-bthot  { background: #14b8a6; }
 .dot-meta   { background: #22c55e; }
 
 .hint { font-size: 10px; color: #475569; margin-top: 4px; }
@@ -876,6 +1002,8 @@ label.feat-chip[title] { cursor: help; }
       <span><span class="dot dot-common"></span> Common (source from Expert)</span>
       <span><span class="dot dot-kp"></span> KenPom-only</span>
       <span><span class="dot dot-bt"></span> BartTorvik-only</span>
+      <span><span class="dot dot-bt2w"></span> 2-Week BartTorvik</span>
+      <span><span class="dot dot-bthot"></span> Hotness (2W&minus;Season)</span>
       <span><span class="dot dot-meta"></span> Bracket metadata</span>
     </div>
 
@@ -920,6 +1048,30 @@ label.feat-chip[title] { cursor: help; }
       <div class="feat-grid" id="feat-meta">
         {% for f in metadata_bases %}
         <label class="feat-chip meta {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
+          <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
+          {{ f }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="feat-section">
+      <div class="feat-section-title">2-Week BartTorvik Snapshot</div>
+      <div class="feat-grid" id="feat-bt2w">
+        {% for f in bt2w_bases %}
+        <label class="feat-chip bt2w-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
+          <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
+          {{ f }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="feat-section">
+      <div class="feat-section-title">Hotness BartTorvik (2-Week minus Season)</div>
+      <div class="feat-grid" id="feat-bthot">
+        {% for f in bthot_bases %}
+        <label class="feat-chip bthot-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}
         </label>

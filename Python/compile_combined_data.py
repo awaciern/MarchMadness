@@ -86,15 +86,53 @@ def attach_barttorvik(df: pd.DataFrame, df_bt: pd.DataFrame) -> pd.DataFrame:
     return result.reset_index(drop=True)
 
 
+def attach_barttorvik_2week(df: pd.DataFrame, df_bt2w: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merge 2-week BartTorvik stats (BT2W__-prefixed) into a matchup DataFrame.
+    The 2-week snapshot has the same column schema as BartTorvikData.
+    Uses a left join to preserve rows for teams absent from this source.
+    """
+    bt2w = prefix_stats_cols(df_bt2w, 'BT2W__', drop_cols=['Seed'])
+
+    bt2w1 = bt2w.add_suffix('__1')
+    bt2w2 = bt2w.add_suffix('__2')
+
+    result = df.merge(bt2w1, on='Team__1', how='left')
+    result = result.merge(bt2w2, on='Team__2', how='left')
+    return result.reset_index(drop=True)
+
+
+def attach_barttorvik_hotness(df: pd.DataFrame, df_hot: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merge Hotness BartTorvik stats (BTHOT__-prefixed) into a matchup DataFrame.
+    Hotness values are the difference between 2-week and season-long BartTorvik
+    stats (positive = improving, negative = declining).
+    Uses a left join to preserve rows for teams absent from this source.
+    """
+    hot = prefix_stats_cols(df_hot, 'BTHOT__', drop_cols=['Seed'])
+
+    hot1 = hot.add_suffix('__1')
+    hot2 = hot.add_suffix('__2')
+
+    result = df.merge(hot1, on='Team__1', how='left')
+    result = result.merge(hot2, on='Team__2', how='left')
+    return result.reset_index(drop=True)
+
+
 def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Place metadata first, then KP__*__1, KP__*__2, BT__*__1, BT__*__2."""
+    """Place metadata first, then KP, BT, BT2W, BTHOT columns (each __1 before __2)."""
     cols = df.columns.tolist()
-    kp1  = [c for c in cols if c.startswith('KP__') and c.endswith('__1')]
-    kp2  = [c for c in cols if c.startswith('KP__') and c.endswith('__2')]
-    bt1  = [c for c in cols if c.startswith('BT__') and c.endswith('__1')]
-    bt2  = [c for c in cols if c.startswith('BT__') and c.endswith('__2')]
-    rest = [c for c in cols if c not in kp1 + kp2 + bt1 + bt2]
-    return df[rest + kp1 + kp2 + bt1 + bt2]
+    kp1    = [c for c in cols if c.startswith('KP__')    and c.endswith('__1')]
+    kp2    = [c for c in cols if c.startswith('KP__')    and c.endswith('__2')]
+    bt1    = [c for c in cols if c.startswith('BT__')    and c.endswith('__1')]
+    bt2    = [c for c in cols if c.startswith('BT__')    and c.endswith('__2')]
+    bt2w1  = [c for c in cols if c.startswith('BT2W__')  and c.endswith('__1')]
+    bt2w2  = [c for c in cols if c.startswith('BT2W__')  and c.endswith('__2')]
+    bthot1 = [c for c in cols if c.startswith('BTHOT__') and c.endswith('__1')]
+    bthot2 = [c for c in cols if c.startswith('BTHOT__') and c.endswith('__2')]
+    ordered = kp1 + kp2 + bt1 + bt2 + bt2w1 + bt2w2 + bthot1 + bthot2
+    rest = [c for c in cols if c not in ordered]
+    return df[rest + ordered]
 
 
 # ---------------------------------------------------------------------------
@@ -103,9 +141,11 @@ def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def compile_game_year(data_root: Path, year: int) -> pd.DataFrame:
     """Return the combined game DataFrame for a single year."""
-    game_path = data_root / 'Data' / 'GameData' / f'{year}.csv'
-    kp_path   = data_root / 'Data' / 'KenPomData' / f'{year}.csv'
-    bt_path   = data_root / 'Data' / 'BartTorvikData' / f'{year}.csv'
+    game_path  = data_root / 'Data' / 'GameData'             / f'{year}.csv'
+    kp_path    = data_root / 'Data' / 'KenPomData'           / f'{year}.csv'
+    bt_path    = data_root / 'Data' / 'BartTorvikData'       / f'{year}.csv'
+    bt2w_path  = data_root / 'Data' / '2WeekBartTorivkData'  / f'{year}.csv'
+    bthot_path = data_root / 'Data' / 'HotnessBartTorvikData' / f'{year}.csv'
 
     df_games = pd.read_csv(game_path)
     df_kp    = pd.read_csv(kp_path)
@@ -115,6 +155,12 @@ def compile_game_year(data_root: Path, year: int) -> pd.DataFrame:
     if bt_path.exists():
         df_bt       = pd.read_csv(bt_path)
         df_combined = attach_barttorvik(df_combined, df_bt)
+    if bt2w_path.exists():
+        df_bt2w     = pd.read_csv(bt2w_path)
+        df_combined = attach_barttorvik_2week(df_combined, df_bt2w)
+    if bthot_path.exists():
+        df_hot      = pd.read_csv(bthot_path)
+        df_combined = attach_barttorvik_hotness(df_combined, df_hot)
     df_combined = reorder_columns(df_combined)
     return df_combined
 
@@ -125,10 +171,14 @@ def compile_bracket_year(data_root: Path, year: int, round1_only: bool = False) 
     Pass round1_only=True for the current year when the tournament has not yet
     been played – only Round 1 (the pre-tournament matchups) will be compiled.
     """
-    kp_path = data_root / 'Data' / 'KenPomData' / f'{year}.csv'
-    bt_path = data_root / 'Data' / 'BartTorvikData' / f'{year}.csv'
-    df_kp   = pd.read_csv(kp_path)
-    df_bt   = pd.read_csv(bt_path) if bt_path.exists() else None
+    kp_path    = data_root / 'Data' / 'KenPomData'            / f'{year}.csv'
+    bt_path    = data_root / 'Data' / 'BartTorvikData'        / f'{year}.csv'
+    bt2w_path  = data_root / 'Data' / '2WeekBartTorivkData'   / f'{year}.csv'
+    bthot_path = data_root / 'Data' / 'HotnessBartTorvikData' / f'{year}.csv'
+    df_kp      = pd.read_csv(kp_path)
+    df_bt      = pd.read_csv(bt_path)    if bt_path.exists()    else None
+    df_bt2w    = pd.read_csv(bt2w_path)  if bt2w_path.exists()  else None
+    df_hot     = pd.read_csv(bthot_path) if bthot_path.exists() else None
 
     out_dir = data_root / 'Data' / 'BracketCombinedData' / str(year)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -147,6 +197,10 @@ def compile_bracket_year(data_root: Path, year: int, round1_only: bool = False) 
         df_combined = attach_kenpom(df_round, df_kp)
         if df_bt is not None:
             df_combined = attach_barttorvik(df_combined, df_bt)
+        if df_bt2w is not None:
+            df_combined = attach_barttorvik_2week(df_combined, df_bt2w)
+        if df_hot is not None:
+            df_combined = attach_barttorvik_hotness(df_combined, df_hot)
         df_combined = reorder_columns(df_combined)
 
         out_path = out_dir / f'Round{rnd}_{year}.csv'

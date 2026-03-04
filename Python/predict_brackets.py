@@ -81,8 +81,43 @@ BT_ONLY_BASES: List[str] = [
     'WAB', 'Rk_WAB',
 ]
 
+# 2-week BartTorvik snapshot bases (always BT2W__ prefix).
+# Same column schema as BartTorvikData; base names are prefixed with '2W_'.
+BT2W_BASES: List[str] = [
+    '2W_WinPct', '2W_Wins', '2W_Losses',
+    '2W_AdjO', '2W_Rk_AdjO', '2W_AdjD', '2W_Rk_AdjD', '2W_AdjT', '2W_Rk_AdjT',
+    '2W_ConfWinPct', '2W_ConfWins', '2W_ConfLosses',
+    '2W_Barthag', '2W_Rk_Barthag',
+    '2W_EFG%', '2W_Rk_EFG%', '2W_EFGD%', '2W_Rk_EFGD%',
+    '2W_TOR', '2W_Rk_TOR', '2W_TORD', '2W_Rk_TORD',
+    '2W_ORB', '2W_Rk_ORB', '2W_DRB', '2W_Rk_DRB',
+    '2W_FTR', '2W_Rk_FTR', '2W_FTRD', '2W_Rk_FTRD',
+    '2W_2P%', '2W_Rk_2P%', '2W_2P%D', '2W_Rk_2P%D',
+    '2W_3P%', '2W_Rk_3P%', '2W_3P%D', '2W_Rk_3P%D',
+    '2W_3PR', '2W_Rk_3PR', '2W_3PRD', '2W_Rk_3PRD',
+    '2W_WAB', '2W_Rk_WAB',
+]
+
+# Hotness BartTorvik bases (always BTHOT__ prefix).
+# Each value is the difference (2-week minus season) for the same BartTorvik column;
+# base names are prefixed with 'HOT_'.
+BTHOT_BASES: List[str] = [
+    'HOT_WinPct', 'HOT_Wins', 'HOT_Losses',
+    'HOT_AdjO', 'HOT_Rk_AdjO', 'HOT_AdjD', 'HOT_Rk_AdjD', 'HOT_AdjT', 'HOT_Rk_AdjT',
+    'HOT_ConfWinPct', 'HOT_ConfWins', 'HOT_ConfLosses',
+    'HOT_Barthag', 'HOT_Rk_Barthag',
+    'HOT_EFG%', 'HOT_Rk_EFG%', 'HOT_EFGD%', 'HOT_Rk_EFGD%',
+    'HOT_TOR', 'HOT_Rk_TOR', 'HOT_TORD', 'HOT_Rk_TORD',
+    'HOT_ORB', 'HOT_Rk_ORB', 'HOT_DRB', 'HOT_Rk_DRB',
+    'HOT_FTR', 'HOT_Rk_FTR', 'HOT_FTRD', 'HOT_Rk_FTRD',
+    'HOT_2P%', 'HOT_Rk_2P%', 'HOT_2P%D', 'HOT_Rk_2P%D',
+    'HOT_3P%', 'HOT_Rk_3P%', 'HOT_3P%D', 'HOT_Rk_3P%D',
+    'HOT_3PR', 'HOT_Rk_3PR', 'HOT_3PRD', 'HOT_Rk_3PRD',
+    'HOT_WAB', 'HOT_Rk_WAB',
+]
+
 # Full list of valid unprefixed base names for --features.
-ALL_FEATURE_BASES: List[str] = COMMON_BASES + KP_ONLY_BASES + BT_ONLY_BASES + ['Seed']
+ALL_FEATURE_BASES: List[str] = COMMON_BASES + KP_ONLY_BASES + BT_ONLY_BASES + BT2W_BASES + BTHOT_BASES + ['Seed']
 
 # Default feature selection.
 DEFAULT_FEATURE_BASES: List[str] = ['WinPct', 'AdjO', 'AdjD', 'SOS_AdjEM']
@@ -155,15 +190,29 @@ def load_barttorvik(data_root: Path, year: int) -> pd.DataFrame:
     return pd.read_csv(data_root / 'Data' / 'BartTorvikData' / f'{year}.csv')
 
 
+def load_barttorvik_2week(data_root: Path, year: int) -> pd.DataFrame:
+    return pd.read_csv(data_root / 'Data' / '2WeekBartTorivkData' / f'{year}.csv')
+
+
+def load_barttorvik_hotness(data_root: Path, year: int) -> pd.DataFrame:
+    return pd.read_csv(data_root / 'Data' / 'HotnessBartTorvikData' / f'{year}.csv')
+
+
 def resolve_feature_col(base: str, expert: str) -> str:
     """
     Map an unprefixed feature base name to its prefixed column base.
     Common features (in both sources) use KP__ or BT__ per *expert*.
     KenPom-only features always use KP__; BartTorvik-only always use BT__.
+    2-week BartTorvik bases (2W_* prefix) always use BT2W__.
+    Hotness BartTorvik bases (HOT_* prefix) always use BTHOT__.
     'Seed' is bracket metadata and carries no source prefix.
     """
     if base == 'Seed':
         return 'Seed'
+    if base.startswith('2W_'):
+        return f'BT2W__{base[3:]}'
+    if base.startswith('HOT_'):
+        return f'BTHOT__{base[4:]}'
     if base in COMMON_BASES:
         return f'{"KP" if expert == "kenpom" else "BT"}__{base}'
     if base in KP_ONLY_BASES:
@@ -307,6 +356,36 @@ def attach_barttorvik(df_matchups: pd.DataFrame, df_bt: pd.DataFrame) -> pd.Data
     return df.reset_index(drop=True)
 
 
+def attach_barttorvik_2week(df_matchups: pd.DataFrame, df_bt2w: pd.DataFrame) -> pd.DataFrame:
+    """
+    Given a DataFrame with columns Team__1 and Team__2, merge in 2-week BartTorvik
+    stats with the BT2W__ source prefix and __1 / __2 team suffix.
+    """
+    bt2w = df_bt2w.drop(columns=['Seed'], errors='ignore')
+    rename_map = {c: f'BT2W__{c}' for c in bt2w.columns if c != 'Team'}
+    bt2w = bt2w.rename(columns=rename_map)
+    bt2w1 = bt2w.add_suffix('__1')
+    bt2w2 = bt2w.add_suffix('__2')
+    df = df_matchups.merge(bt2w1, on='Team__1', how='left')
+    df = df.merge(bt2w2, on='Team__2', how='left')
+    return df.reset_index(drop=True)
+
+
+def attach_barttorvik_hotness(df_matchups: pd.DataFrame, df_hot: pd.DataFrame) -> pd.DataFrame:
+    """
+    Given a DataFrame with columns Team__1 and Team__2, merge in Hotness BartTorvik
+    stats (difference: 2-week minus season) with BTHOT__ prefix and __1/__2 suffix.
+    """
+    hot = df_hot.drop(columns=['Seed'], errors='ignore')
+    rename_map = {c: f'BTHOT__{c}' for c in hot.columns if c != 'Team'}
+    hot = hot.rename(columns=rename_map)
+    hot1 = hot.add_suffix('__1')
+    hot2 = hot.add_suffix('__2')
+    df = df_matchups.merge(hot1, on='Team__1', how='left')
+    df = df.merge(hot2, on='Team__2', how='left')
+    return df.reset_index(drop=True)
+
+
 # ---------------------------------------------------------------------------
 # Final Four pairing helpers
 # ---------------------------------------------------------------------------
@@ -414,8 +493,10 @@ def simulate_bracket(
     if cat_encoders is None:
         cat_encoders = {}
 
-    # Only load/attach BartTorvik stats if any selected feature requires them.
-    needs_bt = any(f.startswith('BT__') for f in feature_list)
+    # Only load/attach a data source if any selected feature requires it.
+    needs_bt    = any(f.startswith('BT__')    for f in feature_list)
+    needs_bt2w  = any(f.startswith('BT2W__')  for f in feature_list)
+    needs_bthot = any(f.startswith('BTHOT__') for f in feature_list)
 
     pred_teams_by_round: list = []
     pred_seeds_by_round: list = []
@@ -473,6 +554,12 @@ def simulate_bracket(
             if needs_bt:
                 df_bt = load_barttorvik(data_root, year)
                 df_round = attach_barttorvik(df_round, df_bt)
+            if needs_bt2w:
+                df_bt2w = load_barttorvik_2week(data_root, year)
+                df_round = attach_barttorvik_2week(df_round, df_bt2w)
+            if needs_bthot:
+                df_hot = load_barttorvik_hotness(data_root, year)
+                df_round = attach_barttorvik_hotness(df_round, df_hot)
 
             # Seed columns are not present in dynamically built rounds (Seed is
             # dropped during attach); populate from the Round 1 seed map.
@@ -626,6 +713,10 @@ def main():
             f'{KP_ONLY_BASES}. '
             'BartTorvik-only (always BT__ prefix): '
             f'{str(BT_ONLY_BASES).replace("%", "%%")}. '
+            '2-week BartTorvik snapshot (always BT2W__ prefix, base names start with 2W_): '
+            f'{str(BT2W_BASES).replace("%", "%%")}. '
+            'Hotness BartTorvik diff (always BTHOT__ prefix, base names start with HOT_): '
+            f'{str(BTHOT_BASES).replace("%", "%%")}. '
             'Categorical opt-ins: Conf, Seed. '
             f'Default: {DEFAULT_FEATURE_BASES}.'
         ),
@@ -904,16 +995,10 @@ def main():
         expert_tag += 'CAL'
     seen_bases: set = set()
     feat_parts: List[str] = []
-    for f in feature_list:
-        # Strip __1/__2 suffix, then strip KP__/BT__ source prefix.
-        col_base = f.rsplit('__', 1)[0]
-        for pfx in ('KP__', 'BT__'):
-            if col_base.startswith(pfx):
-                col_base = col_base[len(pfx):]
-                break
-        if col_base not in seen_bases:
-            seen_bases.add(col_base)
-            feat_parts.append(col_base)
+    for b in args.features:
+        if b not in seen_bases:
+            seen_bases.add(b)
+            feat_parts.append(b)
     feat_str = '+'.join(feat_parts)
     params_tag = ('+'.join(f'{k}={v}' for k, v in model_params.items())) if model_params else ''
     final_dir_name = (
