@@ -4,4 +4,7 @@ tmp*
 .DS_Store
 Predictions*
 Simulations/
-EvanMiyaData/
+Data/
+Binders/
+WebArchiveKP.txt
+Efficiency/
