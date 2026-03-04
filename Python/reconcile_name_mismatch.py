@@ -84,6 +84,19 @@ def reconcile_barttorvik(years, alias_map):
         print(f'  {year}: {changed} name(s) updated')
 
 
+def reconcile_barttorvik_2week(years, alias_map):
+    print('\n=== 2WeekBartTorivkData CSVs ===')
+    for year in years:
+        path = DATA_ROOT / '2WeekBartTorivkData' / f'{year}.csv'
+        if not path.exists():
+            continue
+        df = pd.read_csv(path)
+        df_new = apply_rename(df, alias_map, KP_COLS)
+        changed = (df_new['Team'] != df['Team']).sum()
+        df_new.to_csv(path, index=False)
+        print(f'  {year}: {changed} name(s) updated')
+
+
 def reconcile_kenpom(years, alias_map):
     print('=== KenPom CSVs ===')
     for year in years:
@@ -154,6 +167,7 @@ def main():
     print(f'Loaded {len(alias_map)} alias → canonical mappings from {TEAM_NAMES_CSV.relative_to(DATA_ROOT.parent)}\n')
 
     reconcile_barttorvik(years, alias_map)
+    reconcile_barttorvik_2week(years, alias_map)
     reconcile_kenpom(years, alias_map)
     reconcile_bracket(years, alias_map)
     reconcile_games(years, alias_map)
