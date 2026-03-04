@@ -40,11 +40,11 @@ THIS_YEAR        = 2026
 
 COMMON_BASES = [
     'WinPct', 'Wins', 'Losses',
-    'AdjO', 'Rk_AdjO', 'AdjD', 'Rk_AdjD', 'AdjT', 'Rk_AdjT',
     'Conf',
 ]
 
 KP_ONLY_BASES = [
+    'KP_AdjO', 'KP_Rk_AdjO', 'KP_AdjD', 'KP_Rk_AdjD', 'KP_AdjT', 'KP_Rk_AdjT',
     'AdjEM', 'Rk_AdjEM',
     'Luck', 'Rk_Luck',
     'SOS_AdjEM', 'Rk_SOS_AdjEM',
@@ -54,6 +54,7 @@ KP_ONLY_BASES = [
 ]
 
 BT_ONLY_BASES = [
+    'BT_AdjO', 'BT_Rk_AdjO', 'BT_AdjD', 'BT_Rk_AdjD', 'BT_AdjT', 'BT_Rk_AdjT',
     'Barthag', 'Rk_Barthag',
     'EFG%', 'Rk_EFG%', 'EFGD%', 'Rk_EFGD%',
     'TOR', 'Rk_TOR', 'TORD', 'Rk_TORD',
@@ -95,7 +96,7 @@ BTHOT_BASES = [
 
 METADATA_BASES = ['Seed']
 
-DEFAULT_FEATURES = ['WinPct', 'AdjO', 'AdjD', 'SOS_AdjEM']
+DEFAULT_FEATURES = ['WinPct', 'KP_AdjO', 'KP_AdjD', 'SOS_AdjEM']
 
 MODELS = [
     ('logistic_regression', 'Logistic Regression'),
@@ -109,18 +110,18 @@ MODELS = [
 ]
 
 FEATURE_DESCRIPTIONS = {
-    # ---- Common (source chosen by Expert) --------------------------------
+    # ---- Common (always KenPom) -----------------------------------------
     'WinPct':         'Win percentage (wins / total games)',
     'Wins':           'Total wins in the season',
     'Losses':         'Total losses in the season',
-    'AdjO':           'Adjusted Offensive Efficiency — points scored per 100 possessions vs. average defense',
-    'Rk_AdjO':        'National ranking for Adjusted Offensive Efficiency',
-    'AdjD':           'Adjusted Defensive Efficiency — points allowed per 100 possessions vs. average offense (lower is better)',
-    'Rk_AdjD':        'National ranking for Adjusted Defensive Efficiency (lower rank = better defense)',
-    'AdjT':           'Adjusted Tempo — estimated possessions per 40 minutes vs. average opponent',
-    'Rk_AdjT':        'National ranking for Adjusted Tempo',
     'Conf':           'Athletic conference affiliation',
-    # ---- KenPom-only -----------------------------------------------------
+    # ---- KenPom (KP__ prefix) -------------------------------------------
+    'KP_AdjO':        '(KenPom) Adjusted Offensive Efficiency — points scored per 100 possessions vs. average defense',
+    'KP_Rk_AdjO':     '(KenPom) National ranking for Adjusted Offensive Efficiency',
+    'KP_AdjD':        '(KenPom) Adjusted Defensive Efficiency — points allowed per 100 possessions vs. average offense (lower is better)',
+    'KP_Rk_AdjD':     '(KenPom) National ranking for Adjusted Defensive Efficiency (lower rank = better defense)',
+    'KP_AdjT':        '(KenPom) Adjusted Tempo — estimated possessions per 40 minutes vs. average opponent',
+    'KP_Rk_AdjT':     '(KenPom) National ranking for Adjusted Tempo',
     'AdjEM':          "KenPom's Adjusted Efficiency Margin = AdjO minus AdjD (primary overall team rating)",
     'Rk_AdjEM':       'National ranking for Adjusted Efficiency Margin',
     'Luck':           "KenPom's Luck rating — how much a team over/under-performed its expected win percentage",
@@ -133,7 +134,13 @@ FEATURE_DESCRIPTIONS = {
     'Rk_SOS_AdjD':    'National ranking for Opponent Defensive Efficiency faced',
     'NCSOS_AdjEM':    'Non-Conference Strength of Schedule — average AdjEM of non-conference opponents',
     'Rk_NCSOS_AdjEM': 'National ranking for Non-Conference Strength of Schedule',
-    # ---- BartTorvik-only -------------------------------------------------
+    # ---- BartTorvik (BT__ prefix) ----------------------------------------
+    'BT_AdjO':        '(BartTorvik) Adjusted Offensive Efficiency — points scored per 100 possessions vs. average defense',
+    'BT_Rk_AdjO':     '(BartTorvik) National ranking for Adjusted Offensive Efficiency',
+    'BT_AdjD':        '(BartTorvik) Adjusted Defensive Efficiency — points allowed per 100 possessions vs. average offense (lower is better)',
+    'BT_Rk_AdjD':     '(BartTorvik) National ranking for Adjusted Defensive Efficiency (lower rank = better defense)',
+    'BT_AdjT':        '(BartTorvik) Adjusted Tempo — estimated possessions per 40 minutes vs. average opponent',
+    'BT_Rk_AdjT':     '(BartTorvik) National ranking for Adjusted Tempo',
     'Barthag':        "BartTorvik's Power Rating — probability of beating an average D1 team on a neutral court",
     'Rk_Barthag':     'National ranking for Barthag Power Rating',
     'EFG%':           'Effective Field Goal % — accounts for 3-pointers being worth more: (FGM + 0.5x3PM) / FGA',
@@ -376,7 +383,6 @@ def run_prediction():
     data = request.get_json()
 
     model   = data.get('model', 'logistic_regression')
-    expert  = data.get('expert', 'kenpom')
     params  = data.get('params', '').strip()   # raw "key=val key=val" string
     features = data.get('features', DEFAULT_FEATURES)
 
@@ -386,7 +392,6 @@ def run_prediction():
     cmd = [
         PYTHON_EXE, PREDICT_SCRIPT,
         '--model', model,
-        '--expert', expert,
         '--features', *features,
         '--this-year', str(THIS_YEAR),
     ]
@@ -955,7 +960,7 @@ label.feat-chip[title] { cursor: help; }
       <th style="width:30px">#</th>
       <th style="width:70px">Score</th>
       <th>Model</th>
-      <th style="width:60px">Expert</th>
+      <th style="width:60px">Flags</th>
       <th>Features</th>
       <th>Params</th>
     </tr></thead>
@@ -978,16 +983,9 @@ label.feat-chip[title] { cursor: help; }
     <input type="text" id="params-input" placeholder="e.g. n_estimators=200 random_state=42 max_iter=1000">
     <p class="hint">Space-separated key=value pairs passed directly to the sklearn constructor.</p>
 
-    <label class="field-label">Stats Source (Expert)</label>
-    <div class="radio-group">
-      <label><input type="radio" name="expert" value="kenpom" checked> KenPom</label>
-      <label><input type="radio" name="expert" value="barttorvik"> BartTorvik</label>
-    </div>
-    <p class="hint">Determines which source is used for features shared by both (WinPct, AdjO, etc.).<br>KenPom-only and BartTorvik-only features always use their own source.</p>
-
     <label class="field-label">Features</label>
     <div class="feat-legend">
-      <span><span class="dot dot-common"></span> Common (source from Expert)</span>
+      <span><span class="dot dot-common"></span> Common (always KenPom)</span>
       <span><span class="dot dot-kp"></span> KenPom-only</span>
       <span><span class="dot dot-bt"></span> BartTorvik-only</span>
       <span><span class="dot dot-bt2w"></span> 2-Week BartTorvik</span>
@@ -996,7 +994,7 @@ label.feat-chip[title] { cursor: help; }
     </div>
 
     <div class="feat-section">
-      <div class="feat-section-title">Common</div>
+      <div class="feat-section-title">Common (always KenPom)</div>
       <div class="feat-grid" id="feat-common">
         {% for f in common_bases %}
         <label class="feat-chip {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
@@ -1008,7 +1006,7 @@ label.feat-chip[title] { cursor: help; }
     </div>
 
     <div class="feat-section">
-      <div class="feat-section-title">KenPom-only</div>
+      <div class="feat-section-title">KenPom</div>
       <div class="feat-grid" id="feat-kp">
         {% for f in kp_only_bases %}
         <label class="feat-chip kp-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
@@ -1020,7 +1018,7 @@ label.feat-chip[title] { cursor: help; }
     </div>
 
     <div class="feat-section">
-      <div class="feat-section-title">BartTorvik-only</div>
+      <div class="feat-section-title">BartTorvik</div>
       <div class="feat-grid" id="feat-bt">
         {% for f in bt_only_bases %}
         <label class="feat-chip bt-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
@@ -1167,18 +1165,15 @@ function loadSavedModels() {
       models.forEach(function(m, i) {
         const tr = document.createElement('tr');
         tr.className = 'model-row';
-        const baseTag = m.expert.startsWith('KP')
-          ? '<span class="tag tag-kp">KP</span>'
-          : '<span class="tag tag-bt">BT</span>';
         const nyTag  = m.norm_years  ? '<span class="tag tag-ny">NY</span>'   : '';
         const naTag  = m.norm_all    ? '<span class="tag tag-na">NA</span>'   : '';
         const calTag = m.calibrated  ? '<span class="tag tag-cal">CAL</span>' : '';
-        const expertTag = baseTag + nyTag + naTag + calTag;
+        const flagsTag = (nyTag + naTag + calTag) || '\u2014';
         tr.innerHTML =
           '<td style="color:#475569">' + (i + 1) + '</td>' +
           '<td class="score-cell">' + m.score + '</td>' +
           '<td>' + m.model.replace(/_/g, '\u00a0') + '</td>' +
-          '<td>' + expertTag + '</td>' +
+          '<td>' + flagsTag + '</td>' +
           '<td class="feat-tags">' + m.features.replace(/\+/g, ' &middot; ') + '</td>' +
           '<td style="color:#64748b;font-size:10px">' + (m.params || '\u2014') + '</td>';
         tr.addEventListener('click', function() {
@@ -1398,7 +1393,6 @@ function runPrediction() {
   if (!features.length) { alert('Select at least one feature.'); return; }
 
   const model     = document.getElementById('model-select').value;
-  const expert    = document.querySelector('input[name="expert"]:checked').value;
   const params    = document.getElementById('params-input').value.trim();
   const normYears = document.getElementById('norm-years-check').checked;
   const normAll   = document.getElementById('norm-all-check').checked;
@@ -1413,7 +1407,7 @@ function runPrediction() {
   fetch('/run', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ model, expert, params, features, norm_years: normYears, norm_all: normAll, calibrate }),
+    body: JSON.stringify({ model, params, features, norm_years: normYears, norm_all: normAll, calibrate }),
   })
   .then(r => r.json())
   .then(data => {

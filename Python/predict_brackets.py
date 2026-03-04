@@ -49,16 +49,17 @@ from bracket_html import format_bracket_html
 
 ALL_YEARS = [y for y in range(2012, 2026) if y != 2020]  # all completed years through 2025
 
-# Features present in both KenPom and BartTorvik.
-# --expert controls which source's copy (KP__ or BT__ prefix) is used.
+# Common features present in both sources; always sourced from KenPom (KP__ prefix).
+# AdjO/AdjD/AdjT can be selected from either source using KP_AdjO or BT_AdjO etc.
 COMMON_BASES: List[str] = [
     'WinPct', 'Wins', 'Losses',
-    'AdjO', 'Rk_AdjO', 'AdjD', 'Rk_AdjD', 'AdjT', 'Rk_AdjT',
     'Conf',
 ]
 
-# KenPom-exclusive bases (always KP__ prefix regardless of --expert).
+# KenPom bases (always KP__ prefix).
+# KP_AdjO/KP_AdjD/KP_AdjT are the KenPom versions of the shared Adj fields.
 KP_ONLY_BASES: List[str] = [
+    'KP_AdjO', 'KP_Rk_AdjO', 'KP_AdjD', 'KP_Rk_AdjD', 'KP_AdjT', 'KP_Rk_AdjT',
     'AdjEM', 'Rk_AdjEM',
     'Luck', 'Rk_Luck',
     'SOS_AdjEM', 'Rk_SOS_AdjEM',
@@ -67,8 +68,10 @@ KP_ONLY_BASES: List[str] = [
     'NCSOS_AdjEM', 'Rk_NCSOS_AdjEM',
 ]
 
-# BartTorvik-exclusive bases (always BT__ prefix regardless of --expert).
+# BartTorvik bases (always BT__ prefix).
+# BT_AdjO/BT_AdjD/BT_AdjT are the BartTorvik versions of the shared Adj fields.
 BT_ONLY_BASES: List[str] = [
+    'BT_AdjO', 'BT_Rk_AdjO', 'BT_AdjD', 'BT_Rk_AdjD', 'BT_AdjT', 'BT_Rk_AdjT',
     'Barthag', 'Rk_Barthag',
     'EFG%', 'Rk_EFG%', 'EFGD%', 'Rk_EFGD%',
     'TOR', 'Rk_TOR', 'TORD', 'Rk_TORD',
@@ -117,7 +120,7 @@ BTHOT_BASES: List[str] = [
 ALL_FEATURE_BASES: List[str] = COMMON_BASES + KP_ONLY_BASES + BT_ONLY_BASES + BT2W_BASES + BTHOT_BASES + ['Seed']
 
 # Default feature selection.
-DEFAULT_FEATURE_BASES: List[str] = ['WinPct', 'AdjO', 'AdjD', 'SOS_AdjEM']
+DEFAULT_FEATURE_BASES: List[str] = ['WinPct', 'KP_AdjO', 'KP_AdjD', 'SOS_AdjEM']
 
 # Base names that require label encoding (resolved before prefix is applied).
 CATEGORICAL_BASE_NAMES: frozenset = frozenset(['Conf', 'Seed'])
@@ -195,10 +198,11 @@ def load_barttorvik_hotness(data_root: Path, year: int) -> pd.DataFrame:
     return pd.read_csv(data_root / 'Data' / 'HotnessBartTorvikData' / f'{year}.csv')
 
 
-def resolve_feature_col(base: str, expert: str) -> str:
+def resolve_feature_col(base: str) -> str:
     """
     Map an unprefixed feature base name to its prefixed column base.
-    Common features (in both sources) use KP__ or BT__ per *expert*.
+    Common features (WinPct, Wins, Losses, Conf) always use KP__.
+    KP_AdjO/KP_AdjD/KP_AdjT map to KP__AdjO etc.; BT_AdjO etc. map to BT__AdjO etc.
     KenPom-only features always use KP__; BartTorvik-only always use BT__.
     2-week BartTorvik bases (2W_* prefix) always use BT2W__.
     Hotness BartTorvik bases (HOT_* prefix) always use BTHOT__.
@@ -206,12 +210,16 @@ def resolve_feature_col(base: str, expert: str) -> str:
     """
     if base == 'Seed':
         return 'Seed'
+    if base.startswith('KP_Adj'):
+        return f'KP__{base[3:]}'
+    if base.startswith('BT_Adj'):
+        return f'BT__{base[3:]}'
     if base.startswith('2W_'):
         return f'BT2W__{base[3:]}'
     if base.startswith('HOT_'):
         return f'BTHOT__{base[4:]}'
     if base in COMMON_BASES:
-        return f'{"KP" if expert == "kenpom" else "BT"}__{base}'
+        return f'KP__{base}'
     if base in KP_ONLY_BASES:
         return f'KP__{base}'
     return f'BT__{base}'
@@ -686,17 +694,6 @@ def main():
         ),
     )
     parser.add_argument(
-        '--expert',
-        default='kenpom',
-        choices=['kenpom', 'barttorvik'],
-        help=(
-            'Stats source to use for features common to both KenPom and BartTorvik '
-            '(WinPct, AdjO, AdjD, AdjT, Conf, Wins, Losses, and their rank variants). '
-            'KenPom-only or BartTorvik-only features always use their own source. '
-            'Default: kenpom.'
-        ),
-    )
-    parser.add_argument(
         '--features',
         nargs='+',
         default=DEFAULT_FEATURE_BASES,
@@ -704,7 +701,7 @@ def main():
         metavar='FEATURE',
         help=(
             'Space-separated list of unprefixed base feature names. '
-            'Common features (source chosen by --expert): '
+            'Common features (always KP__ prefix): '
             f'{COMMON_BASES}. '
             'KenPom-only (always KP__ prefix): '
             f'{KP_ONLY_BASES}. '
@@ -751,19 +748,18 @@ def main():
     )
     args = parser.parse_args()
 
-    expert    = args.expert
     data_root = Path(args.data_root)
     model_params = parse_model_params(args.model_params)
     if model_params:
         print(f'Model params: {model_params}')
     # Resolve each base name to its source-prefixed column, then expand __1/__2.
     feature_list = [
-        f'{resolve_feature_col(b, expert)}__{i}'
+        f'{resolve_feature_col(b)}__{i}'
         for b in args.features for i in (1, 2)
     ]
     # Identify categorical columns for label encoding.
     cat_col_set = {
-        f'{resolve_feature_col(b, expert)}__{i}'
+        f'{resolve_feature_col(b)}__{i}'
         for b in args.features if b in CATEGORICAL_BASE_NAMES
         for i in (1, 2)
     }
@@ -983,7 +979,7 @@ def main():
 
     # Rename the pending folder to a descriptive name: model_score_expert_features
     avg_score_val = total_score / num_eval_years if num_eval_years else 0
-    expert_tag = 'KP' if expert == 'kenpom' else 'BT'
+    expert_tag = 'KP'
     if norm_years:
         expert_tag += 'NY'
     elif norm_all:
@@ -1026,7 +1022,6 @@ def main():
         'model':        full_model,
         'model_key':    args.model,
         'model_params': model_params,
-        'expert':       expert,
         'feature_list': feature_list,
         'cat_encoders': cat_encoders,
         'norm_info':    norm_info,
