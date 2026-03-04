@@ -96,7 +96,49 @@ BTHOT_BASES = [
 
 METADATA_BASES = ['Seed']
 
-DEFAULT_FEATURES = ['WinPct', 'KP_AdjO', 'KP_AdjD', 'SOS_AdjEM']
+DEFAULT_FEATURES = ['WinPct', 'KP_AdjO', 'KP_AdjD', 'AdjEM']
+
+# ---------------------------------------------------------------------------
+# Simplified UI feature lists (6 categories shown in the web form)
+# ---------------------------------------------------------------------------
+
+UI_BASIC_BASES = ['WinPct', 'Conf', 'Seed']
+
+UI_KP_BASES = [
+    'AdjEM', 'Rk_AdjEM',
+    'KP_AdjO', 'KP_Rk_AdjO', 'KP_AdjD', 'KP_Rk_AdjD', 'KP_AdjT', 'KP_Rk_AdjT',
+    'Luck', 'Rk_Luck',
+    'SOS_AdjEM', 'Rk_SOS_AdjEM',
+    'NCSOS_AdjEM', 'Rk_NCSOS_AdjEM',
+]
+
+UI_BT_BASES = [
+    'Barthag', 'Rk_Barthag',
+    'WAB', 'Rk_WAB',
+    'BT_AdjO', 'BT_Rk_AdjO', 'BT_AdjD', 'BT_Rk_AdjD', 'BT_AdjT', 'BT_Rk_AdjT',
+]
+
+UI_STATS_BASES = [
+    'EFG%', 'Rk_EFG%', 'EFGD%', 'Rk_EFGD%',
+    'TOR', 'Rk_TOR', 'TORD', 'Rk_TORD',
+    'ORB', 'Rk_ORB', 'DRB', 'Rk_DRB',
+    'FTR', 'Rk_FTR', 'FTRD', 'Rk_FTRD',
+    '2P%', 'Rk_2P%', '2P%D', 'Rk_2P%D',
+    '3P%', 'Rk_3P%', '3P%D', 'Rk_3P%D',
+    '3PR', 'Rk_3PR', '3PRD', 'Rk_3PRD',
+]
+
+UI_BT2W_BASES = [
+    '2W_Barthag', '2W_Rk_Barthag',
+    '2W_WAB', '2W_Rk_WAB',
+    '2W_AdjO', '2W_Rk_AdjO', '2W_AdjD', '2W_Rk_AdjD', '2W_AdjT', '2W_Rk_AdjT',
+]
+
+UI_BTHOT_BASES = [
+    'HOT_Barthag', 'HOT_Rk_Barthag',
+    'HOT_WAB', 'HOT_Rk_WAB',
+    'HOT_AdjO', 'HOT_Rk_AdjO', 'HOT_AdjD', 'HOT_Rk_AdjD', 'HOT_AdjT', 'HOT_Rk_AdjT',
+]
 
 MODELS = [
     ('logistic_regression', 'Logistic Regression'),
@@ -367,12 +409,12 @@ app = Flask(__name__)
 def index():
     return render_template_string(INDEX_HTML,
         models=MODELS,
-        common_bases=COMMON_BASES,
-        kp_only_bases=KP_ONLY_BASES,
-        bt_only_bases=BT_ONLY_BASES,
-        bt2w_bases=BT2W_BASES,
-        bthot_bases=BTHOT_BASES,
-        metadata_bases=METADATA_BASES,
+        ui_basic_bases=UI_BASIC_BASES,
+        ui_kp_bases=UI_KP_BASES,
+        ui_bt_bases=UI_BT_BASES,
+        ui_stats_bases=UI_STATS_BASES,
+        ui_bt2w_bases=UI_BT2W_BASES,
+        ui_bthot_bases=UI_BTHOT_BASES,
         default_features=DEFAULT_FEATURES,
         feature_descs=FEATURE_DESCRIPTIONS,
     )
@@ -985,18 +1027,17 @@ label.feat-chip[title] { cursor: help; }
 
     <label class="field-label">Features</label>
     <div class="feat-legend">
-      <span><span class="dot dot-common"></span> Common (always KenPom)</span>
-      <span><span class="dot dot-kp"></span> KenPom-only</span>
-      <span><span class="dot dot-bt"></span> BartTorvik-only</span>
+      <span><span class="dot dot-common"></span> Basic</span>
+      <span><span class="dot dot-kp"></span> KenPom</span>
+      <span><span class="dot dot-bt"></span> BartTorvik / Stats</span>
       <span><span class="dot dot-bt2w"></span> 2-Week BartTorvik</span>
       <span><span class="dot dot-bthot"></span> Hotness (2W&minus;Season)</span>
-      <span><span class="dot dot-meta"></span> Bracket metadata</span>
     </div>
 
     <div class="feat-section">
-      <div class="feat-section-title">Common (always KenPom)</div>
-      <div class="feat-grid" id="feat-common">
-        {% for f in common_bases %}
+      <div class="feat-section-title">Basic</div>
+      <div class="feat-grid" id="feat-basic">
+        {% for f in ui_basic_bases %}
         <label class="feat-chip {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}
@@ -1008,7 +1049,7 @@ label.feat-chip[title] { cursor: help; }
     <div class="feat-section">
       <div class="feat-section-title">KenPom</div>
       <div class="feat-grid" id="feat-kp">
-        {% for f in kp_only_bases %}
+        {% for f in ui_kp_bases %}
         <label class="feat-chip kp-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}
@@ -1020,7 +1061,7 @@ label.feat-chip[title] { cursor: help; }
     <div class="feat-section">
       <div class="feat-section-title">BartTorvik</div>
       <div class="feat-grid" id="feat-bt">
-        {% for f in bt_only_bases %}
+        {% for f in ui_bt_bases %}
         <label class="feat-chip bt-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}
@@ -1030,10 +1071,10 @@ label.feat-chip[title] { cursor: help; }
     </div>
 
     <div class="feat-section">
-      <div class="feat-section-title">Bracket Metadata</div>
-      <div class="feat-grid" id="feat-meta">
-        {% for f in metadata_bases %}
-        <label class="feat-chip meta {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
+      <div class="feat-section-title">Stats (BartTorvik)</div>
+      <div class="feat-grid" id="feat-stats">
+        {% for f in ui_stats_bases %}
+        <label class="feat-chip bt-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}
         </label>
@@ -1042,9 +1083,9 @@ label.feat-chip[title] { cursor: help; }
     </div>
 
     <div class="feat-section">
-      <div class="feat-section-title">2-Week BartTorvik Snapshot</div>
+      <div class="feat-section-title">2-Week BartTorvik</div>
       <div class="feat-grid" id="feat-bt2w">
-        {% for f in bt2w_bases %}
+        {% for f in ui_bt2w_bases %}
         <label class="feat-chip bt2w-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}
@@ -1056,7 +1097,7 @@ label.feat-chip[title] { cursor: help; }
     <div class="feat-section">
       <div class="feat-section-title">Hotness BartTorvik (2-Week minus Season)</div>
       <div class="feat-grid" id="feat-bthot">
-        {% for f in bthot_bases %}
+        {% for f in ui_bthot_bases %}
         <label class="feat-chip bthot-only {% if f in default_features %}selected{% endif %}" {% if feature_descs.get(f) %}title="{{ feature_descs[f] }}"{% endif %}>
           <input type="checkbox" value="{{ f }}" {% if f in default_features %}checked{% endif %}>
           {{ f }}

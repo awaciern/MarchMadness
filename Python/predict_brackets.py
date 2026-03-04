@@ -191,7 +191,7 @@ def load_barttorvik(data_root: Path, year: int) -> pd.DataFrame:
 
 
 def load_barttorvik_2week(data_root: Path, year: int) -> pd.DataFrame:
-    return pd.read_csv(data_root / 'Data' / '2WeekBartTorivkData' / f'{year}.csv')
+    return pd.read_csv(data_root / 'Data' / '2WeekBartTorvikData' / f'{year}.csv')
 
 
 def load_barttorvik_hotness(data_root: Path, year: int) -> pd.DataFrame:

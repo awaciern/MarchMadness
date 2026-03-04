@@ -144,7 +144,7 @@ def compile_game_year(data_root: Path, year: int) -> pd.DataFrame:
     game_path  = data_root / 'Data' / 'GameData'             / f'{year}.csv'
     kp_path    = data_root / 'Data' / 'KenPomData'           / f'{year}.csv'
     bt_path    = data_root / 'Data' / 'BartTorvikData'       / f'{year}.csv'
-    bt2w_path  = data_root / 'Data' / '2WeekBartTorivkData'  / f'{year}.csv'
+    bt2w_path  = data_root / 'Data' / '2WeekBartTorvikData'  / f'{year}.csv'
     bthot_path = data_root / 'Data' / 'HotnessBartTorvikData' / f'{year}.csv'
 
     df_games = pd.read_csv(game_path)
@@ -173,7 +173,7 @@ def compile_bracket_year(data_root: Path, year: int, round1_only: bool = False) 
     """
     kp_path    = data_root / 'Data' / 'KenPomData'            / f'{year}.csv'
     bt_path    = data_root / 'Data' / 'BartTorvikData'        / f'{year}.csv'
-    bt2w_path  = data_root / 'Data' / '2WeekBartTorivkData'   / f'{year}.csv'
+    bt2w_path  = data_root / 'Data' / '2WeekBartTorvikData'   / f'{year}.csv'
     bthot_path = data_root / 'Data' / 'HotnessBartTorvikData' / f'{year}.csv'
     df_kp      = pd.read_csv(kp_path)
     df_bt      = pd.read_csv(bt_path)    if bt_path.exists()    else None
