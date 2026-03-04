@@ -69,7 +69,6 @@ KP_ONLY_BASES: List[str] = [
 
 # BartTorvik-exclusive bases (always BT__ prefix regardless of --expert).
 BT_ONLY_BASES: List[str] = [
-    'ConfWinPct', 'ConfWins', 'ConfLosses',
     'Barthag', 'Rk_Barthag',
     'EFG%', 'Rk_EFG%', 'EFGD%', 'Rk_EFGD%',
     'TOR', 'Rk_TOR', 'TORD', 'Rk_TORD',
@@ -86,7 +85,6 @@ BT_ONLY_BASES: List[str] = [
 BT2W_BASES: List[str] = [
     '2W_WinPct', '2W_Wins', '2W_Losses',
     '2W_AdjO', '2W_Rk_AdjO', '2W_AdjD', '2W_Rk_AdjD', '2W_AdjT', '2W_Rk_AdjT',
-    '2W_ConfWinPct', '2W_ConfWins', '2W_ConfLosses',
     '2W_Barthag', '2W_Rk_Barthag',
     '2W_EFG%', '2W_Rk_EFG%', '2W_EFGD%', '2W_Rk_EFGD%',
     '2W_TOR', '2W_Rk_TOR', '2W_TORD', '2W_Rk_TORD',
@@ -104,7 +102,6 @@ BT2W_BASES: List[str] = [
 BTHOT_BASES: List[str] = [
     'HOT_WinPct', 'HOT_Wins', 'HOT_Losses',
     'HOT_AdjO', 'HOT_Rk_AdjO', 'HOT_AdjD', 'HOT_Rk_AdjD', 'HOT_AdjT', 'HOT_Rk_AdjT',
-    'HOT_ConfWinPct', 'HOT_ConfWins', 'HOT_ConfLosses',
     'HOT_Barthag', 'HOT_Rk_Barthag',
     'HOT_EFG%', 'HOT_Rk_EFG%', 'HOT_EFGD%', 'HOT_Rk_EFGD%',
     'HOT_TOR', 'HOT_Rk_TOR', 'HOT_TORD', 'HOT_Rk_TORD',
@@ -346,7 +343,7 @@ def attach_barttorvik(df_matchups: pd.DataFrame, df_bt: pd.DataFrame) -> pd.Data
     with the BT__ source prefix and __1 / __2 team suffix.
     Seed is dropped — seeds are tracked separately via team_seed_map.
     """
-    bt = df_bt.drop(columns=['Seed'], errors='ignore')
+    bt = df_bt.drop(columns=['Seed', 'ConfRec', 'ConfWins', 'ConfLosses', 'ConfWinPct'], errors='ignore')
     rename_map = {c: f'BT__{c}' for c in bt.columns if c != 'Team'}
     bt = bt.rename(columns=rename_map)
     bt1 = bt.add_suffix('__1')
@@ -361,7 +358,7 @@ def attach_barttorvik_2week(df_matchups: pd.DataFrame, df_bt2w: pd.DataFrame) ->
     Given a DataFrame with columns Team__1 and Team__2, merge in 2-week BartTorvik
     stats with the BT2W__ source prefix and __1 / __2 team suffix.
     """
-    bt2w = df_bt2w.drop(columns=['Seed'], errors='ignore')
+    bt2w = df_bt2w.drop(columns=['Seed', 'ConfRec', 'ConfWins', 'ConfLosses', 'ConfWinPct'], errors='ignore')
     rename_map = {c: f'BT2W__{c}' for c in bt2w.columns if c != 'Team'}
     bt2w = bt2w.rename(columns=rename_map)
     bt2w1 = bt2w.add_suffix('__1')
@@ -376,7 +373,7 @@ def attach_barttorvik_hotness(df_matchups: pd.DataFrame, df_hot: pd.DataFrame) -
     Given a DataFrame with columns Team__1 and Team__2, merge in Hotness BartTorvik
     stats (difference: 2-week minus season) with BTHOT__ prefix and __1/__2 suffix.
     """
-    hot = df_hot.drop(columns=['Seed'], errors='ignore')
+    hot = df_hot.drop(columns=['Seed', 'ConfRec', 'ConfWins', 'ConfLosses', 'ConfWinPct'], errors='ignore')
     rename_map = {c: f'BTHOT__{c}' for c in hot.columns if c != 'Team'}
     hot = hot.rename(columns=rename_map)
     hot1 = hot.add_suffix('__1')

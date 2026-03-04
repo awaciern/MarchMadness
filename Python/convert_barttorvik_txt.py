@@ -34,9 +34,8 @@ import re
 from pathlib import Path
 
 HEADINGS = [
-    'Rk', 'Team', 'Seed', 'Conf', 'G', 'Rec', 'ConfRec',
+    'Rk', 'Team', 'Seed', 'Conf', 'G', 'Rec',
     'Wins', 'Losses', 'WinPct',
-    'ConfWins', 'ConfLosses', 'ConfWinPct',
     'AdjO', 'Rk_AdjO',
     'AdjD', 'Rk_AdjD',
     'Barthag', 'Rk_Barthag',
@@ -160,7 +159,8 @@ def parse_block(block: list, no_seeds: bool, all_teams: bool):
 
     # 2026+ format dropped ConfRec from the stat block (38 tokens instead of 39).
     # Detect this by checking whether the first token looks like a W-L record or a float.
-    if tokens and '-' not in tokens[0] and not tokens[0].startswith('+'):
+    # ConfRec uses either '-' or the en-dash '–', so check for both.
+    if tokens and '-' not in tokens[0] and '\u2013' not in tokens[0] and not tokens[0].startswith('+'):
         # First token is a numeric value (AdjO), not a W-L record — ConfRec absent.
         tokens.insert(0, '')  # placeholder so STAT_SEQUENCE indices stay aligned
 
@@ -171,16 +171,10 @@ def parse_block(block: list, no_seeds: bool, all_teams: bool):
     for i, name in enumerate(STAT_SEQUENCE):
         stat_map[name] = tokens[i]
 
-    conf_rec = stat_map['ConfRec'].replace('–', '-')
-
     # Parse W-L
     wins = losses = winpct = ''
     if rec and '-' in rec:
         wins, losses, winpct = split_record(rec)
-
-    conf_wins = conf_losses = conf_winpct = ''
-    if conf_rec and '-' in conf_rec:
-        conf_wins, conf_losses, conf_winpct = split_record(conf_rec)
 
     row = {
         'Rk': rk,
@@ -189,13 +183,9 @@ def parse_block(block: list, no_seeds: bool, all_teams: bool):
         'Conf': conf,
         'G': g,
         'Rec': rec,
-        'ConfRec': conf_rec,
         'Wins': wins,
         'Losses': losses,
         'WinPct': winpct,
-        'ConfWins': conf_wins,
-        'ConfLosses': conf_losses,
-        'ConfWinPct': conf_winpct,
     }
 
     # Numeric stats — ranks are int, values are float.

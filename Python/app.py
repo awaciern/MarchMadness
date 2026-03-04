@@ -54,7 +54,6 @@ KP_ONLY_BASES = [
 ]
 
 BT_ONLY_BASES = [
-    'ConfWinPct', 'ConfWins', 'ConfLosses',
     'Barthag', 'Rk_Barthag',
     'EFG%', 'Rk_EFG%', 'EFGD%', 'Rk_EFGD%',
     'TOR', 'Rk_TOR', 'TORD', 'Rk_TORD',
@@ -69,7 +68,6 @@ BT_ONLY_BASES = [
 BT2W_BASES = [
     '2W_WinPct', '2W_Wins', '2W_Losses',
     '2W_AdjO', '2W_Rk_AdjO', '2W_AdjD', '2W_Rk_AdjD', '2W_AdjT', '2W_Rk_AdjT',
-    '2W_ConfWinPct', '2W_ConfWins', '2W_ConfLosses',
     '2W_Barthag', '2W_Rk_Barthag',
     '2W_EFG%', '2W_Rk_EFG%', '2W_EFGD%', '2W_Rk_EFGD%',
     '2W_TOR', '2W_Rk_TOR', '2W_TORD', '2W_Rk_TORD',
@@ -84,7 +82,6 @@ BT2W_BASES = [
 BTHOT_BASES = [
     'HOT_WinPct', 'HOT_Wins', 'HOT_Losses',
     'HOT_AdjO', 'HOT_Rk_AdjO', 'HOT_AdjD', 'HOT_Rk_AdjD', 'HOT_AdjT', 'HOT_Rk_AdjT',
-    'HOT_ConfWinPct', 'HOT_ConfWins', 'HOT_ConfLosses',
     'HOT_Barthag', 'HOT_Rk_Barthag',
     'HOT_EFG%', 'HOT_Rk_EFG%', 'HOT_EFGD%', 'HOT_Rk_EFGD%',
     'HOT_TOR', 'HOT_Rk_TOR', 'HOT_TORD', 'HOT_Rk_TORD',
@@ -137,9 +134,6 @@ FEATURE_DESCRIPTIONS = {
     'NCSOS_AdjEM':    'Non-Conference Strength of Schedule — average AdjEM of non-conference opponents',
     'Rk_NCSOS_AdjEM': 'National ranking for Non-Conference Strength of Schedule',
     # ---- BartTorvik-only -------------------------------------------------
-    'ConfWinPct':     'Win percentage in conference games only',
-    'ConfWins':       'Wins in conference games only',
-    'ConfLosses':     'Losses in conference games only',
     'Barthag':        "BartTorvik's Power Rating — probability of beating an average D1 team on a neutral court",
     'Rk_Barthag':     'National ranking for Barthag Power Rating',
     'EFG%':           'Effective Field Goal % — accounts for 3-pointers being worth more: (FGM + 0.5x3PM) / FGA',
@@ -184,9 +178,6 @@ FEATURE_DESCRIPTIONS = {
     '2W_Rk_AdjD':     '[2-week] Ranking for Adjusted Defensive Efficiency',
     '2W_AdjT':        '[2-week] Adjusted Tempo — 2-week snapshot',
     '2W_Rk_AdjT':     '[2-week] Ranking for Adjusted Tempo',
-    '2W_ConfWinPct':  '[2-week] Conference win percentage over the last two weeks',
-    '2W_ConfWins':    '[2-week] Conference wins over the last two weeks',
-    '2W_ConfLosses':  '[2-week] Conference losses over the last two weeks',
     '2W_Barthag':     '[2-week] BartTorvik Power Rating — 2-week snapshot',
     '2W_Rk_Barthag':  '[2-week] Ranking for Barthag Power Rating',
     '2W_EFG%':        '[2-week] Effective Field Goal % — 2-week snapshot',
@@ -229,9 +220,6 @@ FEATURE_DESCRIPTIONS = {
     'HOT_Rk_AdjD':    '[Hotness] AdjD rank change',
     'HOT_AdjT':       '[Hotness] Adjusted Tempo change',
     'HOT_Rk_AdjT':    '[Hotness] Adjusted Tempo rank change',
-    'HOT_ConfWinPct': '[Hotness] Conference win % change',
-    'HOT_ConfWins':   '[Hotness] Conference wins change',
-    'HOT_ConfLosses': '[Hotness] Conference losses change',
     'HOT_Barthag':    '[Hotness] Barthag power rating change (+ = getting stronger)',
     'HOT_Rk_Barthag': '[Hotness] Barthag rank change',
     'HOT_EFG%':       '[Hotness] Effective Field Goal % change',

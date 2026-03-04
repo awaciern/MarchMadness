@@ -76,7 +76,7 @@ def attach_barttorvik(df: pd.DataFrame, df_bt: pd.DataFrame) -> pd.DataFrame:
     Uses a left join so rows are preserved even if a team is absent from
     BartTorvik data (e.g. play-in teams, pre-tournament year).
     """
-    bt = prefix_stats_cols(df_bt, 'BT__', drop_cols=['Seed'])
+    bt = prefix_stats_cols(df_bt, 'BT__', drop_cols=['Seed', 'ConfRec', 'ConfWins', 'ConfLosses', 'ConfWinPct'])
 
     bt1 = bt.add_suffix('__1')   # Team → Team__1, BT__AdjOE → BT__AdjOE__1
     bt2 = bt.add_suffix('__2')
@@ -92,7 +92,7 @@ def attach_barttorvik_2week(df: pd.DataFrame, df_bt2w: pd.DataFrame) -> pd.DataF
     The 2-week snapshot has the same column schema as BartTorvikData.
     Uses a left join to preserve rows for teams absent from this source.
     """
-    bt2w = prefix_stats_cols(df_bt2w, 'BT2W__', drop_cols=['Seed'])
+    bt2w = prefix_stats_cols(df_bt2w, 'BT2W__', drop_cols=['Seed', 'ConfRec', 'ConfWins', 'ConfLosses', 'ConfWinPct'])
 
     bt2w1 = bt2w.add_suffix('__1')
     bt2w2 = bt2w.add_suffix('__2')
@@ -109,7 +109,7 @@ def attach_barttorvik_hotness(df: pd.DataFrame, df_hot: pd.DataFrame) -> pd.Data
     stats (positive = improving, negative = declining).
     Uses a left join to preserve rows for teams absent from this source.
     """
-    hot = prefix_stats_cols(df_hot, 'BTHOT__', drop_cols=['Seed'])
+    hot = prefix_stats_cols(df_hot, 'BTHOT__', drop_cols=['Seed', 'ConfRec', 'ConfWins', 'ConfLosses', 'ConfWinPct'])
 
     hot1 = hot.add_suffix('__1')
     hot2 = hot.add_suffix('__2')

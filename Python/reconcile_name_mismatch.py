@@ -85,9 +85,9 @@ def reconcile_barttorvik(years, alias_map):
 
 
 def reconcile_barttorvik_2week(years, alias_map):
-    print('\n=== 2WeekBartTorivkData CSVs ===')
+    print('\n=== 2WeekBartTorvikData CSVs ===')
     for year in years:
-        path = DATA_ROOT / '2WeekBartTorivkData' / f'{year}.csv'
+        path = DATA_ROOT / '2WeekBartTorvikData' / f'{year}.csv'
         if not path.exists():
             continue
         df = pd.read_csv(path)

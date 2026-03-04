@@ -76,12 +76,12 @@ def main():
         print(f'  BartTorvikData: {len(barttorvik)} teams')
         report_mismatches('BartTorvikData', bracket, barttorvik)
 
-    barttorvik_2w = stats_teams('2WeekBartTorivkData', year)
+    barttorvik_2w = stats_teams('2WeekBartTorvikData', year)
     if barttorvik_2w is None:
-        print(f'  [!] 2WeekBartTorivkData/{year}.csv not found — skipping.')
+        print(f'  [!] 2WeekBartTorvikData/{year}.csv not found — skipping.')
     else:
-        print(f'  2WeekBartTorivkData: {len(barttorvik_2w)} teams')
-        report_mismatches('2WeekBartTorivkData', bracket, barttorvik_2w)
+        print(f'  2WeekBartTorvikData: {len(barttorvik_2w)} teams')
+        report_mismatches('2WeekBartTorvikData', bracket, barttorvik_2w)
 
 
 if __name__ == '__main__':

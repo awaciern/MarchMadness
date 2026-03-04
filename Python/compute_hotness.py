@@ -4,7 +4,7 @@ compute_hotness.py
 Populates Data/HotnessBartTorvikData/ with per-team *hotness* — the numeric
 difference between the 2-week rolling stats and the full-season stats:
 
-    hotness = 2WeekBartTorivkData[col] - BartTorvikData[col]
+    hotness = 2WeekBartTorvikData[col] - BartTorvikData[col]
 
 A positive value means a team is performing *better* recently than their
 season average (they're "hot"); negative means they've cooled off.
@@ -25,7 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BT_DIR      = ROOT / 'Data' / 'BartTorvikData'
-TWOWEEK_DIR = ROOT / 'Data' / '2WeekBartTorivkData'
+TWOWEEK_DIR = ROOT / 'Data' / '2WeekBartTorvikData'
 OUT_DIR     = ROOT / 'Data' / 'HotnessBartTorvikData'
 
 # Columns carried through as-is (identity / count columns).
@@ -86,7 +86,7 @@ def process_year(year: int) -> int:
         print(f'  [{year}] SKIP — {bt_path.name} not found in BartTorvikData')
         return 0
     if not tw_path.exists():
-        print(f'  [{year}] SKIP — {tw_path.name} not found in 2WeekBartTorivkData')
+        print(f'  [{year}] SKIP — {tw_path.name} not found in 2WeekBartTorvikData')
         return 0
 
     bt_rows = load_csv(bt_path)
