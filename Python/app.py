@@ -671,8 +671,303 @@ def sim_html_route(dir_name, filename):
 
 
 # ---------------------------------------------------------------------------
+# Bracket input routes
+# ---------------------------------------------------------------------------
+
+# Standard NCAA bracket seed matchups within each region, in top-to-bottom order.
+SEED_MATCHUPS = [(1, 16), (8, 9), (5, 12), (4, 13), (6, 11), (3, 14), (7, 10), (2, 15)]
+
+REGION_NAMES = ['South', 'East', 'Midwest', 'West']
+
+
+def _read_kp_teams(year: int = THIS_YEAR):
+    """Return sorted list of team names from KenPom CSV for the given year."""
+    import csv as _csv
+    kp_path = REPO_ROOT / 'Data' / 'KenPomData' / f'{year}.csv'
+    if not kp_path.exists():
+        return []
+    teams = []
+    with open(kp_path, newline='', encoding='utf-8') as f:
+        reader = _csv.DictReader(f)
+        for row in reader:
+            t = row.get('Team', '').strip()
+            if t:
+                teams.append(t)
+    return sorted(teams)
+
+
+def _read_round1_teams(year: int = THIS_YEAR):
+    """
+    Read existing Round1_<year>.csv and return team names by row order.
+    Returns a list of 32 dicts {team1, team2}, padded with empty strings.
+    Seeds come from SEED_MATCHUPS, not the CSV.
+    """
+    import csv as _csv
+    csv_path = REPO_ROOT / 'Data' / 'BracketData' / str(year) / f'Round1_{year}.csv'
+    games = []
+    if csv_path.exists():
+        with open(csv_path, newline='', encoding='utf-8') as f:
+            reader = _csv.DictReader(f)
+            for row in reader:
+                games.append({
+                    'team1': row.get('Team1', '').strip(),
+                    'team2': row.get('Team2', '').strip(),
+                })
+    while len(games) < 32:
+        games.append({'team1': '', 'team2': ''})
+    return games[:32]
+
+
+def _build_display_games(team_rows):
+    """
+    Annotate 32 team rows with their fixed seed values from SEED_MATCHUPS.
+    Returns list of 32 dicts: {team1, team2, seed1, seed2}.
+    """
+    result = []
+    for i, row in enumerate(team_rows):
+        s1, s2 = SEED_MATCHUPS[i % 8]
+        result.append({
+            'team1': row['team1'],
+            'team2': row['team2'],
+            'seed1': s1,
+            'seed2': s2,
+        })
+    return result
+
+
+@app.route('/bracket_input')
+def bracket_input():
+    teams = _read_kp_teams(THIS_YEAR)
+    games = _build_display_games(_read_round1_teams(THIS_YEAR))
+    return render_template_string(
+        BRACKET_INPUT_HTML,
+        year=THIS_YEAR,
+        teams=teams,
+        games=games,
+        region_names=REGION_NAMES,
+        saved=False,
+        error=None,
+    )
+
+
+@app.route('/save_bracket', methods=['POST'])
+def save_bracket():
+    import csv as _csv
+    games_out = []
+    for i in range(1, 33):
+        s1, s2 = SEED_MATCHUPS[(i - 1) % 8]
+        games_out.append({
+            'Team1':       request.form.get(f'game_{i}_team1', '').strip(),
+            'Team1_Seed':  s1,
+            'Team1_Score': '',
+            'Team2':       request.form.get(f'game_{i}_team2', '').strip(),
+            'Team2_Seed':  s2,
+            'Team2_Score': '',
+            'WinningTeam': '',
+            'Team1_Win':   '',
+        })
+
+    # Validate: all team names required
+    missing = [i + 1 for i, g in enumerate(games_out) if not g['Team1'] or not g['Team2']]
+    teams = _read_kp_teams(THIS_YEAR)
+    if missing:
+        games_redisplay = _build_display_games([
+            {'team1': request.form.get(f'game_{i}_team1', '').strip(),
+             'team2': request.form.get(f'game_{i}_team2', '').strip()}
+            for i in range(1, 33)
+        ])
+        return render_template_string(
+            BRACKET_INPUT_HTML,
+            year=THIS_YEAR,
+            teams=teams,
+            games=games_redisplay,
+            region_names=REGION_NAMES,
+            saved=False,
+            error=f'Missing team name(s) in game(s): {", ".join(str(m) for m in missing[:8])}{"…" if len(missing) > 8 else ""}',
+        )
+
+    out_dir = REPO_ROOT / 'Data' / 'BracketData' / str(THIS_YEAR)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f'Round1_{THIS_YEAR}.csv'
+    fieldnames = ['Team1', 'Team1_Seed', 'Team1_Score', 'Team2', 'Team2_Seed',
+                  'Team2_Score', 'WinningTeam', 'Team1_Win']
+    with open(out_path, 'w', newline='', encoding='utf-8') as f:
+        writer = _csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(games_out)
+
+    games_redisplay = _build_display_games([
+        {'team1': g['Team1'], 'team2': g['Team2']} for g in games_out
+    ])
+    return render_template_string(
+        BRACKET_INPUT_HTML,
+        year=THIS_YEAR,
+        teams=teams,
+        games=games_redisplay,
+        region_names=REGION_NAMES,
+        saved=True,
+        error=None,
+    )
+
+
+# ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# HTML template
+# ---------------------------------------------------------------------------
+
+BRACKET_INPUT_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ year }} Bracket Setup</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-height: 100vh;
+  padding: 28px 24px 60px;
+}
+a.back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #64748b; font-size: 12px; text-decoration: none;
+  margin-bottom: 18px; transition: color .15s;
+}
+a.back-link:hover { color: #93c5fd; }
+h1 { font-size: 20px; color: #fbbf24; margin-bottom: 4px; }
+.subtitle { color: #64748b; font-size: 13px; margin-bottom: 24px; }
+
+.regions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  max-width: 1060px;
+}
+@media (max-width: 760px) { .regions-grid { grid-template-columns: 1fr; } }
+
+.region-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+.region-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .8px; color: #94a3b8; margin-bottom: 14px;
+}
+
+.matchup-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 18px 28px 1fr;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 0;
+  border-bottom: 1px solid #0f172a;
+}
+.matchup-row:last-child { border-bottom: none; }
+
+.seed-badge {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  padding: 4px 3px;
+  user-select: none;
+}
+.team-input {
+  width: 100%;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  color: #e2e8f0;
+  padding: 5px 8px;
+  font-size: 12px;
+  outline: none;
+  transition: border-color .15s;
+}
+.team-input:focus { border-color: #3b82f6; }
+.team-input.empty { border-color: #7f1d1d; }
+.vs-sep {
+  font-size: 9px; color: #475569;
+  font-weight: 700; text-align: center;
+}
+
+.action-bar {
+  max-width: 1060px; margin-top: 22px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+button.save-btn {
+  background: #1d4ed8; color: #fff; border: none; border-radius: 7px;
+  padding: 10px 28px; font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: background .15s;
+}
+button.save-btn:hover { background: #2563eb; }
+.msg-saved { color: #4ade80; font-size: 13px; }
+.msg-error { color: #f87171; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<a href="/" class="back-link">&#8592; Back to Predictor</a>
+<h1>&#127942; {{ year }} Bracket Setup</h1>
+<p class="subtitle">
+  Select the team for each seed slot. Autocomplete is sourced from {{ year }} KenPom data.
+  Saving writes <code>Data/BracketData/{{ year }}/Round1_{{ year }}.csv</code>.
+</p>
+
+<datalist id="kp-teams">
+  {% for t in teams %}<option value="{{ t }}">{% endfor %}
+</datalist>
+
+<form method="post" action="/save_bracket" autocomplete="off" id="bracket-form">
+<div class="regions-grid">
+  {% for r in range(4) %}
+  <div class="region-card">
+    <div class="region-title">{{ region_names[r] }}</div>
+    {% for g in range(8) %}
+    {% set i = r*8 + g + 1 %}
+    {% set gd = games[i-1] %}
+    <div class="matchup-row">
+      <span class="seed-badge">{{ gd.seed1 }}</span>
+      <input class="team-input{% if not gd.team1 %} empty{% endif %}"
+             list="kp-teams" name="game_{{ i }}_team1"
+             placeholder="Team (seed {{ gd.seed1 }})"
+             value="{{ gd.team1 }}"
+             oninput="this.classList.toggle('empty', !this.value.trim())">
+      <span class="vs-sep">vs</span>
+      <span class="seed-badge">{{ gd.seed2 }}</span>
+      <input class="team-input{% if not gd.team2 %} empty{% endif %}"
+             list="kp-teams" name="game_{{ i }}_team2"
+             placeholder="Team (seed {{ gd.seed2 }})"
+             value="{{ gd.team2 }}"
+             oninput="this.classList.toggle('empty', !this.value.trim())">
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="action-bar">
+  <button type="submit" class="save-btn">&#128190; Save Bracket</button>
+  {% if saved %}
+  <span class="msg-saved">&#10003; Saved to Round1_{{ year }}.csv</span>
+  {% endif %}
+  {% if error %}
+  <span class="msg-error">&#9888; {{ error }}</span>
+  {% endif %}
+</div>
+</form>
+
+</body>
+</html>
+"""
 
 INDEX_HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -992,6 +1287,7 @@ label.feat-chip[title] { cursor: help; }
 
 <h1>&#127936; March Madness Bracket Predictor</h1>
 <p class="subtitle">Configure a model below, then run the evaluation across all historical years (2012–2025) plus a {{ THIS_YEAR }} prediction.</p>
+<a href="/bracket_input" style="display:inline-flex;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 14px;font-size:12px;color:#93c5fd;text-decoration:none;margin-bottom:20px;transition:border-color .15s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#334155'">&#127942; Set Up {{ THIS_YEAR }} Bracket</a>
 
 <!-- ===== SAVED MODELS ===== -->
 <div class="panel-card saved-section">
