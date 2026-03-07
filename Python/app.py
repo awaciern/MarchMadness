@@ -342,6 +342,7 @@ def scan_saved_models():
             'norm_years': 'NY' in expert_tag,
             'norm_all':   'NA' in expert_tag,
             'calibrated': 'CAL' in expert_tag,
+            'delta_feats':'DF' in expert_tag,
             'features':   feat_str,
             'params':     params_str,
             'years':      years,
@@ -445,6 +446,8 @@ def run_prediction():
         cmd.append('--norm-all')
     if data.get('calibrate'):
         cmd.append('--calibrate')
+    if data.get('delta_feats'):
+        cmd.append('--delta-feats')
 
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = Job()
@@ -1121,6 +1124,11 @@ label.feat-chip[title] { cursor: help; }
       <span style="font-size:13px;color:#e2e8f0">Calibrate probabilities</span>
       <span style="font-size:10px;color:#475569">(Platt scaling &mdash; corrects over/under-confident win probs)</span>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <input type="checkbox" id="delta-feats-check" style="accent-color:#a855f7;cursor:pointer;width:14px;height:14px">
+      <span style="font-size:13px;color:#e2e8f0">Delta features</span>
+      <span style="font-size:10px;color:#475569">(collapse numeric __1 and __2 into a single team1 &minus; team2 difference)</span>
+    </div>
     <button id="run-btn" onclick="runPrediction()">&#9654; Run Prediction</button>
   </div>
 
@@ -1209,7 +1217,8 @@ function loadSavedModels() {
         const nyTag  = m.norm_years  ? '<span class="tag tag-ny">NY</span>'   : '';
         const naTag  = m.norm_all    ? '<span class="tag tag-na">NA</span>'   : '';
         const calTag = m.calibrated  ? '<span class="tag tag-cal">CAL</span>' : '';
-        const flagsTag = (nyTag + naTag + calTag) || '\u2014';
+        const dfTag  = m.delta_feats ? '<span class="tag" style="background:#a855f7;color:#fff">DF</span>' : '';
+        const flagsTag = (nyTag + naTag + calTag + dfTag) || '\u2014';
         tr.innerHTML =
           '<td style="color:#475569">' + (i + 1) + '</td>' +
           '<td class="score-cell">' + m.score + '</td>' +
@@ -1437,7 +1446,8 @@ function runPrediction() {
   const params    = document.getElementById('params-input').value.trim();
   const normYears = document.getElementById('norm-years-check').checked;
   const normAll   = document.getElementById('norm-all-check').checked;
-  const calibrate = document.getElementById('calibrate-check').checked;
+  const calibrate  = document.getElementById('calibrate-check').checked;
+  const deltaFeats = document.getElementById('delta-feats-check').checked;
 
   // Reset UI
   document.getElementById('log-box').innerHTML = '';
@@ -1448,7 +1458,7 @@ function runPrediction() {
   fetch('/run', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ model, params, features, norm_years: normYears, norm_all: normAll, calibrate }),
+    body: JSON.stringify({ model, params, features, norm_years: normYears, norm_all: normAll, calibrate, delta_feats: deltaFeats }),
   })
   .then(r => r.json())
   .then(data => {

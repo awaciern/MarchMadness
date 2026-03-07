@@ -49,6 +49,8 @@ from predict_brackets import (
     attach_kenpom,
     attach_barttorvik,
     apply_label_encoders,
+    apply_year_norm_single,
+    apply_delta_transform,
     derive_ff_pairings_from_data,
     parse_ff_pairings_arg,
     ALL_YEARS,
@@ -139,13 +141,20 @@ def _simulate_one(
     needs_bt: bool,
     draws_r1: np.ndarray,   # pre-drawn randoms for round 1
     rng: np.random.Generator,
-    year_sc=None,           # fitted StandardScaler for this year (or None)
-    norm_cols: list = None, # numeric columns to normalise
+    norm_info=None,
+    year: int = None,
+    delta_feats: bool = False,
+    numeric_bases: list = None,
+    model_feature_list: list = None,
 ) -> dict:
     """
     Run one complete bracket simulation.
     Returns {round_number: [winning_team_names]} for rounds 1–6.
     """
+    if model_feature_list is None:
+        model_feature_list = feature_list
+    if numeric_bases is None:
+        numeric_bases = []
     results = {}
     prev_winners: list = []
 
@@ -175,13 +184,12 @@ def _simulate_one(
             df_rnd['Seed__1'] = df_rnd['Team__1'].map(team_seed_map)
             df_rnd['Seed__2'] = df_rnd['Team__2'].map(team_seed_map)
 
-            df_enc = apply_label_encoders(df_rnd, cat_encoders) if cat_encoders else df_rnd
-            if year_sc is not None and norm_cols:
-                _avail = [c for c in norm_cols if c in df_enc.columns]
-                if _avail:
-                    df_enc = df_enc.copy()
-                    df_enc[_avail] = year_sc.transform(df_enc[_avail])
-            proba  = model.predict_proba(df_enc[feature_list])
+            df_enc = apply_label_encoders(df_rnd, cat_encoders) if cat_encoders else df_rnd.copy()
+            if norm_info is not None and year is not None:
+                df_enc = apply_year_norm_single(df_enc, year, norm_info)
+            if delta_feats and numeric_bases:
+                df_enc = apply_delta_transform(df_enc, numeric_bases)
+            proba  = model.predict_proba(df_enc[model_feature_list])
             teams1 = df_rnd['Team__1'].tolist()
             teams2 = df_rnd['Team__2'].tolist()
             draws  = rng.random(len(teams1))
@@ -206,6 +214,9 @@ def run_simulations(
     num_iters: int,
     seed: int = None,
     norm_info: Optional[dict] = None,
+    delta_feats: bool = False,
+    numeric_bases: list = None,
+    model_feature_list: list = None,
 ) -> pd.DataFrame:
     """
     Run `num_iters` Monte Carlo bracket simulations for `year`.
@@ -214,6 +225,10 @@ def run_simulations(
         Team, Seed, R16, S16, E8, FF, Final, Champ
     Values are probabilities (0–1), sorted by Champ desc → FF desc → … → R16 desc.
     """
+    if numeric_bases is None:
+        numeric_bases = []
+    if model_feature_list is None:
+        model_feature_list = feature_list
     needs_bt = any(f.startswith('BT__') for f in feature_list)
 
     # --- Load fixed data --------------------------------------------------
@@ -242,20 +257,13 @@ def run_simulations(
         df_r1_kp = attach_barttorvik(df_r1_kp, df_bt)
     df_r1_kp['Seed__1'] = df_r1_kp['Team__1'].map(team_seed_map)
     df_r1_kp['Seed__2'] = df_r1_kp['Team__2'].map(team_seed_map)
-    # Derive per-year scaler (if model was trained with --norm-years)
-    year_sc   = None
-    norm_cols: list = []
-    if norm_info:
-        year_sc   = norm_info['by_year'].get(year, norm_info.get('fallback'))
-        norm_cols = norm_info.get('cols', [])
 
-    df_r1_enc = apply_label_encoders(df_r1_kp, cat_encoders) if cat_encoders else df_r1_kp
-    if year_sc is not None and norm_cols:
-        _avail = [c for c in norm_cols if c in df_r1_enc.columns]
-        if _avail:
-            df_r1_enc = df_r1_enc.copy()
-            df_r1_enc[_avail] = year_sc.transform(df_r1_enc[_avail])
-    r1_proba  = model.predict_proba(df_r1_enc[feature_list])
+    df_r1_enc = apply_label_encoders(df_r1_kp, cat_encoders) if cat_encoders else df_r1_kp.copy()
+    if norm_info is not None:
+        df_r1_enc = apply_year_norm_single(df_r1_enc, year, norm_info)
+    if delta_feats and numeric_bases:
+        df_r1_enc = apply_delta_transform(df_r1_enc, numeric_bases)
+    r1_proba  = model.predict_proba(df_r1_enc[model_feature_list])
 
     # Aligned team lists for Round 1 (same row order as r1_proba)
     r1_teams1 = df_r1_kp['Team__1'].tolist()
@@ -287,7 +295,11 @@ def run_simulations(
             model, r1_teams1, r1_teams2, r1_proba,
             df_kp, df_bt, feature_list, cat_encoders,
             team_seed_map, ff_pairings, needs_bt, draws_r1, rng,
-            year_sc=year_sc, norm_cols=norm_cols,
+            norm_info=norm_info,
+            year=year,
+            delta_feats=delta_feats,
+            numeric_bases=numeric_bases,
+            model_feature_list=model_feature_list,
         )
         for rnd, winners in sim.items():
             for team in winners:
@@ -495,6 +507,9 @@ def main():
     feature_list = payload['feature_list']
     cat_encoders = payload.get('cat_encoders', {})
     norm_info    = payload.get('norm_info')
+    delta_feats       = payload.get('delta_feats', False)
+    numeric_bases     = payload.get('numeric_bases', [])
+    model_feature_list = payload.get('model_feature_list', feature_list)
 
     # --- Infer data root --------------------------------------------------
     # Expected layout: <repo_root>/Predictions/<model_dir>/model.pkl
@@ -541,6 +556,9 @@ def main():
         num_iters=args.num_iters,
         seed=args.seed,
         norm_info=norm_info,
+        delta_feats=delta_feats,
+        numeric_bases=numeric_bases,
+        model_feature_list=model_feature_list,
     )
 
     # --- Actual results (only for historical years with bracket data) ------

@@ -292,22 +292,111 @@ def fit_global_scaler(df: pd.DataFrame, num_cols: List[str]) -> dict:
     return {'by_year': {}, 'fallback': sc, 'cols': avail}
 
 
+def fit_year_scalers_delta(df: pd.DataFrame, numeric_bases: List[str]) -> dict:
+    """
+    Fit a StandardScaler per year using the combined distribution of __1 and __2
+    columns for each numeric base (delta mode).
+
+    The scaler for each year is fitted on a stacked DataFrame where __1 and __2
+    values are concatenated so that both populations inform the scaling.
+
+    norm_info['cols']     — the base column names (no __1/__2 suffix)
+    norm_info['is_delta'] — True, signals delta-aware apply helpers
+    """
+    avail = [b for b in numeric_bases
+             if f'{b}__1' in df.columns and f'{b}__2' in df.columns]
+    if not avail:
+        return {'by_year': {}, 'fallback': None, 'cols': [], 'is_delta': True}
+    by_year: dict = {}
+    for year, grp in df.groupby('Year'):
+        part1 = grp[[f'{b}__1' for b in avail]].rename(columns={f'{b}__1': b for b in avail})
+        part2 = grp[[f'{b}__2' for b in avail]].rename(columns={f'{b}__2': b for b in avail})
+        stacked = pd.concat([part1, part2], axis=0, ignore_index=True)
+        sc = StandardScaler()
+        sc.fit(stacked)
+        by_year[year] = sc
+    # Fallback: stack over all years.
+    all1 = df[[f'{b}__1' for b in avail]].rename(columns={f'{b}__1': b for b in avail})
+    all2 = df[[f'{b}__2' for b in avail]].rename(columns={f'{b}__2': b for b in avail})
+    fallback = StandardScaler()
+    fallback.fit(pd.concat([all1, all2], axis=0, ignore_index=True))
+    return {'by_year': by_year, 'fallback': fallback, 'cols': avail, 'is_delta': True}
+
+
+def fit_global_scaler_delta(df: pd.DataFrame, numeric_bases: List[str]) -> dict:
+    """
+    Fit a single global StandardScaler using the combined distribution of __1
+    and __2 columns for each numeric base (delta / --norm-all counterpart).
+    """
+    avail = [b for b in numeric_bases
+             if f'{b}__1' in df.columns and f'{b}__2' in df.columns]
+    if not avail:
+        return {'by_year': {}, 'fallback': None, 'cols': [], 'is_delta': True}
+    all1 = df[[f'{b}__1' for b in avail]].rename(columns={f'{b}__1': b for b in avail})
+    all2 = df[[f'{b}__2' for b in avail]].rename(columns={f'{b}__2': b for b in avail})
+    sc = StandardScaler()
+    sc.fit(pd.concat([all1, all2], axis=0, ignore_index=True))
+    return {'by_year': {}, 'fallback': sc, 'cols': avail, 'is_delta': True}
+
+
+def apply_delta_transform(df: pd.DataFrame, numeric_bases: List[str]) -> pd.DataFrame:
+    """
+    For each base in numeric_bases, compute:
+        base__delta = base__1 - base__2
+    then drop base__1 and base__2.  Returns a copy.
+    Call this *after* normalisation so that deltas are in Z-score space when
+    normalisation is active.
+    """
+    df = df.copy()
+    for b in numeric_bases:
+        c1, c2 = f'{b}__1', f'{b}__2'
+        if c1 in df.columns and c2 in df.columns:
+            df[f'{b}__delta'] = df[c1] - df[c2]
+            df.drop(columns=[c1, c2], inplace=True)
+    return df
+
+
 def apply_year_norm(df: pd.DataFrame, norm_info: dict) -> pd.DataFrame:
     """
     Apply per-year Z-score normalisation to a DataFrame that contains a 'Year'
     column.  Each row is scaled by the scaler fitted for its year.
+
+    In delta mode (norm_info['is_delta'] == True) the scaler expects base column
+    names (no __1/__2 suffix); both __1 and __2 columns are transformed using the
+    same scaler so their scales match before the delta is computed.
     """
     if norm_info is None:
         return df
-    cols = [c for c in norm_info['cols'] if c in df.columns]
+    is_delta = norm_info.get('is_delta', False)
+    cols = norm_info['cols']
     if not cols:
         return df
     df = df.copy()
-    for year, grp in df.groupby('Year'):
-        sc = norm_info['by_year'].get(year, norm_info['fallback'])
-        if sc is None:
-            continue
-        df.loc[grp.index, cols] = sc.transform(grp[cols])
+    if is_delta:
+        avail = [b for b in cols if f'{b}__1' in df.columns and f'{b}__2' in df.columns]
+        if not avail:
+            return df
+        for year, grp in df.groupby('Year'):
+            sc = norm_info['by_year'].get(year, norm_info['fallback'])
+            if sc is None:
+                continue
+            sub1 = grp[[f'{b}__1' for b in avail]].rename(columns={f'{b}__1': b for b in avail})
+            scaled1 = pd.DataFrame(sc.transform(sub1), columns=avail, index=grp.index)
+            for b in avail:
+                df.loc[grp.index, f'{b}__1'] = scaled1[b].values
+            sub2 = grp[[f'{b}__2' for b in avail]].rename(columns={f'{b}__2': b for b in avail})
+            scaled2 = pd.DataFrame(sc.transform(sub2), columns=avail, index=grp.index)
+            for b in avail:
+                df.loc[grp.index, f'{b}__2'] = scaled2[b].values
+    else:
+        avail = [c for c in cols if c in df.columns]
+        if not avail:
+            return df
+        for year, grp in df.groupby('Year'):
+            sc = norm_info['by_year'].get(year, norm_info['fallback'])
+            if sc is None:
+                continue
+            df.loc[grp.index, avail] = sc.transform(grp[avail])
     return df
 
 
@@ -315,17 +404,36 @@ def apply_year_norm_single(df: pd.DataFrame, year: int, norm_info: dict) -> pd.D
     """
     Apply the normalisation scaler for a single known *year* to a DataFrame
     that does NOT have a 'Year' column (e.g. per-round bracket data).
+
+    In delta mode, both __1 and __2 are transformed using the same scaler.
     """
     if norm_info is None:
         return df
-    cols = [c for c in norm_info['cols'] if c in df.columns]
+    is_delta = norm_info.get('is_delta', False)
+    cols = norm_info['cols']
     if not cols:
         return df
     sc = norm_info['by_year'].get(year, norm_info['fallback'])
     if sc is None:
         return df
     df = df.copy()
-    df[cols] = sc.transform(df[cols])
+    if is_delta:
+        avail = [b for b in cols if f'{b}__1' in df.columns and f'{b}__2' in df.columns]
+        if not avail:
+            return df
+        sub1 = df[[f'{b}__1' for b in avail]].rename(columns={f'{b}__1': b for b in avail})
+        scaled1 = pd.DataFrame(sc.transform(sub1), columns=avail, index=df.index)
+        for b in avail:
+            df[f'{b}__1'] = scaled1[b].values
+        sub2 = df[[f'{b}__2' for b in avail]].rename(columns={f'{b}__2': b for b in avail})
+        scaled2 = pd.DataFrame(sc.transform(sub2), columns=avail, index=df.index)
+        for b in avail:
+            df[f'{b}__2'] = scaled2[b].values
+    else:
+        avail = [c for c in cols if c in df.columns]
+        if not avail:
+            return df
+        df[avail] = sc.transform(df[avail])
     return df
 
 
@@ -476,6 +584,9 @@ def simulate_bracket(
     feature_list: list = None,
     cat_encoders: dict = None,
     norm_info: dict = None,
+    delta_feats: bool = False,
+    numeric_bases: list = None,
+    model_feature_list: list = None,
 ) -> Tuple[list, list, list, list, list, int]:
     """
     Simulate filling out a bracket from Round 1 using the model.
@@ -495,6 +606,10 @@ def simulate_bracket(
         feature_list = [
             f'KP__{b}__{i}' for b in DEFAULT_FEATURE_BASES for i in (1, 2)
         ]
+    if model_feature_list is None:
+        model_feature_list = feature_list
+    if numeric_bases is None:
+        numeric_bases = []
     if cat_encoders is None:
         cat_encoders = {}
 
@@ -582,7 +697,9 @@ def simulate_bracket(
             df_round = apply_label_encoders(df_round, cat_encoders)
         if norm_info is not None:
             df_round = apply_year_norm_single(df_round, year, norm_info)
-        X = df_round[feature_list]
+        if delta_feats and numeric_bases:
+            df_round = apply_delta_transform(df_round, numeric_bases)
+        X = df_round[model_feature_list]
         preds = model.predict(X)
         # Win probability for the predicted winner (None if model lacks predict_proba).
         try:
@@ -746,6 +863,20 @@ def main():
             'to train the base model. Output folder name will include a CAL indicator.'
         ),
     )
+    parser.add_argument(
+        '--delta-feats',
+        action='store_true',
+        default=False,
+        help=(
+            'Combine numeric __1 and __2 features into a single delta feature '
+            '(team1 value minus team2 value) before training and prediction. '
+            'Categorical features (Conf, Seed) are kept as separate __1/__2 columns. '
+            'When normalisation is active, both __1 and __2 are scaled using a scaler '
+            'fitted on the combined distribution of both columns, then the delta is '
+            'computed in the normalised space. '
+            'Output folder name will include a DF indicator.'
+        ),
+    )
     args = parser.parse_args()
 
     data_root = Path(args.data_root)
@@ -764,6 +895,37 @@ def main():
         for i in (1, 2)
     }
     cat_cols = [c for c in feature_list if c in cat_col_set]
+    # --delta-feats: compute per-base numeric list and the model's feature list.
+    delta_feats = args.delta_feats
+    if delta_feats:
+        # Ordered numeric base col names (source-prefixed, no __1/__2 suffix).
+        _seen_num: dict = {}
+        numeric_bases: List[str] = []
+        for b in args.features:
+            if b not in CATEGORICAL_BASE_NAMES:
+                bc = resolve_feature_col(b)
+                if bc not in _seen_num:
+                    _seen_num[bc] = True
+                    numeric_bases.append(bc)
+        # Model receives one __delta col per numeric base, plus __1/__2 for cats.
+        _seen_mf: dict = {}
+        model_feature_list: List[str] = []
+        for b in args.features:
+            bc = resolve_feature_col(b)
+            if b in CATEGORICAL_BASE_NAMES:
+                for i in (1, 2):
+                    fc = f'{bc}__{i}'
+                    if fc not in _seen_mf:
+                        _seen_mf[fc] = True
+                        model_feature_list.append(fc)
+            else:
+                fc = f'{bc}__delta'
+                if fc not in _seen_mf:
+                    _seen_mf[fc] = True
+                    model_feature_list.append(fc)
+    else:
+        numeric_bases = []
+        model_feature_list = feature_list
     # Write to a pending folder; renamed to model+score+features at the end.
     output_root  = Path(args.output_root) / 'Predictions' / f'__{args.model}__pending'
     output_root.mkdir(parents=True, exist_ok=True)
@@ -799,14 +961,20 @@ def main():
         parser.error('--norm-years and --norm-all are mutually exclusive.')
     norm_info: dict = None
     if norm_years:
-        num_cols = [c for c in feature_list if c not in cat_col_set]
         df_for_norm = apply_label_encoders(df_all_raw, cat_encoders) if cat_encoders else df_all_raw
-        norm_info = fit_year_scalers(df_for_norm, num_cols)
+        if delta_feats:
+            norm_info = fit_year_scalers_delta(df_for_norm, numeric_bases)
+        else:
+            num_cols = [c for c in feature_list if c not in cat_col_set]
+            norm_info = fit_year_scalers(df_for_norm, num_cols)
         print(f'Normalisation:           per-year Z-score  ({len(norm_info["cols"])} numeric columns)')
     elif norm_all:
-        num_cols = [c for c in feature_list if c not in cat_col_set]
         df_for_norm = apply_label_encoders(df_all_raw, cat_encoders) if cat_encoders else df_all_raw
-        norm_info = fit_global_scaler(df_for_norm, num_cols)
+        if delta_feats:
+            norm_info = fit_global_scaler_delta(df_for_norm, numeric_bases)
+        else:
+            num_cols = [c for c in feature_list if c not in cat_col_set]
+            norm_info = fit_global_scaler(df_for_norm, num_cols)
         print(f'Normalisation:           global Z-score    ({len(norm_info["cols"])} numeric columns)')
     else:
         print(f'Normalisation:           OFF')
@@ -845,13 +1013,18 @@ def main():
             if df_test_year is not None:
                 df_test_year = apply_year_norm(df_test_year, norm_info)
 
-        X_tr = df_train[feature_list]
+        if delta_feats and numeric_bases:
+            df_train = apply_delta_transform(df_train, numeric_bases)
+            if df_test_year is not None:
+                df_test_year = apply_delta_transform(df_test_year, numeric_bases)
+
+        X_tr = df_train[model_feature_list]
         y_tr = df_train['Win__1']
         model = build_and_train_model(args.model, X_tr, y_tr, model_params, calibrate=calibrate)
 
         train_acc = model.score(X_tr, y_tr)
         if not is_current:
-            X_te = df_test_year[feature_list]
+            X_te = df_test_year[model_feature_list]
             y_te = df_test_year['Win__1']
             test_acc = model.score(X_te, y_te)
             print(f'  Model trained on {len(df_train)} rows (excl. {year})')
@@ -883,6 +1056,9 @@ def main():
             feature_list=feature_list,
             cat_encoders=cat_encoders,
             norm_info=norm_info,
+            delta_feats=delta_feats,
+            numeric_bases=numeric_bases,
+            model_feature_list=model_feature_list,
         )
 
         if not is_current:
@@ -925,7 +1101,9 @@ def main():
         df_trad = apply_label_encoders(df_trad, cat_encoders)
     if norm_info is not None:
         df_trad = apply_year_norm(df_trad, norm_info)
-    X_trad, y_trad = df_trad[feature_list], df_trad['Win__1']
+    if delta_feats and numeric_bases:
+        df_trad = apply_delta_transform(df_trad, numeric_bases)
+    X_trad, y_trad = df_trad[model_feature_list], df_trad['Win__1']
     X_tr_t, X_te_t, y_tr_t, y_te_t = train_test_split(X_trad, y_trad, test_size=0.33, random_state=42)
     model_trad = build_and_train_model(args.model, X_tr_t, y_tr_t, model_params, calibrate=calibrate)
     trad_train_acc = model_trad.score(X_tr_t, y_tr_t)
@@ -986,6 +1164,8 @@ def main():
         expert_tag += 'NA'
     if calibrate:
         expert_tag += 'CAL'
+    if delta_feats:
+        expert_tag += 'DF'
     seen_bases: set = set()
     feat_parts: List[str] = []
     for b in args.features:
@@ -1016,15 +1196,20 @@ def main():
             df_full = apply_label_encoders(df_full, cat_encoders)
         if norm_info is not None:
             df_full = apply_year_norm(df_full, norm_info)
-        full_model = build_and_train_model(args.model, df_full[feature_list], df_full['Win__1'], model_params, calibrate=calibrate)
+        if delta_feats and numeric_bases:
+            df_full = apply_delta_transform(df_full, numeric_bases)
+        full_model = build_and_train_model(args.model, df_full[model_feature_list], df_full['Win__1'], model_params, calibrate=calibrate)
 
     pickle_payload = {
-        'model':        full_model,
-        'model_key':    args.model,
-        'model_params': model_params,
-        'feature_list': feature_list,
-        'cat_encoders': cat_encoders,
-        'norm_info':    norm_info,
+        'model':              full_model,
+        'model_key':          args.model,
+        'model_params':       model_params,
+        'feature_list':       feature_list,
+        'model_feature_list': model_feature_list,
+        'cat_encoders':       cat_encoders,
+        'norm_info':          norm_info,
+        'delta_feats':        delta_feats,
+        'numeric_bases':      numeric_bases,
     }
     pickle_path = final_output_root / 'model.pkl'
     with open(pickle_path, 'wb') as fh:
