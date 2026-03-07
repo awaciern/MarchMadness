@@ -32,6 +32,7 @@ PREDICT_SCRIPT   = str(Path(__file__).resolve().parent / 'predict_brackets.py')
 SIMULATE_SCRIPT  = str(Path(__file__).resolve().parent / 'simulate_bracket.py')
 PREDICTIONS_DIR  = REPO_ROOT / 'Predictions'
 SIMULATIONS_DIR  = REPO_ROOT / 'Simulations'
+BRACKETS_DIR     = REPO_ROOT / 'Brackets'
 THIS_YEAR        = 2026
 
 # ---------------------------------------------------------------------------
@@ -812,6 +813,113 @@ def save_bracket():
 
 
 # ---------------------------------------------------------------------------
+# Fill-out-my-bracket routes
+# ---------------------------------------------------------------------------
+
+def _load_round1_matchups(year: int = THIS_YEAR):
+    """Load Round1_<year>.csv and return list of matchup dicts (32 items)."""
+    import csv as _csv
+    csv_path = REPO_ROOT / 'Data' / 'BracketData' / str(year) / f'Round1_{year}.csv'
+    matchups = []
+    if csv_path.exists():
+        with open(csv_path, newline='', encoding='utf-8') as f:
+            reader = _csv.DictReader(f)
+            for i, row in enumerate(reader):
+                matchups.append({
+                    'index':   i,
+                    'region':  i // 8,
+                    'team1':   row.get('Team1', '').strip(),
+                    'seed1':   int(row.get('Team1_Seed', 0) or 0),
+                    'team2':   row.get('Team2', '').strip(),
+                    'seed2':   int(row.get('Team2_Seed', 0) or 0),
+                })
+    return matchups
+
+
+@app.route('/fill_bracket')
+def fill_bracket_route():
+    matchups = _load_round1_matchups(THIS_YEAR)
+    if not matchups:
+        abort(404)
+    return render_template_string(
+        FILL_BRACKET_HTML,
+        year=THIS_YEAR,
+        matchups_json=json.dumps(matchups),
+        region_names_json=json.dumps(REGION_NAMES),
+        region_names=REGION_NAMES,
+    )
+
+
+@app.route('/save_my_bracket', methods=['POST'])
+def save_my_bracket():
+    import datetime
+    data  = request.get_json(force=True)
+    name  = (data.get('name') or '').strip()
+    group = (data.get('group') or '').strip()
+    picks = data.get('picks', {})
+
+    if not name:
+        return jsonify({'error': 'Bracket name is required.'}), 400
+    if not group:
+        return jsonify({'error': 'Group name is required.'}), 400
+
+    safe_name  = re.sub(r'[^\w\-\. ]', '', name).strip().replace(' ', '_')
+    safe_group = re.sub(r'[^\w\-\. ]', '', group).strip().replace(' ', '_')
+    if not safe_name or not safe_group:
+        return jsonify({'error': 'Name or group contains only invalid characters.'}), 400
+
+    out_dir = BRACKETS_DIR / safe_group
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f'{safe_name}.json'
+
+    payload = {
+        'name':    name,
+        'group':   group,
+        'year':    THIS_YEAR,
+        'created': datetime.datetime.now().isoformat(timespec='seconds'),
+        'picks':   picks,
+    }
+    with open(out_path, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, indent=2)
+
+    return jsonify({'saved': True, 'path': str(out_path.relative_to(REPO_ROOT))})
+
+
+@app.route('/api/bracket/<path:group>/<string:filename>')
+def api_bracket(group, filename):
+    fpath = BRACKETS_DIR / group / filename
+    if not fpath.exists() or fpath.suffix != '.json':
+        abort(404)
+    return jsonify(json.loads(fpath.read_text()))
+
+
+@app.route('/my_brackets')
+def my_brackets_route():
+    groups = {}
+    if BRACKETS_DIR.is_dir():
+        for gdir in sorted(BRACKETS_DIR.iterdir()):
+            if not gdir.is_dir():
+                continue
+            brackets = []
+            for f in sorted(gdir.glob('*.json')):
+                try:
+                    b = json.loads(f.read_text())
+                    brackets.append({
+                        'name':     b.get('name', f.stem),
+                        'group':    b.get('group', gdir.name),
+                        'year':     b.get('year', THIS_YEAR),
+                        'created':  b.get('created', ''),
+                        'file':     f.name,
+                        'champion': (b.get('picks') or {}).get('champion') or '',
+                    })
+                except Exception:
+                    pass
+            if brackets:
+                groups[gdir.name] = brackets
+    return render_template_string(MY_BRACKETS_HTML, groups=groups, year=THIS_YEAR)
+
+
+# ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
 
@@ -969,6 +1077,611 @@ button.save-btn:hover { background: #2563eb; }
 </body>
 </html>
 """
+
+# ---------------------------------------------------------------------------
+# Fill-My-Bracket HTML template
+# ---------------------------------------------------------------------------
+
+FILL_BRACKET_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ year }} Bracket Picker</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-height: 100vh;
+  padding: 22px 20px 60px;
+}
+a.back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #64748b; font-size: 12px; text-decoration: none;
+  margin-bottom: 16px; transition: color .15s;
+}
+a.back-link:hover { color: #93c5fd; }
+.page-title { font-size: 20px; color: #fbbf24; margin-bottom: 3px; }
+.page-sub   { color: #64748b; font-size: 12px; margin-bottom: 20px; }
+
+/* ----- meta form ----- */
+.meta-bar {
+  display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;
+  background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+  padding: 14px 18px; margin-bottom: 18px; max-width: 900px;
+}
+.meta-bar .field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 160px; }
+.meta-bar label  { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: #94a3b8; }
+.meta-bar input  {
+  background: #0f172a; border: 1px solid #334155; border-radius: 6px;
+  color: #e2e8f0; padding: 7px 10px; font-size: 13px; outline: none;
+}
+.meta-bar input:focus { border-color: #3b82f6; }
+#save-btn {
+  background: #ca8a04; color: #fefce8; border: none; border-radius: 7px;
+  padding: 9px 22px; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background .15s; white-space: nowrap;
+}
+#save-btn:hover:not(:disabled) { background: #eab308; }
+#save-btn:disabled { opacity: .5; cursor: not-allowed; }
+#save-msg { font-size: 12px; white-space: nowrap; }
+
+/* ----- progress ----- */
+.progress-bar {
+  max-width: 900px; margin-bottom: 18px;
+  display: flex; align-items: center; gap: 10px;
+}
+.prog-track { flex: 1; background: #1e293b; border-radius: 4px; height: 8px; overflow: hidden; border: 1px solid #334155; }
+#prog-fill   { height: 100%; background: linear-gradient(90deg, #ca8a04, #fbbf24); border-radius: 4px; width: 0%; transition: width .2s ease; }
+#prog-text   { font-size: 11px; color: #94a3b8; font-family: monospace; white-space: nowrap; }
+
+/* ----- bracket layout ----- */
+.bracket-outer { max-width: 100%; overflow-x: auto; }
+.region-section { margin-bottom: 22px; }
+.region-heading {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px;
+  color: #94a3b8; margin-bottom: 6px;
+}
+.rounds-row {
+  display: flex; gap: 0; align-items: stretch;
+  border: 1px solid #334155; border-radius: 8px; overflow: hidden;
+}
+
+/* ----- round columns ----- */
+:root { --u: 64px; }
+.round-col { display: flex; flex-direction: column; min-width: 160px; }
+.round-col + .round-col { border-left: 1px solid #1a2744; }
+.round-hdr {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px;
+  color: #475569; background: #1a2744; padding: 5px 10px; text-align: center;
+  border-bottom: 1px solid #1a2744; white-space: nowrap;
+}
+
+/* ----- game cards ----- */
+.game-card {
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 2px; padding: 4px 6px; background: #1e293b; position: relative;
+}
+.game-card + .game-card { border-top: 1px solid #0f172a; }
+
+.r1-card  { height: var(--u); }
+.r2-card  { height: calc(var(--u) * 2); }
+.s16-card { height: calc(var(--u) * 4); }
+.e8-card  { height: calc(var(--u) * 8); flex: 1; }
+
+/* ----- team buttons ----- */
+.team-btn {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 4px;
+  color: #cbd5e1; padding: 5px 8px; font-size: 11px; text-align: left;
+  cursor: pointer; transition: border-color .12s, color .12s, background .12s;
+  overflow: hidden; white-space: nowrap;
+}
+.team-btn:hover:not(:disabled):not(.tbd) { border-color: #3b82f6; color: #93c5fd; background: #1e3a5f; }
+.team-btn.winner { background: #322f1a; border-color: #ca8a04; color: #fbbf24; font-weight: 600; }
+.team-btn.tbd    { color: #334155; border-color: #1e293b; cursor: default; }
+.team-btn:disabled { cursor: default; }
+.team-btn .s {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; border-radius: 3px;
+  background: #0f172a; border: 1px solid #334155;
+  color: #64748b; font-size: 10px; font-weight: 700; flex-shrink: 0;
+}
+.team-btn.winner .s { background: #1a1500; border-color: #78540a; color: #fbbf24; }
+
+/* ----- final four ----- */
+.ff-section {
+  background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+  padding: 18px 20px; max-width: 900px; margin-bottom: 18px;
+}
+.ff-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px;
+  color: #94a3b8; margin-bottom: 14px;
+}
+.ff-games {
+  display: grid; grid-template-columns: 1fr 200px 1fr; gap: 16px; align-items: center;
+}
+.ff-matchup-label {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+  color: #475569; margin-bottom: 6px;
+}
+.ff-card, .champ-card {
+  display: flex; flex-direction: column; gap: 2px;
+  background: #0f172a; border-radius: 6px; padding: 6px;
+}
+.champ-col { text-align: center; }
+.champ-col .ff-matchup-label { color: #ca8a04; justify-content: center; display: flex; }
+.champ-display {
+  margin-top: 10px; padding: 8px 12px; background: #1a1500;
+  border: 1px solid #ca8a04; border-radius: 6px; text-align: center;
+  font-size: 13px; font-weight: 700; color: #fbbf24;
+}
+
+/* ----- links bar ----- */
+.links-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.nav-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #1e293b; border: 1px solid #334155; border-radius: 7px;
+  padding: 6px 14px; font-size: 12px; color: #93c5fd; text-decoration: none;
+  transition: border-color .15s;
+}
+.nav-link:hover { border-color: #3b82f6; }
+</style>
+</head>
+<body>
+
+<a href="/" class="back-link">&#8592; Back to Predictor</a>
+<div class="links-bar">
+  <a href="/my_brackets" class="nav-link">&#128196; Browse Saved Brackets</a>
+</div>
+<h1 class="page-title">&#127944; {{ year }} Bracket Picker</h1>
+<p class="page-sub">Click a team name to advance them. When complete, give your bracket a name and group, then save.</p>
+
+<!-- Meta bar -->
+<div class="meta-bar" id="meta-form">
+  <div class="field">
+    <label for="bracket-name">Bracket Name</label>
+    <input type="text" id="bracket-name" placeholder="e.g. My Bracket">
+  </div>
+  <div class="field">
+    <label for="bracket-group">Group</label>
+    <input type="text" id="bracket-group" placeholder="e.g. Friends">
+  </div>
+  <button id="save-btn" onclick="saveBracket()">&#128190; Save Bracket</button>
+  <span id="save-msg"></span>
+</div>
+
+<!-- Progress -->
+<div class="progress-bar">
+  <span id="prog-text">0 / 63 picks</span>
+  <div class="prog-track"><div id="prog-fill"></div></div>
+</div>
+
+<!-- Bracket -->
+<div class="bracket-outer">
+
+  {% for r in range(4) %}
+  <div class="region-section">
+    <div class="region-heading">{{ region_names[r] }}</div>
+    <div class="rounds-row">
+      <!-- Round 1 -->
+      <div class="round-col">
+        <div class="round-hdr">Round 1</div>
+        {% for g in range(8) %}
+        {% set gi = r*8 + g %}
+        <div class="game-card r1-card">
+          <button class="team-btn" id="btn-r1-{{ gi }}-0" onclick="makePick('r1',{{ gi }},0)"></button>
+          <button class="team-btn" id="btn-r1-{{ gi }}-1" onclick="makePick('r1',{{ gi }},1)"></button>
+        </div>
+        {% endfor %}
+      </div>
+      <!-- Round 2 -->
+      <div class="round-col">
+        <div class="round-hdr">Round 2</div>
+        {% for g in range(4) %}
+        {% set gi = r*4 + g %}
+        <div class="game-card r2-card">
+          <button class="team-btn tbd" id="btn-r2-{{ gi }}-0" onclick="makePick('r2',{{ gi }},0)" disabled>TBD</button>
+          <button class="team-btn tbd" id="btn-r2-{{ gi }}-1" onclick="makePick('r2',{{ gi }},1)" disabled>TBD</button>
+        </div>
+        {% endfor %}
+      </div>
+      <!-- Sweet 16 -->
+      <div class="round-col">
+        <div class="round-hdr">Sweet 16</div>
+        {% for g in range(2) %}
+        {% set gi = r*2 + g %}
+        <div class="game-card s16-card">
+          <button class="team-btn tbd" id="btn-s16-{{ gi }}-0" onclick="makePick('s16',{{ gi }},0)" disabled>TBD</button>
+          <button class="team-btn tbd" id="btn-s16-{{ gi }}-1" onclick="makePick('s16',{{ gi }},1)" disabled>TBD</button>
+        </div>
+        {% endfor %}
+      </div>
+      <!-- Elite 8 -->
+      <div class="round-col">
+        <div class="round-hdr">Elite 8</div>
+        <div class="game-card e8-card">
+          <button class="team-btn tbd" id="btn-e8-{{ r }}-0" onclick="makePick('e8',{{ r }},0)" disabled>TBD</button>
+          <button class="team-btn tbd" id="btn-e8-{{ r }}-1" onclick="makePick('e8',{{ r }},1)" disabled>TBD</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Final Four + Championship -->
+  <div class="ff-section">
+    <div class="ff-title">&#127952; Final Four &amp; Championship</div>
+    <div class="ff-games">
+      <!-- Semi 0: South vs West -->
+      <div>
+        <div class="ff-matchup-label">South vs West</div>
+        <div class="ff-card">
+          <button class="team-btn tbd" id="btn-semi-0-0" onclick="makePick('semi',0,0)" disabled>TBD</button>
+          <button class="team-btn tbd" id="btn-semi-0-1" onclick="makePick('semi',0,1)" disabled>TBD</button>
+        </div>
+      </div>
+      <!-- Championship -->
+      <div class="champ-col">
+        <div class="ff-matchup-label">&#127942; Championship</div>
+        <div class="champ-card">
+          <button class="team-btn tbd" id="btn-champ-0-0" onclick="makePick('champ',0,0)" disabled>TBD</button>
+          <button class="team-btn tbd" id="btn-champ-0-1" onclick="makePick('champ',0,1)" disabled>TBD</button>
+        </div>
+        <div id="champion-display" class="champ-display" style="display:none"></div>
+      </div>
+      <!-- Semi 1: East vs Midwest -->
+      <div>
+        <div class="ff-matchup-label">East vs Midwest</div>
+        <div class="ff-card">
+          <button class="team-btn tbd" id="btn-semi-1-0" onclick="makePick('semi',1,0)" disabled>TBD</button>
+          <button class="team-btn tbd" id="btn-semi-1-1" onclick="makePick('semi',1,1)" disabled>TBD</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- bracket-outer -->
+
+<script>
+const R1          = {{ matchups_json | safe }};
+const REGIONS     = {{ region_names_json | safe }};
+const FF_PAIRINGS = [[0, 3], [1, 2]]; // South vs West, East vs Midwest
+
+// ---- state ----
+const state = {
+  r1:   new Array(32).fill(null),
+  r2:   new Array(16).fill(null),
+  s16:  new Array(8).fill(null),
+  e8:   new Array(4).fill(null),
+  semi: new Array(2).fill(null),
+  champ: null,
+};
+
+// ---- seed lookup ----
+const seedOf = {};
+R1.forEach(m => { seedOf[m.team1] = m.seed1; seedOf[m.team2] = m.seed2; });
+
+// ---- routing helpers ----
+function feedsInto(level, gameIdx) {
+  if (level === 'r1')  return { level: 'r2',   gameIdx: Math.floor(gameIdx / 2) };
+  if (level === 'r2')  return { level: 's16',  gameIdx: Math.floor(gameIdx / 2) };
+  if (level === 's16') return { level: 'e8',   gameIdx: Math.floor(gameIdx / 2) };
+  if (level === 'e8') {
+    if (gameIdx === 0 || gameIdx === 3) return { level: 'semi', gameIdx: 0 };
+    if (gameIdx === 1 || gameIdx === 2) return { level: 'semi', gameIdx: 1 };
+  }
+  if (level === 'semi') return { level: 'champ', gameIdx: 0 };
+  return null;
+}
+
+function clearDownstream(level, gameIdx) {
+  const next = feedsInto(level, gameIdx);
+  if (!next) return;
+  if (next.level === 'champ') { state.champ = null; }
+  else { state[next.level][next.gameIdx] = null; }
+  clearDownstream(next.level, next.gameIdx);
+}
+
+// ---- pick ----
+function makePick(level, gameIdx, slot) {
+  let teamName;
+  if (level === 'r1') {
+    const m = R1[gameIdx];
+    teamName = slot === 0 ? m.team1 : m.team2;
+  } else {
+    const btn = document.getElementById('btn-' + level + '-' + gameIdx + '-' + slot);
+    if (!btn || btn.disabled || !btn.dataset.team) return;
+    teamName = btn.dataset.team;
+  }
+  const prev = level === 'champ' ? state.champ : state[level][gameIdx];
+  if (prev === teamName) return;
+  if (level === 'champ') state.champ = teamName;
+  else state[level][gameIdx] = teamName;
+  clearDownstream(level, gameIdx);
+  renderAll();
+}
+
+// ---- which team occupies a slot in a game ----
+function getTeamForSlot(level, gameIdx, slot) {
+  if (level === 'r1') {
+    const m = R1[gameIdx];
+    return slot === 0 ? { team: m.team1, seed: m.seed1 }
+                      : { team: m.team2, seed: m.seed2 };
+  }
+  let prevLevel, prevGameIdx;
+  switch (level) {
+    case 'r2':   prevLevel = 'r1';   prevGameIdx = gameIdx * 2 + slot; break;
+    case 's16':  prevLevel = 'r2';   prevGameIdx = gameIdx * 2 + slot; break;
+    case 'e8':   prevLevel = 's16';  prevGameIdx = gameIdx * 2 + slot; break;
+    case 'semi': prevLevel = 'e8';   prevGameIdx = FF_PAIRINGS[gameIdx][slot]; break;
+    case 'champ':prevLevel = 'semi'; prevGameIdx = slot; break;
+    default: return { team: null, seed: null };
+  }
+  const winner = state[prevLevel][prevGameIdx];
+  return { team: winner || null, seed: winner ? (seedOf[winner] || '') : null };
+}
+
+// ---- render ----
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderBtn(btn, team, seed, winner) {
+  if (team) {
+    btn.disabled = false;
+    btn.classList.remove('tbd');
+    btn.dataset.team = team;
+    btn.innerHTML = '<span class="s">' + escHtml(seed || '') + '</span> ' + escHtml(team);
+    btn.classList.toggle('winner', winner === team);
+  } else {
+    btn.disabled = true;
+    btn.classList.add('tbd');
+    btn.classList.remove('winner');
+    btn.dataset.team = '';
+    btn.innerHTML = 'TBD';
+  }
+}
+
+function renderGame(level, gameIdx) {
+  const winner = level === 'champ' ? state.champ : state[level][gameIdx];
+  for (let slot = 0; slot < 2; slot++) {
+    const btn = document.getElementById('btn-' + level + '-' + gameIdx + '-' + slot);
+    if (!btn) continue;
+    const { team, seed } = getTeamForSlot(level, gameIdx, slot);
+    renderBtn(btn, team, seed, winner);
+  }
+}
+
+function renderAll() {
+  // R1 — just toggle winner class
+  for (let i = 0; i < 32; i++) {
+    const winner = state.r1[i];
+    for (let s = 0; s < 2; s++) {
+      const btn = document.getElementById('btn-r1-' + i + '-' + s);
+      if (!btn) continue;
+      const m = R1[i];
+      const team = s === 0 ? m.team1 : m.team2;
+      btn.classList.toggle('winner', winner === team);
+    }
+  }
+  // All other levels
+  const levelsAndCounts = [['r2',16],['s16',8],['e8',4],['semi',2],['champ',1]];
+  for (const [lv, cnt] of levelsAndCounts) {
+    for (let g = 0; g < cnt; g++) renderGame(lv, g);
+  }
+  // Champion display
+  const cd = document.getElementById('champion-display');
+  if (state.champ) {
+    cd.textContent = '\u{1F3C6} ' + state.champ;
+    cd.style.display = '';
+  } else {
+    cd.style.display = 'none';
+  }
+  updateProgress();
+}
+
+function updateProgress() {
+  let done = 0;
+  state.r1.forEach(v => v && done++);
+  state.r2.forEach(v => v && done++);
+  state.s16.forEach(v => v && done++);
+  state.e8.forEach(v => v && done++);
+  state.semi.forEach(v => v && done++);
+  if (state.champ) done++;
+  const pct = Math.round(done / 63 * 100);
+  document.getElementById('prog-text').textContent = done + ' / 63 picks';
+  document.getElementById('prog-fill').style.width = pct + '%';
+}
+
+// ---- save ----
+function saveBracket() {
+  const name  = document.getElementById('bracket-name').value.trim();
+  const group = document.getElementById('bracket-group').value.trim();
+  if (!name)  { alert('Enter a bracket name.'); return; }
+  if (!group) { alert('Enter a group name.'); return; }
+  if (!state.champ && !confirm('Your bracket is not complete. Save anyway?')) return;
+
+  const btn = document.getElementById('save-btn');
+  const msg = document.getElementById('save-msg');
+  btn.disabled = true;
+  msg.style.color = '#94a3b8';
+  msg.textContent = 'Saving\u2026';
+
+  fetch('/save_my_bracket', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name, group,
+      picks: {
+        r1:       [...state.r1],
+        r2:       [...state.r2],
+        s16:      [...state.s16],
+        e8:       [...state.e8],
+        semi:     [...state.semi],
+        champion: state.champ,
+      },
+    }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.disabled = false;
+    if (data.error) {
+      msg.style.color = '#f87171';
+      msg.textContent = '\u26a0 ' + data.error;
+    } else {
+      msg.style.color = '#4ade80';
+      msg.textContent = '\u2713 Saved to ' + data.path;
+    }
+  })
+  .catch(() => {
+    btn.disabled = false;
+    msg.style.color = '#f87171';
+    msg.textContent = '\u26a0 Failed to save.';
+  });
+}
+
+// ---- load saved picks (called from view bracket page) ----
+function loadPicks(picks) {
+  if (!picks) return;
+  ['r1','r2','s16','e8'].forEach(lv => {
+    (picks[lv] || []).forEach((v, i) => { if (i < state[lv].length) state[lv][i] = v; });
+  });
+  (picks.semi || []).forEach((v, i) => { if (i < 2) state.semi[i] = v; });
+  state.champ = picks.champion || null;
+}
+
+// ---- initialise R1 buttons with team names from JSON ----
+(function init() {
+  R1.forEach((m, i) => {
+    const b0 = document.getElementById('btn-r1-' + i + '-0');
+    const b1 = document.getElementById('btn-r1-' + i + '-1');
+    if (b0) { b0.innerHTML = '<span class="s">' + m.seed1 + '</span> ' + escHtml(m.team1); b0.dataset.team = m.team1; }
+    if (b1) { b1.innerHTML = '<span class="s">' + m.seed2 + '</span> ' + escHtml(m.team2); b1.dataset.team = m.team2; }
+  });
+
+  // Pre-load if ?load=<group>/<file> param present
+  const params = new URLSearchParams(window.location.search);
+  const loadPath = params.get('load');
+  if (loadPath) {
+    const bname = params.get('bname') || '';
+    const bgrp  = params.get('bgrp')  || '';
+    if (bname) document.getElementById('bracket-name').value = bname;
+    if (bgrp)  document.getElementById('bracket-group').value = bgrp;
+
+    fetch('/api/bracket/' + encodeURIComponent(loadPath))
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        document.getElementById('bracket-name').value  = data.name  || '';
+        document.getElementById('bracket-group').value = data.group || '';
+        loadPicks(data.picks);
+        renderAll();
+      });
+  }
+
+  updateProgress();
+})();
+</script>
+</body>
+</html>
+"""
+
+
+# ---------------------------------------------------------------------------
+# My-Brackets HTML template
+# ---------------------------------------------------------------------------
+
+MY_BRACKETS_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My Brackets</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-height: 100vh;
+  padding: 26px 24px 60px;
+}
+a.back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #64748b; font-size: 12px; text-decoration: none;
+  margin-bottom: 18px; transition: color .15s;
+}
+a.back-link:hover { color: #93c5fd; }
+h1 { font-size: 20px; color: #fbbf24; margin-bottom: 4px; }
+.subtitle { color: #64748b; font-size: 13px; margin-bottom: 22px; }
+.new-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #ca8a04; color: #1a1000; border-radius: 7px;
+  padding: 8px 18px; font-size: 13px; font-weight: 700;
+  text-decoration: none; margin-bottom: 24px; transition: background .15s;
+}
+.new-link:hover { background: #eab308; }
+
+.group-section { margin-bottom: 28px; }
+.group-name {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px;
+  color: #94a3b8; margin-bottom: 8px;
+  border-bottom: 1px solid #334155; padding-bottom: 4px;
+}
+.bracket-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.bracket-card {
+  background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+  padding: 14px 16px; min-width: 200px; max-width: 260px;
+  text-decoration: none; color: inherit; transition: border-color .15s;
+  display: block;
+}
+.bracket-card:hover { border-color: #3b82f6; }
+.b-name { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+.b-champ {
+  font-size: 12px; color: #fbbf24; margin-bottom: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.b-meta { font-size: 10px; color: #475569; }
+
+.empty { color: #475569; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<a href="/" class="back-link">&#8592; Back to Predictor</a>
+<h1>&#128196; My Brackets</h1>
+<p class="subtitle">All saved brackets, grouped by group name. Click a bracket to view or edit it.</p>
+<a href="/fill_bracket" class="new-link">&#43; New Bracket</a>
+
+{% if not groups %}
+<p class="empty">No saved brackets yet. <a href="/fill_bracket" style="color:#93c5fd">Fill out your first bracket!</a></p>
+{% endif %}
+
+{% for group_key, brackets in groups.items() %}
+<div class="group-section">
+  <div class="group-name">{{ brackets[0].group }}</div>
+  <div class="bracket-grid">
+    {% for b in brackets %}
+    <a class="bracket-card"
+       href="/fill_bracket?load={{ group_key }}/{{ b.file }}&bname={{ b.name | urlencode }}&bgrp={{ b.group | urlencode }}">
+      <div class="b-name">{{ b.name }}</div>
+      {% if b.champion %}
+      <div class="b-champ">&#127942; {{ b.champion }}</div>
+      {% else %}
+      <div class="b-champ" style="color:#475569">&#8212; Incomplete</div>
+      {% endif %}
+      <div class="b-meta">{{ b.year }} &middot; {{ b.created[:10] if b.created else '' }}</div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+
+</body>
+</html>
+"""
+
 
 INDEX_HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -1288,7 +2001,11 @@ label.feat-chip[title] { cursor: help; }
 
 <h1>&#127936; March Madness Bracket Predictor</h1>
 <p class="subtitle">Configure a model below, then run the evaluation across all historical years (2012–2025) plus a {{ THIS_YEAR }} prediction.</p>
-<a href="/bracket_input" style="display:inline-flex;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 14px;font-size:12px;color:#93c5fd;text-decoration:none;margin-bottom:20px;transition:border-color .15s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#334155'">&#127942; Set Up {{ THIS_YEAR }} Bracket</a>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+<a href="/bracket_input" style="display:inline-flex;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 14px;font-size:12px;color:#93c5fd;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#334155'">&#127942; Set Up {{ THIS_YEAR }} Bracket</a>
+<a href="/fill_bracket" style="display:inline-flex;align-items:center;gap:6px;background:#1a1500;border:1px solid #78540a;border-radius:7px;padding:6px 14px;font-size:12px;color:#fbbf24;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#ca8a04'" onmouseout="this.style.borderColor='#78540a'">&#127944; Fill Out My Bracket</a>
+<a href="/my_brackets" style="display:inline-flex;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 14px;font-size:12px;color:#93c5fd;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#334155'">&#128196; My Brackets</a>
+</div>
 
 <!-- ===== SAVED MODELS ===== -->
 <div class="panel-card saved-section">
