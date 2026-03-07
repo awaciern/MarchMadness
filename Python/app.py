@@ -437,6 +437,7 @@ def run_prediction():
         '--model', model,
         '--features', *features,
         '--this-year', str(THIS_YEAR),
+        '--final-four-pairings', '0-3,1-2',
     ]
     if params:
         cmd += ['--model-params'] + params.split()
