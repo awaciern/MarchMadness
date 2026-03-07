@@ -46,8 +46,12 @@ from predict_brackets import (
     load_bracket_round,
     load_kenpom,
     load_barttorvik,
+    load_barttorvik_2week,
+    load_barttorvik_hotness,
     attach_kenpom,
     attach_barttorvik,
+    attach_barttorvik_2week,
+    attach_barttorvik_hotness,
     apply_label_encoders,
     apply_year_norm_single,
     apply_delta_transform,
@@ -133,13 +137,17 @@ def _simulate_one(
     r1_teams2: list,
     r1_proba: np.ndarray,
     df_kp: pd.DataFrame,
-    df_bt,                  # pd.DataFrame or None
+    df_bt,                   # pd.DataFrame or None
+    df_bt2w,                 # pd.DataFrame or None
+    df_hot,                  # pd.DataFrame or None
     feature_list: list,
     cat_encoders: dict,
     team_seed_map: dict,
     ff_pairings: list,
     needs_bt: bool,
-    draws_r1: np.ndarray,   # pre-drawn randoms for round 1
+    needs_bt2w: bool,
+    needs_bthot: bool,
+    draws_r1: np.ndarray,    # pre-drawn randoms for round 1
     rng: np.random.Generator,
     norm_info=None,
     year: int = None,
@@ -181,6 +189,10 @@ def _simulate_one(
             df_rnd = attach_kenpom(df_match, df_kp)
             if needs_bt and df_bt is not None:
                 df_rnd = attach_barttorvik(df_rnd, df_bt)
+            if needs_bt2w and df_bt2w is not None:
+                df_rnd = attach_barttorvik_2week(df_rnd, df_bt2w)
+            if needs_bthot and df_hot is not None:
+                df_rnd = attach_barttorvik_hotness(df_rnd, df_hot)
             df_rnd['Seed__1'] = df_rnd['Team__1'].map(team_seed_map)
             df_rnd['Seed__2'] = df_rnd['Team__2'].map(team_seed_map)
 
@@ -229,7 +241,9 @@ def run_simulations(
         numeric_bases = []
     if model_feature_list is None:
         model_feature_list = feature_list
-    needs_bt = any(f.startswith('BT__') for f in feature_list)
+    needs_bt    = any(f.startswith('BT__')    for f in feature_list)
+    needs_bt2w  = any(f.startswith('BT2W__')  for f in feature_list)
+    needs_bthot = any(f.startswith('BTHOT__') for f in feature_list)
 
     # --- Load fixed data --------------------------------------------------
     r1_df_raw = load_bracket_round(data_root, year, 1)
@@ -249,12 +263,18 @@ def run_simulations(
 
     # Pre-load stat files once
     df_kp = load_kenpom(data_root, year)
-    df_bt = load_barttorvik(data_root, year) if needs_bt else None
+    df_bt   = load_barttorvik(data_root, year)   if needs_bt    else None
+    df_bt2w = load_barttorvik_2week(data_root, year)   if needs_bt2w  else None
+    df_hot  = load_barttorvik_hotness(data_root, year) if needs_bthot else None
 
     # Pre-compute Round 1 feature matrix & probabilities (matchups are fixed)
     df_r1_kp = attach_kenpom(r1_df_raw[['Team__1', 'Team__2']].copy(), df_kp)
     if needs_bt and df_bt is not None:
         df_r1_kp = attach_barttorvik(df_r1_kp, df_bt)
+    if needs_bt2w and df_bt2w is not None:
+        df_r1_kp = attach_barttorvik_2week(df_r1_kp, df_bt2w)
+    if needs_bthot and df_hot is not None:
+        df_r1_kp = attach_barttorvik_hotness(df_r1_kp, df_hot)
     df_r1_kp['Seed__1'] = df_r1_kp['Team__1'].map(team_seed_map)
     df_r1_kp['Seed__2'] = df_r1_kp['Team__2'].map(team_seed_map)
 
@@ -293,8 +313,11 @@ def run_simulations(
         draws_r1 = rng.random(len(r1_teams1))
         sim = _simulate_one(
             model, r1_teams1, r1_teams2, r1_proba,
-            df_kp, df_bt, feature_list, cat_encoders,
-            team_seed_map, ff_pairings, needs_bt, draws_r1, rng,
+            df_kp, df_bt, df_bt2w, df_hot,
+            feature_list, cat_encoders,
+            team_seed_map, ff_pairings,
+            needs_bt, needs_bt2w, needs_bthot,
+            draws_r1, rng,
             norm_info=norm_info,
             year=year,
             delta_feats=delta_feats,

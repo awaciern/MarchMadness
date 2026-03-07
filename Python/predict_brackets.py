@@ -30,6 +30,7 @@ import shutil
 from pathlib import Path
 from typing import List, Tuple
 
+import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
@@ -294,49 +295,67 @@ def fit_global_scaler(df: pd.DataFrame, num_cols: List[str]) -> dict:
 
 def fit_year_scalers_delta(df: pd.DataFrame, numeric_bases: List[str]) -> dict:
     """
-    Fit a StandardScaler per year using the combined distribution of __1 and __2
-    columns for each numeric base (delta mode).
-
-    The scaler for each year is fitted on a stacked DataFrame where __1 and __2
-    values are concatenated so that both populations inform the scaling.
-
-    norm_info['cols']     — the base column names (no __1/__2 suffix)
-    norm_info['is_delta'] — True, signals delta-aware apply helpers
+    Fit per-year scalers for delta-feature mode.
+    Each base gets ONE scaler fitted on the stacked __1 + __2 values so
+    both columns share identical scaling before the delta is computed.
+    norm_info format:  {'by_year': {year: {base: scaler}},
+                        'fallback': {base: scaler},
+                        'cols': numeric_bases,
+                        'is_delta': True}
     """
-    avail = [b for b in numeric_bases
-             if f'{b}__1' in df.columns and f'{b}__2' in df.columns]
-    if not avail:
-        return {'by_year': {}, 'fallback': None, 'cols': [], 'is_delta': True}
     by_year: dict = {}
+    all_stacked: dict = {base: [] for base in numeric_bases}
+
     for year, grp in df.groupby('Year'):
-        part1 = grp[[f'{b}__1' for b in avail]].rename(columns={f'{b}__1': b for b in avail})
-        part2 = grp[[f'{b}__2' for b in avail]].rename(columns={f'{b}__2': b for b in avail})
-        stacked = pd.concat([part1, part2], axis=0, ignore_index=True)
-        sc = StandardScaler()
-        sc.fit(stacked)
-        by_year[year] = sc
-    # Fallback: stack over all years.
-    all1 = df[[f'{b}__1' for b in avail]].rename(columns={f'{b}__1': b for b in avail})
-    all2 = df[[f'{b}__2' for b in avail]].rename(columns={f'{b}__2': b for b in avail})
-    fallback = StandardScaler()
-    fallback.fit(pd.concat([all1, all2], axis=0, ignore_index=True))
-    return {'by_year': by_year, 'fallback': fallback, 'cols': avail, 'is_delta': True}
+        scalers: dict = {}
+        for base in numeric_bases:
+            c1 = f'{base}__1'
+            c2 = f'{base}__2'
+            vals = pd.concat([
+                grp[c1].dropna() if c1 in grp.columns else pd.Series(dtype=float),
+                grp[c2].dropna() if c2 in grp.columns else pd.Series(dtype=float),
+            ]).values.reshape(-1, 1)
+            if len(vals) == 0:
+                scalers[base] = None
+                continue
+            sc = StandardScaler().fit(vals)
+            scalers[base] = sc
+            all_stacked[base].append(vals)
+        by_year[year] = scalers
+
+    # Global fallback scaler (all years stacked)
+    fallback: dict = {}
+    for base in numeric_bases:
+        parts = all_stacked[base]
+        if not parts:
+            fallback[base] = None
+            continue
+        vals = np.vstack(parts)
+        fallback[base] = StandardScaler().fit(vals)
+
+    return {'by_year': by_year, 'fallback': fallback,
+            'cols': numeric_bases, 'is_delta': True}
 
 
 def fit_global_scaler_delta(df: pd.DataFrame, numeric_bases: List[str]) -> dict:
     """
-    Fit a single global StandardScaler using the combined distribution of __1
-    and __2 columns for each numeric base (delta / --norm-all counterpart).
+    Fit a single global scaler for delta-feature mode (--norm-all --delta-feats).
+    One scaler per base, fitted on all years' stacked __1 + __2 values.
     """
-    avail = [b for b in numeric_bases
-             if f'{b}__1' in df.columns and f'{b}__2' in df.columns]
-    if not avail:
-        return {'by_year': {}, 'fallback': None, 'cols': [], 'is_delta': True}
-    all1 = df[[f'{b}__1' for b in avail]].rename(columns={f'{b}__1': b for b in avail})
-    all2 = df[[f'{b}__2' for b in avail]].rename(columns={f'{b}__2': b for b in avail})
-    sc = StandardScaler()
-    sc.fit(pd.concat([all1, all2], axis=0, ignore_index=True))
-    return {'by_year': {}, 'fallback': sc, 'cols': avail, 'is_delta': True}
+    fallback: dict = {}
+    for base in numeric_bases:
+        c1 = f'{base}__1'
+        c2 = f'{base}__2'
+        vals = pd.concat([
+            df[c1].dropna() if c1 in df.columns else pd.Series(dtype=float),
+            df[c2].dropna() if c2 in df.columns else pd.Series(dtype=float),
+        ]).values.reshape(-1, 1)
+        if len(vals) == 0:
+            fallback[base] = None
+            continue
+        fallback[base] = StandardScaler().fit(vals)
+    return {'by_year': {}, 'fallback': fallback,
+            'cols': numeric_bases, 'is_delta': True}
 
 
 def apply_delta_transform(df: pd.DataFrame, numeric_bases: List[str]) -> pd.DataFrame:
@@ -356,86 +375,126 @@ def apply_delta_transform(df: pd.DataFrame, numeric_bases: List[str]) -> pd.Data
     return df
 
 
-def apply_year_norm(df: pd.DataFrame, norm_info: dict) -> pd.DataFrame:
+def mirror_augment(df: pd.DataFrame, model_feature_list: List[str]) -> pd.DataFrame:
     """
-    Apply per-year Z-score normalisation to a DataFrame that contains a 'Year'
-    column.  Each row is scaled by the scaler fitted for its year.
+    Append a mirrored copy of every row to balance the training set.
 
-    In delta mode (norm_info['is_delta'] == True) the scaler expects base column
-    names (no __1/__2 suffix); both __1 and __2 columns are transformed using the
-    same scaler so their scales match before the delta is computed.
+    For delta-feature mode: a mirrored row negates all ``__delta`` columns
+    (team2 perspective) and swaps any remaining ``base__1``/``base__2``
+    categorical pair columns, then flips ``Win__1``.
+
+    This guarantees exactly 50/50 Win__1 class balance → intercept ≈ 0 and
+    forces the model to learn correctly-signed coefficients (positive delta =
+    team1 has better stats = team1 more likely to win).
+
+    Works on the *post-transformation* DataFrame (after label-encoding,
+    normalisation, and delta transform).  Only columns in model_feature_list
+    plus ``Win__1`` and ``Year`` are relevant; all other columns are copied
+    as-is for the mirrored rows.
     """
-    if norm_info is None:
-        return df
+    mirror = df.copy()
+
+    # Negate all delta columns present in the feature list.
+    delta_cols = [c for c in model_feature_list if c.endswith('__delta') and c in mirror.columns]
+    for c in delta_cols:
+        mirror[c] = -mirror[c]
+
+    # Swap any remaining __1 / __2 categorical column pairs present in the feature list.
+    feat_set = set(model_feature_list)
+    swapped: set = set()
+    for c in model_feature_list:
+        if c.endswith('__1') and c not in swapped:
+            base = c[:-3]
+            c2 = f'{base}__2'
+            if c2 in feat_set and c in mirror.columns and c2 in mirror.columns:
+                mirror[c], mirror[c2] = mirror[c2].copy(), mirror[c].copy()
+                swapped.add(c)
+                swapped.add(c2)
+
+    # Flip the target label.
+    if 'Win__1' in mirror.columns:
+        mirror['Win__1'] = ~mirror['Win__1']
+
+    return pd.concat([df, mirror], ignore_index=True)
+
+
+def apply_year_norm(df: pd.DataFrame, norm_info: dict) -> pd.DataFrame:
+    """Apply per-year normalisation in-place (training/batch path)."""
+    by_year  = norm_info['by_year']
+    fallback = norm_info['fallback']
     is_delta = norm_info.get('is_delta', False)
-    cols = norm_info['cols']
-    if not cols:
-        return df
     df = df.copy()
+
     if is_delta:
-        avail = [b for b in cols if f'{b}__1' in df.columns and f'{b}__2' in df.columns]
-        if not avail:
-            return df
-        for year, grp in df.groupby('Year'):
-            sc = norm_info['by_year'].get(year, norm_info['fallback'])
-            if sc is None:
-                continue
-            sub1 = grp[[f'{b}__1' for b in avail]].rename(columns={f'{b}__1': b for b in avail})
-            scaled1 = pd.DataFrame(sc.transform(sub1), columns=avail, index=grp.index)
-            for b in avail:
-                df.loc[grp.index, f'{b}__1'] = scaled1[b].values
-            sub2 = grp[[f'{b}__2' for b in avail]].rename(columns={f'{b}__2': b for b in avail})
-            scaled2 = pd.DataFrame(sc.transform(sub2), columns=avail, index=grp.index)
-            for b in avail:
-                df.loc[grp.index, f'{b}__2'] = scaled2[b].values
+        numeric_bases = norm_info['cols']
+        for year, grp_idx in df.groupby('Year').groups.items():
+            scalers = by_year.get(year, fallback)
+            for base in numeric_bases:
+                sc = scalers.get(base) if isinstance(scalers, dict) else None
+                if sc is None:
+                    sc = fallback.get(base) if isinstance(fallback, dict) else None
+                if sc is None:
+                    continue
+                c1, c2 = f'{base}__1', f'{base}__2'
+                if c1 in df.columns:
+                    df.loc[grp_idx, c1] = sc.transform(
+                        df.loc[grp_idx, c1].values.reshape(-1, 1)).ravel()
+                if c2 in df.columns:
+                    df.loc[grp_idx, c2] = sc.transform(
+                        df.loc[grp_idx, c2].values.reshape(-1, 1)).ravel()
     else:
-        avail = [c for c in cols if c in df.columns]
-        if not avail:
-            return df
-        for year, grp in df.groupby('Year'):
-            sc = norm_info['by_year'].get(year, norm_info['fallback'])
+        num_cols = norm_info['cols']
+        for year, grp_idx in df.groupby('Year').groups.items():
+            sc = by_year.get(year, fallback)
             if sc is None:
                 continue
-            df.loc[grp.index, avail] = sc.transform(grp[avail])
+            present = [c for c in num_cols if c in df.columns]
+            if not present:
+                continue
+            df.loc[grp_idx, present] = sc.transform(df.loc[grp_idx, present])
     return df
 
 
 def apply_year_norm_single(df: pd.DataFrame, year: int, norm_info: dict) -> pd.DataFrame:
     """
-    Apply the normalisation scaler for a single known *year* to a DataFrame
-    that does NOT have a 'Year' column (e.g. per-round bracket data).
-
-    In delta mode, both __1 and __2 are transformed using the same scaler.
+    Apply normalisation to a single-year DataFrame (simulation / bracket path).
+    Works for both standard and delta-feature norm_info.
     """
-    if norm_info is None:
-        return df
+    by_year  = norm_info['by_year']
+    fallback = norm_info['fallback']
     is_delta = norm_info.get('is_delta', False)
-    cols = norm_info['cols']
-    if not cols:
-        return df
-    sc = norm_info['by_year'].get(year, norm_info['fallback'])
-    if sc is None:
-        return df
     df = df.copy()
+
     if is_delta:
-        avail = [b for b in cols if f'{b}__1' in df.columns and f'{b}__2' in df.columns]
-        if not avail:
-            return df
-        sub1 = df[[f'{b}__1' for b in avail]].rename(columns={f'{b}__1': b for b in avail})
-        scaled1 = pd.DataFrame(sc.transform(sub1), columns=avail, index=df.index)
-        for b in avail:
-            df[f'{b}__1'] = scaled1[b].values
-        sub2 = df[[f'{b}__2' for b in avail]].rename(columns={f'{b}__2': b for b in avail})
-        scaled2 = pd.DataFrame(sc.transform(sub2), columns=avail, index=df.index)
-        for b in avail:
-            df[f'{b}__2'] = scaled2[b].values
+        numeric_bases = norm_info['cols']
+        scalers = by_year.get(year, fallback)
+        for base in numeric_bases:
+            sc = scalers.get(base) if isinstance(scalers, dict) else None
+            if sc is None:
+                sc = fallback.get(base) if isinstance(fallback, dict) else None
+            if sc is None:
+                continue
+            c1, c2 = f'{base}__1', f'{base}__2'
+            if c1 in df.columns:
+                df[c1] = sc.transform(df[c1].values.reshape(-1, 1)).ravel()
+            if c2 in df.columns:
+                df[c2] = sc.transform(df[c2].values.reshape(-1, 1)).ravel()
     else:
-        avail = [c for c in cols if c in df.columns]
-        if not avail:
+        num_cols = norm_info['cols']
+        sc = by_year.get(year)
+        if sc is None:
+            sc = fallback if not isinstance(fallback, dict) else fallback.get(year)
+        if sc is None:
             return df
-        df[avail] = sc.transform(df[avail])
+        present = [c for c in num_cols if c in df.columns]
+        if present:
+            df[present] = sc.transform(df[present])
     return df
 
+
+# ---------------------------------------------------------------------------
+# Matchup attachment helpers
+# ---------------------------------------------------------------------------
 
 def attach_kenpom(df_matchups: pd.DataFrame, df_kp: pd.DataFrame) -> pd.DataFrame:
     """
@@ -446,7 +505,7 @@ def attach_kenpom(df_matchups: pd.DataFrame, df_kp: pd.DataFrame) -> pd.DataFram
     kp = df_kp.drop(columns=['Seed'], errors='ignore')
     rename_map = {c: f'KP__{c}' for c in kp.columns if c != 'Team'}
     kp = kp.rename(columns=rename_map)
-    kp1 = kp.add_suffix('__1')   # Team → Team__1, KP__AdjEM → KP__AdjEM__1
+    kp1 = kp.add_suffix('__1')
     kp2 = kp.add_suffix('__2')
     df = df_matchups.merge(kp1, on='Team__1', how='inner')
     df = df.merge(kp2, on='Team__2', how='inner')
@@ -1017,6 +1076,10 @@ def main():
             df_train = apply_delta_transform(df_train, numeric_bases)
             if df_test_year is not None:
                 df_test_year = apply_delta_transform(df_test_year, numeric_bases)
+            # Mirror-augment training set: append a flipped copy of every row so
+            # the class distribution is exactly 50/50 and coefficients get the
+            # correct signs (positive delta → team1's stat is better → team1 wins).
+            df_train = mirror_augment(df_train, model_feature_list)
 
         X_tr = df_train[model_feature_list]
         y_tr = df_train['Win__1']
@@ -1105,6 +1168,11 @@ def main():
         df_trad = apply_delta_transform(df_trad, numeric_bases)
     X_trad, y_trad = df_trad[model_feature_list], df_trad['Win__1']
     X_tr_t, X_te_t, y_tr_t, y_te_t = train_test_split(X_trad, y_trad, test_size=0.33, random_state=42)
+    if delta_feats and numeric_bases:
+        # Mirror-augment only the training split (avoid leaking mirrored test rows into train).
+        df_tr_t = pd.concat([X_tr_t, y_tr_t], axis=1)
+        df_tr_t = mirror_augment(df_tr_t, model_feature_list)
+        X_tr_t, y_tr_t = df_tr_t[model_feature_list], df_tr_t['Win__1']
     model_trad = build_and_train_model(args.model, X_tr_t, y_tr_t, model_params, calibrate=calibrate)
     trad_train_acc = model_trad.score(X_tr_t, y_tr_t)
     trad_test_acc  = model_trad.score(X_te_t, y_te_t)
