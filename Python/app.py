@@ -16,6 +16,7 @@ import os
 import queue
 import re
 import subprocess
+import sys
 import threading
 import uuid
 from pathlib import Path
@@ -561,6 +562,8 @@ def saved_bracket(dir_name, year):
 
 sim_jobs: dict = {}
 
+group_jobs: dict = {}   # job_id → Job (with .results attribute added dynamically)
+
 
 def run_sim_job(job_id: str, cmd: list):
     job = sim_jobs[job_id]
@@ -920,6 +923,278 @@ def my_brackets_route():
 
 
 # ---------------------------------------------------------------------------
+# Group bracket analysis routes
+# ---------------------------------------------------------------------------
+
+def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
+                       year: int, num_iters: int, ff_pairings_str: str,
+                       rng_seed):
+    """
+    Worker thread: run Monte Carlo simulations of the tournament and,
+    for each iteration, score every user bracket in the group.
+
+    Streams PROGRESS:<done>/<total> lines through job.queue.
+    When finished sets job.results and job.status='done'.
+    """
+    import pickle as _pickle
+    import traceback as _tb
+
+    job = group_jobs[job_id]
+    try:
+        import numpy as _np
+
+        # Lazy import — keeps startup fast
+        sys.path.insert(0, str(REPO_ROOT / 'Python'))
+        from simulate_bracket import _simulate_one  # pylint: disable=import-error
+        from predict_brackets import (             # pylint: disable=import-error
+            load_bracket_round, load_kenpom,
+            load_barttorvik, load_barttorvik_2week, load_barttorvik_hotness,
+            attach_kenpom, attach_barttorvik,
+            attach_barttorvik_2week, attach_barttorvik_hotness,
+            apply_label_encoders, apply_year_norm_single,
+            apply_delta_transform, parse_ff_pairings_arg,
+        )
+
+        # ---- Load model pickle ----
+        with open(pkl_path_str, 'rb') as fh:
+            payload = _pickle.load(fh)
+
+        model              = payload['model']
+        feature_list       = payload['feature_list']
+        cat_encoders       = payload.get('cat_encoders', {})
+        norm_info          = payload.get('norm_info')
+        delta_feats        = payload.get('delta_feats', False)
+        numeric_bases      = payload.get('numeric_bases', [])
+        model_feature_list = payload.get('model_feature_list', feature_list)
+
+        ff_pairings = (
+            parse_ff_pairings_arg(ff_pairings_str)
+            if ff_pairings_str else [(0, 3), (1, 2)]
+        )
+
+        data_root   = REPO_ROOT
+        needs_bt    = any(f.startswith('BT__')    for f in feature_list)
+        needs_bt2w  = any(f.startswith('BT2W__')  for f in feature_list)
+        needs_bthot = any(f.startswith('BTHOT__') for f in feature_list)
+
+        # ---- Load Round 1 fixture ----
+        r1_df_raw = load_bracket_round(data_root, year, 1)
+        team_seed_map: dict = {}
+        for _, row in r1_df_raw.iterrows():
+            team_seed_map[row['Team__1']] = row['Seed__1']
+            team_seed_map[row['Team__2']] = row['Seed__2']
+
+        # ---- Load stat files ----
+        df_kp   = load_kenpom(data_root, year)
+        df_bt   = load_barttorvik(data_root, year)         if needs_bt    else None
+        df_bt2w = load_barttorvik_2week(data_root, year)   if needs_bt2w  else None
+        df_hot  = load_barttorvik_hotness(data_root, year) if needs_bthot else None
+
+        # ---- Pre-compute Round 1 features (fixed matchups) ----
+        df_r1_kp = attach_kenpom(r1_df_raw[['Team__1', 'Team__2']].copy(), df_kp)
+        if needs_bt   and df_bt   is not None:
+            df_r1_kp = attach_barttorvik(df_r1_kp, df_bt)
+        if needs_bt2w and df_bt2w is not None:
+            df_r1_kp = attach_barttorvik_2week(df_r1_kp, df_bt2w)
+        if needs_bthot and df_hot is not None:
+            df_r1_kp = attach_barttorvik_hotness(df_r1_kp, df_hot)
+        df_r1_kp['Seed__1'] = df_r1_kp['Team__1'].map(team_seed_map)
+        df_r1_kp['Seed__2'] = df_r1_kp['Team__2'].map(team_seed_map)
+
+        df_r1_enc = apply_label_encoders(df_r1_kp, cat_encoders) if cat_encoders else df_r1_kp.copy()
+        if norm_info is not None:
+            df_r1_enc = apply_year_norm_single(df_r1_enc, year, norm_info)
+        if delta_feats and numeric_bases:
+            df_r1_enc = apply_delta_transform(df_r1_enc, numeric_bases)
+        r1_proba  = model.predict_proba(df_r1_enc[model_feature_list])
+        r1_teams1 = df_r1_kp['Team__1'].tolist()
+        r1_teams2 = df_r1_kp['Team__2'].tolist()
+
+        # ---- Load all user brackets in the group ----
+        group_dir = BRACKETS_DIR / group_key
+        brackets: list = []
+        for f in sorted(group_dir.glob('*.json')):
+            try:
+                b = json.loads(f.read_text())
+                brackets.append({
+                    'name':  b.get('name', f.stem),
+                    'picks': b.get('picks', {}),
+                    'file':  f.name,
+                })
+            except Exception:
+                pass
+
+        if not brackets:
+            job.status = 'error'
+            job.queue.put('[ERROR] No brackets found in group.')
+            job.queue.put(None)
+            return
+
+        names  = [b['name'] for b in brackets]
+        scores = {n: [] for n in names}
+
+        rng = _np.random.default_rng(rng_seed)
+        # (key, sim_round_number, points_per_correct_pick)
+        _rnd_cfg = [
+            ('r1',   1,  10),
+            ('r2',   2,  20),
+            ('s16',  3,  40),
+            ('e8',   4,  80),
+            ('semi', 5, 160),
+        ]
+        prog_interval = max(1, num_iters // 200)
+
+        # ---- Monte Carlo loop ----
+        for it in range(num_iters):
+            draws_r1 = rng.random(len(r1_teams1))
+            sim = _simulate_one(
+                model, r1_teams1, r1_teams2, r1_proba,
+                df_kp, df_bt, df_bt2w, df_hot,
+                feature_list, cat_encoders,
+                team_seed_map, ff_pairings,
+                needs_bt, needs_bt2w, needs_bthot,
+                draws_r1, rng,
+                norm_info=norm_info,
+                year=year,
+                delta_feats=delta_feats,
+                numeric_bases=numeric_bases,
+                model_feature_list=model_feature_list,
+            )
+
+            for b in brackets:
+                picks = b['picks']
+                sc = 0
+                for (key, sim_rnd, pts) in _rnd_cfg:
+                    for u, s in zip(picks.get(key) or [], sim.get(sim_rnd) or []):
+                        if u and u == s:
+                            sc += pts
+                champ_pick = picks.get('champion')
+                if champ_pick and sim.get(6) and champ_pick == sim[6][0]:
+                    sc += 320
+                scores[b['name']].append(sc)
+
+            if (it + 1) % prog_interval == 0 or it + 1 == num_iters:
+                job.queue.put(f'PROGRESS:{it + 1}/{num_iters}')
+
+        # ---- Aggregate: win counts (ties split equally) ----
+        win_counts = {n: 0.0 for n in names}
+        for it in range(num_iters):
+            iter_scores = [(n, scores[n][it]) for n in names]
+            best = max(sc for _, sc in iter_scores)
+            tied = [n for n, sc in iter_scores if sc == best]
+            share = 1.0 / len(tied)
+            for n in tied:
+                win_counts[n] += share
+
+        results = []
+        for b in brackets:
+            n = b['name']
+            sc_list = scores[n]
+            results.append({
+                'name':      n,
+                'file':      b['file'],
+                'avg_score': round(sum(sc_list) / num_iters, 1),
+                'win_prob':  round(win_counts[n] / num_iters, 4),
+                'max_score': int(max(sc_list)),
+                'min_score': int(min(sc_list)),
+            })
+
+        results.sort(key=lambda x: (-x['win_prob'], -x['avg_score']))
+        job.results = results
+        job.status  = 'done'
+
+    except Exception as exc:
+        job.queue.put(f'[ERROR] {exc}')
+        job.queue.put(f'[TRACEBACK] {_tb.format_exc()}')
+        job.status = 'error'
+    finally:
+        job.queue.put(None)   # always send sentinel
+
+
+@app.route('/group_analysis')
+def group_analysis_route():
+    group = request.args.get('group', '')
+    saved = scan_saved_models()
+    groups_list = []
+    if BRACKETS_DIR.is_dir():
+        groups_list = [d.name for d in sorted(BRACKETS_DIR.iterdir()) if d.is_dir()]
+    return render_template_string(
+        GROUP_ANALYSIS_HTML,
+        group=group,
+        groups_list=groups_list,
+        saved_models=saved,
+        year=THIS_YEAR,
+    )
+
+
+@app.route('/run_group_analysis', methods=['POST'])
+def run_group_analysis():
+    data        = request.get_json(force=True)
+    group_key   = (data.get('group')       or '').strip()
+    dir_name    = (data.get('dir_name')    or '').strip()
+    num_iters   = int(data.get('num_iters', 1000))
+    ff_pairings = (data.get('ff_pairings') or '0-3,1-2').strip()
+    rng_seed    = data.get('seed')
+    year        = int(data.get('year', THIS_YEAR))
+
+    if not group_key:
+        return jsonify({'error': 'Group name required.'}), 400
+    if not dir_name:
+        return jsonify({'error': 'Model required.'}), 400
+
+    pkl_path = PREDICTIONS_DIR / dir_name / 'model.pkl'
+    if not pkl_path.exists():
+        return jsonify({'error': f'model.pkl not found in {dir_name}.'}), 400
+
+    job_id = str(uuid.uuid4())[:8]
+    j = Job()
+    j.results = None
+    group_jobs[job_id] = j
+
+    t = threading.Thread(
+        target=_run_group_scoring,
+        args=(
+            job_id, str(pkl_path), group_key, year, num_iters,
+            ff_pairings,
+            int(rng_seed) if rng_seed is not None and str(rng_seed).strip() != '' else None,
+        ),
+        daemon=True,
+    )
+    t.start()
+    return jsonify({'job_id': job_id})
+
+
+@app.route('/group_analysis_stream/<job_id>')
+def group_analysis_stream(job_id):
+    if job_id not in group_jobs:
+        abort(404)
+
+    def generate():
+        job = group_jobs[job_id]
+        while True:
+            try:
+                line = job.queue.get(timeout=600)
+            except queue.Empty:
+                yield 'data: {"type":"timeout"}\n\n'
+                break
+            if line is None:
+                payload = {
+                    'type':    'done',
+                    'status':  job.status,
+                    'results': job.results,
+                }
+                yield f'data: {json.dumps(payload)}\n\n'
+                break
+            yield f'data: {json.dumps({"type": "line", "text": line})}\n\n'
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
+
+
+# ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
 
@@ -1235,7 +1510,7 @@ a.back-link:hover { color: #93c5fd; }
 <div class="links-bar">
   <a href="/my_brackets" class="nav-link">&#128196; Browse Saved Brackets</a>
 </div>
-<h1 class="page-title">&#127944; {{ year }} Bracket Picker</h1>
+<h1 class="page-title">&#10003; {{ year }} Bracket Picker</h1>
 <p class="page-sub">Click a team name to advance them. When complete, give your bracket a name and group, then save.</p>
 
 <!-- Meta bar -->
@@ -1660,7 +1935,15 @@ h1 { font-size: 20px; color: #fbbf24; margin-bottom: 4px; }
 
 {% for group_key, brackets in groups.items() %}
 <div class="group-section">
-  <div class="group-name">{{ brackets[0].group }}</div>
+  <div class="group-name" style="display:flex;justify-content:space-between;align-items:center">
+    <span>{{ brackets[0].group }}</span>
+    <a href="/group_analysis?group={{ group_key }}"
+       style="font-size:10px;font-weight:500;text-transform:none;letter-spacing:0;
+              color:#93c5fd;text-decoration:none;background:#0f172a;border:1px solid #334155;
+              border-radius:5px;padding:3px 10px;transition:border-color .15s"
+       onmouseover="this.style.borderColor='#3b82f6'"
+       onmouseout="this.style.borderColor='#334155'">&#128202; Analyze Group</a>
+  </div>
   <div class="bracket-grid">
     {% for b in brackets %}
     <a class="bracket-card"
@@ -1678,6 +1961,377 @@ h1 { font-size: 20px; color: #fbbf24; margin-bottom: 4px; }
 </div>
 {% endfor %}
 
+</body>
+</html>
+"""
+
+
+# ---------------------------------------------------------------------------
+# Group Analysis HTML template
+# ---------------------------------------------------------------------------
+
+GROUP_ANALYSIS_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Group Analysis</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #0f172a; color: #e2e8f0;
+  min-height: 100vh; padding: 26px 24px 60px;
+}
+a.back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #64748b; font-size: 12px; text-decoration: none;
+  margin-bottom: 18px; transition: color .15s;
+}
+a.back-link:hover { color: #93c5fd; }
+h1 { font-size: 20px; color: #fbbf24; margin-bottom: 4px; }
+.subtitle { color: #64748b; font-size: 12px; margin-bottom: 22px; }
+
+/* Config card */
+.config-card {
+  background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+  padding: 18px 20px; max-width: 820px; margin-bottom: 20px;
+}
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px 16px; align-items: end;
+}
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .6px; color: #94a3b8;
+}
+.field select, .field input {
+  background: #0f172a; border: 1px solid #334155; border-radius: 6px;
+  color: #e2e8f0; padding: 7px 9px; font-size: 12px; outline: none;
+}
+.field select:focus, .field input:focus { border-color: #3b82f6; }
+#run-btn {
+  background: #ca8a04; color: #1a1000; border: none; border-radius: 7px;
+  padding: 8px 22px; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background .15s; white-space: nowrap; align-self: end;
+}
+#run-btn:hover:not(:disabled) { background: #eab308; }
+#run-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Progress */
+.prog-wrap { max-width: 820px; margin-bottom: 16px; }
+.prog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.prog-label { font-size: 10px; color: #64748b; }
+#prog-text  { font-size: 11px; color: #93c5fd; font-family: monospace; }
+.prog-track { background: #1e293b; border-radius: 4px; overflow: hidden; height: 8px; border: 1px solid #334155; }
+#prog-bar   { height: 100%; background: linear-gradient(90deg, #ca8a04, #fbbf24); border-radius: 4px; width: 0%; transition: width .2s ease; }
+
+/* Status badge */
+.status-badge {
+  display: inline-block; border-radius: 12px;
+  padding: 2px 10px; font-size: 11px; font-weight: 600;
+}
+.status-running { background: #1e3a5f; color: #93c5fd; }
+.status-done    { background: #14432a; color: #86efac; }
+.status-error   { background: #450a0a; color: #fca5a5; }
+
+/* Error box */
+#error-box {
+  max-width: 820px; background: #450a0a; border-radius: 8px;
+  padding: 10px 14px; font-size: 12px; color: #fca5a5;
+  margin-bottom: 14px; display: none; white-space: pre-wrap; font-family: monospace;
+}
+
+/* Results */
+.results-card {
+  background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+  padding: 18px 20px; max-width: 820px;
+}
+.results-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 14px;
+}
+.results-title { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+.results-meta  { font-size: 11px; color: #64748b; }
+
+table.res-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.res-table th {
+  text-align: left; padding: 6px 10px; color: #64748b; font-size: 10px;
+  text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid #334155;
+  white-space: nowrap;
+}
+table.res-table td {
+  padding: 8px 10px; border-bottom: 1px solid #1a2744;
+  color: #cbd5e1; vertical-align: middle;
+}
+table.res-table tr:last-child td { border-bottom: none; }
+table.res-table tbody tr:hover td { background: #172554; }
+
+.rank-cell { color: #475569; font-size: 11px; text-align: right; width: 28px; }
+.name-cell { font-weight: 600; color: #e2e8f0; }
+.name-link { color: #93c5fd; text-decoration: none; }
+.name-link:hover { text-decoration: underline; }
+.score-cell { font-size: 14px; font-weight: 700; color: #fbbf24; text-align: right; }
+.prob-cell  { text-align: right; min-width: 110px; }
+.prob-bar-wrap { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.prob-bar-bg {
+  width: 80px; height: 8px; background: #0f172a;
+  border-radius: 4px; overflow: hidden; border: 1px solid #334155;
+  flex-shrink: 0;
+}
+.prob-bar-fill { height: 100%; border-radius: 4px; transition: width .3s ease; }
+.prob-pct { font-size: 12px; font-weight: 700; font-family: monospace; min-width: 46px; text-align: right; }
+.minmax-cell { font-size: 11px; color: #64748b; text-align: right; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<a href="/my_brackets" class="back-link">&#8592; My Brackets</a>
+<h1>&#128202; Group Analysis</h1>
+<p class="subtitle">
+  Select a group and a saved model, then run Monte Carlo simulations to see each bracket's
+  expected score and probability of winning the group.
+</p>
+
+<!-- Config -->
+<div class="config-card">
+  <div class="config-grid">
+    <div class="field">
+      <label for="grp-sel">Group</label>
+      <select id="grp-sel">
+        {% for g in groups_list %}
+        <option value="{{ g }}" {% if g == group %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="grid-column:span 2">
+      <label for="model-sel">Model</label>
+      <select id="model-sel">
+        <option value="">-- select model --</option>
+        {% for m in saved_models %}
+        <option value="{{ m.dir_name }}">{{ m.score }}pts &mdash; {{ m.model }} &mdash; {{ m.features }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="iters-inp">Iterations</label>
+      <input type="number" id="iters-inp" value="2000" min="100" max="100000">
+    </div>
+    <div class="field">
+      <label for="ff-inp">FF Pairings</label>
+      <input type="text" id="ff-inp" value="0-3,1-2" style="width:90px">
+    </div>
+    <div class="field">
+      <label for="seed-inp">Seed (opt.)</label>
+      <input type="number" id="seed-inp" placeholder="random" style="width:90px">
+    </div>
+    <button id="run-btn" onclick="runAnalysis()">&#9654; Run</button>
+    <span id="status-badge" class="status-badge" style="display:none;align-self:center"></span>
+  </div>
+</div>
+
+<!-- Progress -->
+<div class="prog-wrap" id="prog-wrap" style="display:none">
+  <div class="prog-header">
+    <span class="prog-label">Simulating&hellip;</span>
+    <span id="prog-text">0 / 0</span>
+  </div>
+  <div class="prog-track"><div id="prog-bar"></div></div>
+</div>
+
+<!-- Error -->
+<div id="error-box"></div>
+
+<!-- Results -->
+<div class="results-card" id="results-section" style="display:none">
+  <div class="results-header">
+    <span class="results-title">Results</span>
+    <span class="results-meta" id="results-meta"></span>
+  </div>
+  <table class="res-table">
+    <thead>
+      <tr>
+        <th style="width:28px">#</th>
+        <th>Bracket</th>
+        <th style="text-align:right">Avg Score</th>
+        <th style="text-align:right">Win Probability</th>
+        <th style="text-align:right">Max&nbsp;/&nbsp;Min</th>
+      </tr>
+    </thead>
+    <tbody id="results-tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const THIS_YEAR   = {{ year }};
+const GROUP_INIT  = {{ group | tojson }};
+
+function probColor(p) {
+  if (p >= 0.40) return '#86efac';
+  if (p >= 0.20) return '#fde68a';
+  if (p >= 0.05) return '#fb923c';
+  return '#94a3b8';
+}
+
+function fmtPct(p) {
+  if (p === 0) return '0.0%';
+  if (p >= 0.9995) return '100%';
+  if (p < 0.001)   return '<0.1%';
+  return (p * 100).toFixed(1) + '%';
+}
+
+function renderResults(results, meta) {
+  const tbody = document.getElementById('results-tbody');
+  const section = document.getElementById('results-section');
+  const metaEl  = document.getElementById('results-meta');
+  tbody.innerHTML = '';
+  metaEl.textContent = meta || '';
+
+  // Find max avg for bar scaling
+  const maxAvg = Math.max(...results.map(r => r.avg_score), 1);
+  const groupKey = document.getElementById('grp-sel').value;
+
+  results.forEach((r, i) => {
+    const pct = fmtPct(r.win_prob);
+    const barW = Math.round(r.win_prob * 100);
+    const color = probColor(r.win_prob);
+    const loadUrl = `/fill_bracket?load=${encodeURIComponent(groupKey + '/' + r.file)}&bname=${encodeURIComponent(r.name)}&bgrp=${encodeURIComponent(groupKey)}`;
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td class="rank-cell">${i + 1}</td>` +
+      `<td class="name-cell"><a class="name-link" href="${loadUrl}" target="_blank">${r.name}</a></td>` +
+      `<td class="score-cell">${r.avg_score.toFixed(1)}</td>` +
+      `<td class="prob-cell">
+         <div class="prob-bar-wrap">
+           <span class="prob-pct" style="color:${color}">${pct}</span>
+           <div class="prob-bar-bg"><div class="prob-bar-fill" style="width:${barW}%;background:${color}"></div></div>
+         </div>
+       </td>` +
+      `<td class="minmax-cell">${r.max_score} / ${r.min_score}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  section.style.display = '';
+}
+
+function setStatus(text, cls) {
+  const b = document.getElementById('status-badge');
+  b.style.display = '';
+  b.className = 'status-badge ' + cls;
+  b.textContent = text;
+}
+
+function runAnalysis() {
+  const group    = document.getElementById('grp-sel').value;
+  const dirName  = document.getElementById('model-sel').value;
+  const iters    = parseInt(document.getElementById('iters-inp').value) || 2000;
+  const ffPairs  = document.getElementById('ff-inp').value.trim();
+  const seedRaw  = document.getElementById('seed-inp').value.trim();
+  const seed     = seedRaw !== '' ? parseInt(seedRaw) : null;
+
+  if (!group)   { alert('Select a group.'); return; }
+  if (!dirName) { alert('Select a model.'); return; }
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  document.getElementById('error-box').style.display = 'none';
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('prog-bar').style.width = '0%';
+  document.getElementById('prog-text').textContent = '0 / ' + iters.toLocaleString();
+  document.getElementById('prog-wrap').style.display = '';
+  setStatus('Running\u2026', 'status-running');
+
+  fetch('/run_group_analysis', {
+    method:  'POST',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify({ group, dir_name: dirName, num_iters: iters,
+                              ff_pairings: ffPairs, seed, year: THIS_YEAR }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) {
+      btn.disabled = false;
+      document.getElementById('prog-wrap').style.display = 'none';
+      const eb = document.getElementById('error-box');
+      eb.textContent = data.error;
+      eb.style.display = '';
+      setStatus('Error', 'status-error');
+      return;
+    }
+    startStream(data.job_id, iters, dirName);
+  })
+  .catch(err => {
+    btn.disabled = false;
+    document.getElementById('prog-wrap').style.display = 'none';
+    setStatus('Error', 'status-error');
+  });
+}
+
+function startStream(jobId, iters, dirName) {
+  const es = new EventSource('/group_analysis_stream/' + jobId);
+  es.onmessage = function(e) {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === 'line') {
+      if (msg.text.startsWith('PROGRESS:')) {
+        const parts = msg.text.slice(9).split('/');
+        const done  = parseInt(parts[0]);
+        const total = parseInt(parts[1]);
+        const pct   = total > 0 ? done / total * 100 : 0;
+        document.getElementById('prog-bar').style.width = pct + '%';
+        document.getElementById('prog-text').textContent =
+          done.toLocaleString() + ' / ' + total.toLocaleString();
+        return;
+      }
+      if (msg.text.startsWith('[ERROR]') || msg.text.startsWith('[TRACEBACK]')) {
+        const eb = document.getElementById('error-box');
+        eb.textContent += msg.text + '\n';
+        eb.style.display = '';
+      }
+      return;
+    }
+
+    if (msg.type === 'done') {
+      es.close();
+      document.getElementById('prog-wrap').style.display = 'none';
+      document.getElementById('run-btn').disabled = false;
+
+      if (msg.status === 'done' && msg.results) {
+        setStatus('Done', 'status-done');
+        const meta = `${iters.toLocaleString()} iterations \u00b7 model: ${dirName}`;
+        renderResults(msg.results, meta);
+      } else {
+        setStatus('Error', 'status-error');
+      }
+      return;
+    }
+
+    if (msg.type === 'timeout') {
+      es.close();
+      document.getElementById('prog-wrap').style.display = 'none';
+      document.getElementById('run-btn').disabled = false;
+      setStatus('Timeout', 'status-error');
+    }
+  };
+  es.onerror = function() {
+    es.close();
+    document.getElementById('prog-wrap').style.display = 'none';
+    document.getElementById('run-btn').disabled = false;
+    setStatus('Disconnected', 'status-error');
+  };
+}
+
+// Pre-select group from URL param
+(function() {
+  if (GROUP_INIT) {
+    const sel = document.getElementById('grp-sel');
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === GROUP_INIT) { sel.selectedIndex = i; break; }
+    }
+  }
+})();
+</script>
 </body>
 </html>
 """
@@ -2003,7 +2657,7 @@ label.feat-chip[title] { cursor: help; }
 <p class="subtitle">Configure a model below, then run the evaluation across all historical years (2012–2025) plus a {{ THIS_YEAR }} prediction.</p>
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
 <a href="/bracket_input" style="display:inline-flex;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 14px;font-size:12px;color:#93c5fd;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#334155'">&#127942; Set Up {{ THIS_YEAR }} Bracket</a>
-<a href="/fill_bracket" style="display:inline-flex;align-items:center;gap:6px;background:#1a1500;border:1px solid #78540a;border-radius:7px;padding:6px 14px;font-size:12px;color:#fbbf24;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#ca8a04'" onmouseout="this.style.borderColor='#78540a'">&#127944; Fill Out My Bracket</a>
+<a href="/fill_bracket" style="display:inline-flex;align-items:center;gap:6px;background:#1a1500;border:1px solid #78540a;border-radius:7px;padding:6px 14px;font-size:12px;color:#fbbf24;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#ca8a04'" onmouseout="this.style.borderColor='#78540a'">&#10003; Fill Out My Bracket</a>
 <a href="/my_brackets" style="display:inline-flex;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 14px;font-size:12px;color:#93c5fd;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#334155'">&#128196; My Brackets</a>
 </div>
 
