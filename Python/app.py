@@ -379,6 +379,8 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
         latest = csv_files[0]
         iters_match = re.search(r'_(\d+)iters\.csv$', latest.name)
         iters = int(iters_match.group(1)) if iters_match else 0
+        html_file = latest.with_suffix('.html').name
+        has_html  = (d / html_file).exists()
         has_pkl = (PREDICTIONS_DIR / d.name / 'model.pkl').exists()
         results.append({
             'dir_name':   d.name,
@@ -388,6 +390,7 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
             'iters':      iters,
             'has_pkl':    has_pkl,
             'csv_file':   latest.name,
+            'html_file':  html_file if has_html else '',
         })
     results.sort(key=lambda x: x['score'], reverse=True)
     return results
@@ -1007,6 +1010,8 @@ def my_brackets_route():
                 continue
             brackets = []
             for f in sorted(gdir.glob('*.json')):
+                if f.name.startswith('group_results_'):
+                    continue
                 try:
                     b = json.loads(f.read_text())
                     brackets.append({
@@ -1044,11 +1049,14 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
     job = group_jobs[job_id]
     try:
         import numpy as _np
+        import pathlib as _pl
 
         # Lazy import — keeps startup fast
         sys.path.insert(0, str(REPO_ROOT / 'Python'))
-        from simulate_bracket import _simulate_one  # pylint: disable=import-error
-        from predict_brackets import (             # pylint: disable=import-error
+        from simulate_bracket import (                 # pylint: disable=import-error
+            _simulate_one, to_html, get_actual_results, ROUND_LABELS as _ROUND_LABELS,
+        )
+        from predict_brackets import (                 # pylint: disable=import-error
             load_bracket_round, load_kenpom,
             load_barttorvik, load_barttorvik_2week, load_barttorvik_hotness,
             attach_kenpom, attach_barttorvik,
@@ -1062,6 +1070,7 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
             payload = _pickle.load(fh)
 
         model              = payload['model']
+        model_key          = payload.get('model_key', _pl.Path(pkl_path_str).parent.name)
         feature_list       = payload['feature_list']
         cat_encoders       = payload.get('cat_encoders', {})
         norm_info          = payload.get('norm_info')
@@ -1110,10 +1119,20 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
         r1_teams1 = df_r1_kp['Team__1'].tolist()
         r1_teams2 = df_r1_kp['Team__2'].tolist()
 
+        # bracket insertion order (Team__1 then Team__2 per game, no duplicates)
+        all_teams: list = []
+        for t1, t2 in zip(r1_teams1, r1_teams2):
+            if t1 not in all_teams:
+                all_teams.append(t1)
+            if t2 not in all_teams:
+                all_teams.append(t2)
+
         # ---- Load all user brackets in the group ----
         group_dir = BRACKETS_DIR / group_key
         brackets: list = []
         for f in sorted(group_dir.glob('*.json')):
+            if f.name.startswith('group_results_'):
+                continue
             try:
                 b = json.loads(f.read_text())
                 brackets.append({
@@ -1132,6 +1151,9 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
 
         names  = [b['name'] for b in brackets]
         scores = {n: [] for n in names}
+
+        from collections import defaultdict as _defaultdict
+        round_wins: dict = _defaultdict(lambda: _defaultdict(int))
 
         rng = _np.random.default_rng(rng_seed)
         # (key, sim_round_number, points_per_correct_pick)
@@ -1173,6 +1195,11 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
                     sc += 320
                 scores[b['name']].append(sc)
 
+            # accumulate team advancement counts for simulation table
+            for rnd, winners in sim.items():
+                for team in winners:
+                    round_wins[team][rnd] += 1
+
             if (it + 1) % prog_interval == 0 or it + 1 == num_iters:
                 job.queue.put(f'PROGRESS:{it + 1}/{num_iters}')
 
@@ -1202,6 +1229,56 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
         results.sort(key=lambda x: (-x['win_prob'], -x['avg_score']))
         job.results = results
         job.status  = 'done'
+
+        # ---- Build and save simulation table (team advancement probs) ----
+        import pandas as _pd
+        sim_rows = []
+        for team in all_teams:
+            row = {'Team': team, 'Seed': team_seed_map.get(team, '?')}
+            for rnd, lbl in enumerate(_ROUND_LABELS, start=1):
+                row[lbl] = round_wins[team][rnd] / num_iters
+            sim_rows.append(row)
+        df_sim = _pd.DataFrame(sim_rows)
+        df_sim = df_sim.sort_values(
+            list(reversed(_ROUND_LABELS)), ascending=False
+        ).reset_index(drop=True)
+
+        _actual = {}
+        try:
+            _actual = get_actual_results(REPO_ROOT, year)
+        except Exception:
+            pass
+
+        _dir_name = _pl.Path(pkl_path_str).parent.name
+        _sim_out_dir = SIMULATIONS_DIR / _dir_name
+        _sim_out_dir.mkdir(parents=True, exist_ok=True)
+        _stem = f'{year}_{num_iters}iters'
+        _html_path = _sim_out_dir / f'{_stem}.html'
+        _csv_path  = _sim_out_dir / f'{_stem}.csv'
+        _html_path.write_text(
+            to_html(df_sim, year, num_iters, model_key, _actual or None),
+            encoding='utf-8',
+        )
+        df_sim.to_csv(_csv_path, index=False)
+        job.sim_url = f'/sim_html/{_dir_name}/{_stem}.html'
+
+        # ---- Save group analysis results to disk ----
+        import datetime as _dt
+        _save_dir = BRACKETS_DIR / group_key
+        _save_dir.mkdir(parents=True, exist_ok=True)
+        _ts = _dt.datetime.now().strftime('%Y%m%d_%H%M%S')
+        _save_name = f'group_results_{_dir_name}_{year}_{num_iters}iters_{_ts}.json'
+        _save_payload = {
+            'group':      group_key,
+            'dir_name':   _dir_name,
+            'year':       year,
+            'num_iters':  num_iters,
+            'ff_pairings': ff_pairings_str,
+            'computed':   _ts,
+            'results':    results,
+        }
+        with open(_save_dir / _save_name, 'w', encoding='utf-8') as _fh:
+            json.dump(_save_payload, _fh, indent=2)
 
     except Exception as exc:
         job.queue.put(f'[ERROR] {exc}')
@@ -1286,6 +1363,7 @@ def group_analysis_stream(job_id):
                     'type':    'done',
                     'status':  job.status,
                     'results': job.results,
+                    'sim_url': getattr(job, 'sim_url', None),
                 }
                 yield f'data: {json.dumps(payload)}\n\n'
                 break
@@ -2313,6 +2391,7 @@ table.res-table tbody tr:hover td { background: #172554; }
       <th>Model</th>
       <th>Iters</th>
       <th></th>
+      <th></th>
     </tr></thead>
     <tbody>
     {% for s in simulations %}
@@ -2321,9 +2400,14 @@ table.res-table tbody tr:hover td { background: #172554; }
       <td style="color:#e2e8f0;font-size:11px">{{ s.model }} &mdash; {{ s.features[:40] }}{% if s.features|length > 40 %}&hellip;{% endif %}</td>
       <td style="color:#64748b">{{ '{:,}'.format(s.iters) }}</td>
       <td>
+        {% if s.html_file %}
+        <a href="/sim_html/{{ s.dir_name }}/{{ s.html_file }}" target="_blank" class="quick-run-btn" style="text-decoration:none;display:inline-block">&#128200; View</a>
+        {% endif %}
+      </td>
+      <td>
         {% if s.has_pkl %}
         <button class="quick-run-btn"
-                onclick="quickRun({{ s.dir_name | tojson }}, {{ s.iters }})">
+                onclick='quickRun({{ s.dir_name | tojson }}, {{ s.iters }})'>
           &#9654; Use This
         </button>
         {% else %}
@@ -2359,7 +2443,7 @@ table.res-table tbody tr:hover td { background: #172554; }
     </div>
     <div class="field">
       <label for="iters-inp">Iterations</label>
-      <input type="number" id="iters-inp" value="2000" min="100" max="100000">
+      <input type="number" id="iters-inp" value="1000" min="100" max="100000">
     </div>
     <div class="field">
       <label for="seed-inp">Seed (opt.)</label>
@@ -2400,6 +2484,14 @@ table.res-table tbody tr:hover td { background: #172554; }
     </thead>
     <tbody id="results-tbody"></tbody>
   </table>
+</div>
+
+<div style="margin-top:10px;text-align:center">
+  <a id="sim-view-link" href="#" target="_blank"
+     style="display:none;padding:6px 14px;background:#334155;color:#e2e8f0;
+            border-radius:6px;text-decoration:none;font-size:0.85rem">
+    &#128202; View Simulation Table
+  </a>
 </div>
 
 <script>
@@ -2475,6 +2567,7 @@ function runAnalysis(dirNameOverride, itersOverride) {
   btn.disabled = true;
   document.getElementById('error-box').style.display = 'none';
   document.getElementById('results-section').style.display = 'none';
+  document.getElementById('sim-view-link').style.display = 'none';
   document.getElementById('prog-bar').style.width = '0%';
   document.getElementById('prog-text').textContent = '0 / ' + iters.toLocaleString();
   document.getElementById('prog-wrap').style.display = '';
@@ -2548,6 +2641,11 @@ function startStream(jobId, iters, dirName) {
         setStatus('Done', 'status-done');
         const meta = `${iters.toLocaleString()} iterations \u00b7 model: ${dirName}`;
         renderResults(msg.results, meta);
+        if (msg.sim_url) {
+          const lnk = document.getElementById('sim-view-link');
+          lnk.href = msg.sim_url;
+          lnk.style.display = '';
+        }
       } else {
         setStatus('Error', 'status-error');
       }
