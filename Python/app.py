@@ -2583,33 +2583,14 @@ table.sims-table tbody tr:hover td { background: #172554; }
 .quick-run-btn:disabled { opacity: .5; cursor: not-allowed; }
 .no-pkl-note { font-size: 10px; color: #94a3b8; }
 
-/* Live Tournament Results */
+/* Live Tournament Results – Bracket */
 .lr-card {
   background: #1e293b; border: 1px solid #334155; border-radius: 10px;
-  padding: 16px 20px; max-width: 100%; margin-bottom: 18px;
+  padding: 16px 20px; margin-bottom: 18px;
 }
 .lr-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: #94a3b8; margin-bottom: 4px; }
-.lr-subtitle { font-size: 11px; color: #64748b; margin-bottom: 12px; }
-.lr-round { margin-bottom: 14px; }
-.lr-round-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: #64748b; margin-bottom: 7px; }
-.lr-games { display: flex; flex-wrap: wrap; gap: 6px; }
-.lr-game {
-  display: flex; align-items: center; gap: 4px;
-  background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 4px 6px;
-}
-.lr-game-incomplete { color: #475569; font-size: 11px; background: #0a1120; }
-.lr-tbd { font-size: 10px; color: #334155; padding: 2px 6px; }
-.lr-team {
-  background: #1e293b; border: 1px solid #334155; border-radius: 4px;
-  padding: 3px 9px; font-size: 11px; color: #94a3b8; cursor: pointer;
-  transition: background .1s, color .1s, border-color .1s;
-  white-space: nowrap;
-}
-.lr-team:hover { background: #1e3a5f; color: #93c5fd; border-color: #2563eb; }
-.lr-team.lr-winner { background: #14432a; color: #86efac; border-color: #16a34a; font-weight: 700; }
-.lr-team.lr-loser  { background: #0a1120; color: #334155; border-color: #1e293b; }
-.lr-vs { font-size: 10px; color: #334155; }
-.lr-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.lr-subtitle { font-size: 11px; color: #64748b; margin-bottom: 14px; }
+.lr-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 .lr-save-btn {
   background: #166534; border: 1px solid #16a34a; color: #86efac;
   border-radius: 5px; padding: 4px 14px; font-size: 11px; font-weight: 600;
@@ -2623,7 +2604,72 @@ table.sims-table tbody tr:hover td { background: #172554; }
 }
 .lr-clear-btn:hover { border-color: #ef4444; color: #f87171; }
 #locked-save-msg { font-size: 11px; }
-#locked-count    { font-size: 10px; color: #64748b; margin-left: 4px; }
+#locked-count { font-size: 10px; color: #64748b; margin-left: 4px; }
+
+/* Bracket grid */
+.bk-wrap { display: flex; flex-direction: row; align-items: flex-start; overflow-x: auto; padding-bottom: 4px; gap: 0; }
+.bk-half { display: flex; flex-direction: row; }
+.bk-half-r { flex-direction: row-reverse; }
+.bk-center { display: flex; flex-direction: row; flex-shrink: 0; }
+.bk-col {
+  position: relative; width: 118px; flex-shrink: 0;
+}
+.bk-col-center { position: relative; width: 122px; flex-shrink: 0; }
+.bk-col-hdr {
+  text-align: center; font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; color: #475569; height: 16px; line-height: 16px; margin-bottom: 2px;
+}
+.bk-region-hdr {
+  position: absolute; font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: #64748b; left: 4px; white-space: nowrap;
+}
+.bk-game {
+  position: absolute; left: 0; right: 0;
+  display: flex; flex-direction: column;
+}
+/* Right-side connector arms (left half) */
+.bk-left .bk-game::after {
+  content: \'\'; position: absolute; right: -1px; top: 50%;
+  width: 8px; height: 0; border-top: 1px solid #334155;
+  pointer-events: none;
+}
+/* Left-side connector arms (right half) */
+.bk-right .bk-game::after {
+  content: \'\'; position: absolute; left: -1px; top: 50%;
+  width: 8px; height: 0; border-top: 1px solid #334155;
+  pointer-events: none;
+}
+/* Vertical bracket connector between two games in same column (right side vertical bar) */
+.bk-left .bk-game::before {
+  content: \'\'; position: absolute; top: 12px; bottom: 12px;
+  right: -1px; width: 0; border-right: 1px solid #334155;
+  pointer-events: none;
+}
+.bk-right .bk-game::before {
+  content: \'\'; position: absolute; top: 12px; bottom: 12px;
+  left: -1px; width: 0; border-left: 1px solid #334155;
+  pointer-events: none;
+}
+/* No connector arm/bar on E8 games (they connect to center differently) */
+.bk-e8 .bk-game::before, .bk-e8 .bk-game::after { display: none; }
+.bk-col-center .bk-game::before, .bk-col-center .bk-game::after { display: none; }
+.bk-team {
+  display: block; height: 24px; line-height: 24px;
+  padding: 0 6px; font-size: 10px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: #0f172a; border: 1px solid #2d3f55; border-radius: 3px;
+  color: #94a3b8; cursor: pointer; text-align: left;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.bk-team:hover:not(.bk-tbd) { background: #1e3a5f; color: #93c5fd; border-color: #2563eb; }
+.bk-team.bk-winner { background: #14432a; color: #86efac; border-color: #16a34a; font-weight: 700; }
+.bk-team.bk-loser  { background: #0a1120; color: #33415a; border-color: #1a2744; }
+.bk-team.bk-tbd    { background: #0a1120; color: #1e3a5f; border-color: #0f172a; cursor: default; font-style: italic; }
+.bk-seed { font-size: 9px; color: #475569; margin-right: 3px; }
+.bk-champ-label {
+  text-align: center; font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; color: #fbbf24; margin-top: 4px;
+}
 
 /* Results */
 .results-card {
@@ -2704,16 +2750,13 @@ table.res-table tbody tr:hover td { background: #172554; }
 </div>
 {% endif %}
 
-<!-- Live Tournament Results -->
+<!-- Live Tournament Results Bracket -->
 <div class="lr-card" id="lr-card" style="display:none">
   <div class="lr-title">&#128274; Live Tournament Results</div>
-  <div class="lr-subtitle">
-    Click a team to lock in the actual outcome of a game. Simulations will treat locked games as certain.
-    Toggle to unlock. <span id="locked-count"></span>
-  </div>
-  <div id="locked-rounds"></div>
+  <div class="lr-subtitle">Click a team to mark them as the winner &mdash; they advance to the next round. Click again to un-lock. Simulations will treat locked results as certain. <span id="locked-count"></span></div>
+  <div id="bk-container"></div>
   <div class="lr-actions">
-    <button class="lr-save-btn" id="save-locked-btn" onclick="saveLockedResults()">&#128190; Save</button>
+    <button class="lr-save-btn" id="save-locked-btn" onclick="saveLockedResults()">&#128190; Save Results</button>
     <button class="lr-clear-btn" onclick="clearLockedResults()">&#10006; Clear All</button>
     <span id="locked-save-msg"></span>
   </div>
@@ -2897,87 +2940,280 @@ function buildRoundMatchups(rnd, prevWinners) {
   return matchups;
 }
 
-function renderLockedRounds() {
-  var container = document.getElementById('locked-rounds');
-  if (!container) return;
-  container.innerHTML = '';
+// ---- Bracket rendering constants ----
+var BK_SLOT   = 52;   // px: height of one game slot (2×22px btn + 8px gap)
+var BK_GAP    = 8;    // px gap between the two team buttons inside a slot
+var BK_BTN    = (BK_SLOT - BK_GAP) / 2;  // 22px button height
+// Column widths
+var BK_COL_W       = 118;  // round column
+var BK_COL_CENTER_W = 122; // FF/Champ column
+// Per-region height = 8 games × BK_SLOT
+var BK_REGION_H = 8 * BK_SLOT;  // 416
+// Total column height = 2 regions stacked
+var BK_HALF_H   = 2 * BK_REGION_H; // 832
 
-  var prevMatchupWinners = BRACKET_R1.map(function(g, i) {
-    return (lockedResults['1'] || [])[i] || null;
-  });
+// Region definitions: [regionName, r1StartIdx]
+// r1StartIdx = start index in BRACKET_R1/lockedResults[1] arrays
+var BK_REGIONS = [
+  { name: 'South',   idx: 0  },
+  { name: 'East',    idx: 8  },
+  { name: 'West',    idx: 16 },
+  { name: 'Midwest', idx: 24 },
+];
 
-  for (var rnd = 1; rnd <= 6; rnd++) {
-    var matchups;
-    if (rnd === 1) {
-      matchups = BRACKET_R1.map(function(g) { return [g.team1, g.team2]; });
+// Global game index for region r, round rnd (1-4), game i within region
+function bkGlobalIdx(r, rnd, i) {
+  var gamesPerRegion = 8 >> (rnd - 1);  // 8,4,2,1
+  return gamesPerRegion * r + i;
+}
+
+// Absolute top position (px) for game i in round rnd within a region that starts at regionY
+function bkGameTop(rnd, i, regionY) {
+  var stride = BK_SLOT * (1 << (rnd - 1));
+  return regionY + stride * i + (stride - BK_SLOT) / 2;
+}
+
+// Derive all winners up to round maxRnd from lockedResults
+function bkAllWinners() {
+  var w = {};
+  for (var r = 1; r <= 6; r++) {
+    w[r] = (lockedResults[String(r)] || []).map(function(v) { return v || null; });
+  }
+  return w;
+}
+
+// Build one game div and attach click handler
+function bkMakeGame(rnd, globalIdx, t1, t2, seed1, seed2, winner) {
+  var div = document.createElement('div');
+  div.className = 'bk-game';
+
+  function makeBtn(team, seed, isWinner, hasWinner) {
+    var btn = document.createElement('button');
+    if (!team) {
+      btn.className = 'bk-team bk-tbd';
+      btn.textContent = 'TBD';
+      btn.disabled = true;
     } else {
-      matchups = buildRoundMatchups(rnd, prevMatchupWinners);
+      btn.className = 'bk-team' + (isWinner ? ' bk-winner' : (hasWinner ? ' bk-loser' : ''));
+      var seedSpan = document.createElement('span');
+      seedSpan.className = 'bk-seed';
+      seedSpan.textContent = seed ? '[' + seed + ']' : '';
+      btn.appendChild(seedSpan);
+      btn.appendChild(document.createTextNode(team));
+      btn.title = team;
+      (function(tm) {
+        btn.addEventListener('click', function() { lockGame(rnd, globalIdx, tm); });
+      }(team));
     }
-
-    var hasGame = matchups.some(function(m) { return m[0] && m[1]; });
-    if (!hasGame) break;
-
-    var lockedForRnd = lockedResults[String(rnd)] || new Array(matchups.length).fill(null);
-
-    var roundDiv = document.createElement('div');
-    roundDiv.className = 'lr-round';
-
-    var labelDiv = document.createElement('div');
-    labelDiv.className = 'lr-round-label';
-    labelDiv.textContent = ROUND_LABELS_LR[rnd];
-    roundDiv.appendChild(labelDiv);
-
-    var gamesDiv = document.createElement('div');
-    gamesDiv.className = 'lr-games';
-
-    for (var gi = 0; gi < matchups.length; gi++) {
-      var t1 = matchups[gi][0], t2 = matchups[gi][1];
-      var gameDiv = document.createElement('div');
-      if (!t1 || !t2) {
-        gameDiv.className = 'lr-game lr-game-incomplete';
-        var tbd = document.createElement('span');
-        tbd.className = 'lr-tbd';
-        tbd.textContent = 'TBD';
-        gameDiv.appendChild(tbd);
-        gamesDiv.appendChild(gameDiv);
-        continue;
-      }
-      gameDiv.className = 'lr-game';
-
-      var winner = lockedForRnd[gi] || null;
-
-      (function(r, g, team1, team2, w) {
-        var btn1 = document.createElement('button');
-        btn1.className = 'lr-team' + (w === team1 ? ' lr-winner' : (w ? ' lr-loser' : ''));
-        btn1.textContent = team1;
-        btn1.addEventListener('click', function() { lockGame(r, g, team1); });
-
-        var vsSpan = document.createElement('span');
-        vsSpan.className = 'lr-vs';
-        vsSpan.textContent = 'vs';
-
-        var btn2 = document.createElement('button');
-        btn2.className = 'lr-team' + (w === team2 ? ' lr-winner' : (w ? ' lr-loser' : ''));
-        btn2.textContent = team2;
-        btn2.addEventListener('click', function() { lockGame(r, g, team2); });
-
-        gameDiv.appendChild(btn1);
-        gameDiv.appendChild(vsSpan);
-        gameDiv.appendChild(btn2);
-      }(rnd, gi, t1, t2, winner));
-
-      gamesDiv.appendChild(gameDiv);
-    }
-    roundDiv.appendChild(gamesDiv);
-    container.appendChild(roundDiv);
-
-    prevMatchupWinners = matchups.map(function(m, i) { return (lockedForRnd[i] || null); });
+    btn.style.height = BK_BTN + 'px';
+    btn.style.lineHeight = BK_BTN + 'px';
+    return btn;
   }
 
+  div.appendChild(makeBtn(t1, seed1, winner === t1, !!winner));
+  var gap = document.createElement('div');
+  gap.style.height = BK_GAP + 'px';
+  div.appendChild(gap);
+  div.appendChild(makeBtn(t2, seed2, winner === t2, !!winner));
+  return div;
+}
+
+function renderBracket() {
+  var container = document.getElementById('bk-container');
+  if (!container) return;
+  container.innerHTML = '';
+  container.className = 'bk-wrap';
+
+  var W = bkAllWinners();
+
+  // Seeds lookup from BRACKET_R1
+  var seedMap = {};
+  BRACKET_R1.forEach(function(g) {
+    if (g.team1) seedMap[g.team1] = g.seed1;
+    if (g.team2) seedMap[g.team2] = g.seed2;
+  });
+
+  // Build a column div for a single region-round slice
+  // side: 'bk-left' or 'bk-right'
+  // regionIdx: 0-3
+  // rnd: 1-4
+  // regionInHalf: 0 (top) or 1 (bottom) within the half
+  function makeRegionRoundCol(side, regionIdx, rnd, regionInHalf) {
+    var col = document.createElement('div');
+    col.className = 'bk-col ' + side + (rnd === 4 ? ' bk-e8' : '');
+    col.style.height = (BK_HALF_H + 18) + 'px';  // +18 for header
+
+    var regionY = regionInHalf * BK_REGION_H;
+    var gamesInRound = 8 >> (rnd - 1);  // 8,4,2,1
+
+    for (var i = 0; i < gamesInRound; i++) {
+      var gi = bkGlobalIdx(regionIdx, rnd, i);
+      var t1 = null, t2 = null, seed1 = null, seed2 = null;
+
+      if (rnd === 1) {
+        t1 = BRACKET_R1[gi].team1; t2 = BRACKET_R1[gi].team2;
+        seed1 = BRACKET_R1[gi].seed1; seed2 = BRACKET_R1[gi].seed2;
+      } else {
+        // team1 = winner of prev-round game 2*i, team2 = winner of prev game 2*i+1
+        var prevGi1 = bkGlobalIdx(regionIdx, rnd - 1, 2 * i);
+        var prevGi2 = bkGlobalIdx(regionIdx, rnd - 1, 2 * i + 1);
+        t1 = (W[rnd - 1] || [])[prevGi1] || null;
+        t2 = (W[rnd - 1] || [])[prevGi2] || null;
+        if (t1) seed1 = seedMap[t1] || null;
+        if (t2) seed2 = seedMap[t2] || null;
+      }
+
+      var winner = (W[rnd] || [])[gi] || null;
+      var gameDiv = bkMakeGame(rnd, gi, t1, t2, seed1, seed2, winner);
+      var top = bkGameTop(rnd, i, regionY);
+      gameDiv.style.top  = (top + 18) + 'px';  // +18 for header
+      gameDiv.style.left = '4px';
+      gameDiv.style.right = '4px';
+      col.appendChild(gameDiv);
+    }
+    return col;
+  }
+
+  // Region-name labels (placed on R64 column, at region start)
+  function addRegionLabel(col, name, regionInHalf) {
+    var lbl = document.createElement('div');
+    lbl.className = 'bk-region-hdr';
+    lbl.textContent = name;
+    lbl.style.top = (regionInHalf * BK_REGION_H + 18) + 'px';
+    col.appendChild(lbl);
+  }
+
+  // Round-name header row (placed across top of col)
+  var ROUND_HDRS = {1: 'R64', 2: 'R32', 3: 'Sweet 16', 4: 'Elite 8', 5: 'Final Four', 6: 'Champ'};
+
+  function makeColHdr(col, label) {
+    var hdr = document.createElement('div');
+    hdr.className = 'bk-col-hdr';
+    hdr.textContent = label;
+    hdr.style.position = 'absolute';
+    hdr.style.top = '0';
+    hdr.style.left = '0';
+    hdr.style.right = '0';
+    col.appendChild(hdr);
+  }
+
+  // --- LEFT HALF (South + East, rounds 1-4 going left→right) ---
+  var leftHalf = document.createElement('div');
+  leftHalf.className = 'bk-half';
+
+  for (var rnd = 1; rnd <= 4; rnd++) {
+    var col = document.createElement('div');
+    col.className = 'bk-col bk-left' + (rnd === 4 ? ' bk-e8' : '');
+    col.style.height = (BK_HALF_H + 18) + 'px';
+    makeColHdr(col, ROUND_HDRS[rnd]);
+
+    // South (region 0, top half)
+    var southR = makeRegionRoundCol('bk-left', 0, rnd, 0);
+    Array.prototype.forEach.call(southR.querySelectorAll('.bk-game, .bk-region-hdr'), function(el) {
+      col.appendChild(el);
+    });
+    // East (region 1, bottom half)
+    var eastR = makeRegionRoundCol('bk-left', 1, rnd, 1);
+    Array.prototype.forEach.call(eastR.querySelectorAll('.bk-game, .bk-region-hdr'), function(el) {
+      col.appendChild(el);
+    });
+
+    if (rnd === 1) {
+      addRegionLabel(col, 'South', 0);
+      addRegionLabel(col, 'East', 1);
+    }
+    leftHalf.appendChild(col);
+  }
+
+  // --- CENTER (FF1 | Championship | FF2) ---
+  var centerSec = document.createElement('div');
+  centerSec.className = 'bk-center';
+
+  // E8 winners for FF pairings: [South_E8, East_E8, West_E8, Midwest_E8]
+  var e8Winners = [0, 1, 2, 3].map(function(r) {
+    var gi = bkGlobalIdx(r, 4, 0);
+    return (W[4] || [])[gi] || null;
+  });
+
+  // FF game positions: center vertically at BK_REGION_H (boundary of top+bottom regions)
+  var ffTop = BK_REGION_H - BK_SLOT / 2;  // 416 - 26 = 390
+  var champTop = BK_REGION_H - BK_SLOT / 2;
+
+  function makeCenterCol(label, rnd, gi, t1, t2, seed1, seed2) {
+    var col = document.createElement('div');
+    col.className = 'bk-col-center';
+    col.style.height = (BK_HALF_H + 18) + 'px';
+    makeColHdr(col, label);
+    var winner = (W[rnd] || [])[gi] || null;
+    var gameDiv = bkMakeGame(rnd, gi, t1, t2, seed1, seed2, winner);
+    gameDiv.style.top   = (ffTop + 18) + 'px';
+    gameDiv.style.left  = '4px';
+    gameDiv.style.right = '4px';
+    col.appendChild(gameDiv);
+    if (rnd === 6 && winner) {
+      var lbl = document.createElement('div');
+      lbl.className = 'bk-champ-label';
+      lbl.textContent = '\u2605 Champion';
+      lbl.style.position = 'absolute';
+      lbl.style.top = (ffTop + BK_SLOT + 22) + 'px';
+      lbl.style.left = '0'; lbl.style.right = '0';
+      col.appendChild(lbl);
+    }
+    return col;
+  }
+
+  // FF1: FF_PAIRINGS[0] = [e8Idx0, e8Idx1]
+  var ff1T1 = e8Winners[FF_PAIRINGS[0][0]], ff1T2 = e8Winners[FF_PAIRINGS[0][1]];
+  // FF2: FF_PAIRINGS[1] = [e8Idx2, e8Idx3]
+  var ff2T1 = e8Winners[FF_PAIRINGS[1][0]], ff2T2 = e8Winners[FF_PAIRINGS[1][1]];
+  // Champ: winner of FF1 vs winner of FF2
+  var champT1 = (W[5] || [])[0] || null;
+  var champT2 = (W[5] || [])[1] || null;
+
+  centerSec.appendChild(makeCenterCol('Final Four', 5, 0, ff1T1, ff1T2,
+    ff1T1 ? (seedMap[ff1T1] || null) : null, ff1T2 ? (seedMap[ff1T2] || null) : null));
+  centerSec.appendChild(makeCenterCol('Championship', 6, 0, champT1, champT2,
+    champT1 ? (seedMap[champT1] || null) : null, champT2 ? (seedMap[champT2] || null) : null));
+  centerSec.appendChild(makeCenterCol('Final Four', 5, 1, ff2T1, ff2T2,
+    ff2T1 ? (seedMap[ff2T1] || null) : null, ff2T2 ? (seedMap[ff2T2] || null) : null));
+
+  // --- RIGHT HALF (West + Midwest, rounds 4-1 going left→right, i.e. E8 nearest center) ---
+  var rightHalf = document.createElement('div');
+  rightHalf.className = 'bk-half bk-half-r';
+
+  for (var rnd2 = 1; rnd2 <= 4; rnd2++) {
+    var col2 = document.createElement('div');
+    col2.className = 'bk-col bk-right' + (rnd2 === 4 ? ' bk-e8' : '');
+    col2.style.height = (BK_HALF_H + 18) + 'px';
+    makeColHdr(col2, ROUND_HDRS[rnd2]);
+
+    // West (region 2, top half)
+    var westR = makeRegionRoundCol('bk-right', 2, rnd2, 0);
+    Array.prototype.forEach.call(westR.querySelectorAll('.bk-game, .bk-region-hdr'), function(el) {
+      col2.appendChild(el);
+    });
+    // Midwest (region 3, bottom half)
+    var mwR = makeRegionRoundCol('bk-right', 3, rnd2, 1);
+    Array.prototype.forEach.call(mwR.querySelectorAll('.bk-game, .bk-region-hdr'), function(el) {
+      col2.appendChild(el);
+    });
+
+    if (rnd2 === 1) {
+      addRegionLabel(col2, 'West', 0);
+      addRegionLabel(col2, 'Midwest', 1);
+    }
+    rightHalf.appendChild(col2);
+  }
+
+  container.appendChild(leftHalf);
+  container.appendChild(centerSec);
+  container.appendChild(rightHalf);
+
+  // Update locked count badge
   var total = 0;
-  for (var r = 1; r <= 6; r++) {
-    var arr = lockedResults[String(r)] || [];
-    total += arr.filter(function(w) { return w !== null && w !== ''; }).length;
+  for (var r2 = 1; r2 <= 6; r2++) {
+    var arr = lockedResults[String(r2)] || [];
+    total += arr.filter(function(v) { return v !== null && v !== ''; }).length;
   }
   var countEl = document.getElementById('locked-count');
   if (countEl) countEl.textContent = total > 0 ? '(' + total + ' game' + (total !== 1 ? 's' : '') + ' locked)' : '';
@@ -2997,7 +3233,7 @@ function lockGame(rnd, gi, team) {
     if (prev && prev !== team) { clearDownstream(rnd); }
     lockedResults[rnds][gi] = team;
   }
-  renderLockedRounds();
+  renderBracket();
 }
 
 function clearDownstream(rnd) {
@@ -3043,14 +3279,14 @@ function clearLockedResults() {
   if (!confirm('Clear all locked game results?')) return;
   lockedResults = {};
   saveLockedResults();
-  renderLockedRounds();
+  renderBracket();
 }
 
 function initLockedResults() {
   if (!BRACKET_R1 || !BRACKET_R1.length || !BRACKET_R1[0].team1) return;
   var card = document.getElementById('lr-card');
   if (card) card.style.display = '';
-  renderLockedRounds();
+  renderBracket();
 }
 
 initLockedResults();
