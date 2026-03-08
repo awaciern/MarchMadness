@@ -1260,18 +1260,20 @@ def main():
     output_root.rename(final_output_root)
     # Write model metadata for the UI to display.
     model_info = {
-        'run_name':     args.run_name,
-        'model_key':    args.model,
-        'score':        int(avg_score_val),
-        'expert_tag':   expert_tag,
-        'features':     feat_str,
-        'params':       params_tag,
-        'norm_years':   norm_years,
-        'norm_all':     norm_all,
-        'calibrate':    calibrate,
-        'delta_feats':  delta_feats,
-        'model_params': {str(k): str(v) for k, v in model_params.items()},
-        'feature_bases': list(args.features),
+        'run_name':       args.run_name,
+        'model_key':      args.model,
+        'score':          int(avg_score_val),
+        'expert_tag':     expert_tag,
+        'features':       feat_str,
+        'params':         params_tag,
+        'norm_years':     norm_years,
+        'norm_all':       norm_all,
+        'calibrate':      calibrate,
+        'delta_feats':    delta_feats,
+        'model_params':   {str(k): str(v) for k, v in model_params.items()},
+        'feature_bases':  list(args.features),
+        'trad_train_acc': round(trad_train_acc, 4),
+        'trad_test_acc':  round(trad_test_acc, 4),
     }
     (final_output_root / 'model_info.json').write_text(json.dumps(model_info, indent=2))
     # -----------------------------------------------------------------------

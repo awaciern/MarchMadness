@@ -313,6 +313,20 @@ ALL_YEARS = [y for y in range(2012, THIS_YEAR + 1) if y != 2020]
 
 _SAVED_PATTERN = re.compile(r'^(.+?)_(\d+)_((?:KP|BT)\w*)_(.+)$')
 
+
+def _parse_trad_acc(folder: Path):
+    """Parse Traditional 67/33 train/test accuracy from a Predictions folder's summary.txt."""
+    summary = folder / 'summary.txt'
+    if not summary.exists():
+        return None, None
+    m = re.search(
+        r'Train acc:\s*([\d.]+)\s*\|.*?Test acc:\s*([\d.]+)',
+        summary.read_text(),
+    )
+    if m:
+        return float(m.group(1)), float(m.group(2))
+    return None, None
+
 def scan_saved_models():
     """
     Scan PREDICTIONS_DIR for completed model folders (not __pending__ dirs).
@@ -333,6 +347,9 @@ def scan_saved_models():
             try:
                 info = json.loads(info_file.read_text())
                 expert_tag = info.get('expert_tag', '')
+                train_acc, test_acc = info.get('trad_train_acc'), info.get('trad_test_acc')
+                if train_acc is None:
+                    train_acc, test_acc = _parse_trad_acc(d)
                 results.append({
                     'dir_name':   d.name,
                     'score':      info.get('score', 0),
@@ -344,6 +361,9 @@ def scan_saved_models():
                     'delta_feats':info.get('delta_feats', False),
                     'features':   info.get('features', ''),
                     'params':     info.get('params', ''),
+                    'train_acc':  train_acc,
+                    'test_acc':   test_acc,
+                    'has_pkl':    (d / 'model.pkl').exists(),
                     'years':      years,
                 })
                 continue
@@ -360,6 +380,7 @@ def scan_saved_models():
         if pm:
             params_str = pm.group(1)
             feat_str = rest[:pm.start()]
+        train_acc, test_acc = _parse_trad_acc(d)
         results.append({
             'dir_name':   d.name,
             'score':      score,
@@ -371,6 +392,9 @@ def scan_saved_models():
             'delta_feats':'DF' in expert_tag,
             'features':   feat_str,
             'params':     params_str,
+            'train_acc':  train_acc,
+            'test_acc':   test_acc,
+            'has_pkl':    (d / 'model.pkl').exists(),
             'years':      years,
         })
     results.sort(key=lambda x: x['score'], reverse=True)
@@ -410,6 +434,9 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
             try:
                 info = json.loads(info_file.read_text())
                 expert_tag = info.get('expert_tag', '')
+                train_acc, test_acc = info.get('trad_train_acc'), info.get('trad_test_acc')
+                if train_acc is None:
+                    train_acc, test_acc = _parse_trad_acc(PREDICTIONS_DIR / d.name)
                 results.append({
                     'dir_name':   d.name,
                     'model':      info.get('model_key', d.name),
@@ -421,6 +448,8 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
                     'delta_feats':info.get('delta_feats', False),
                     'features':   info.get('features', ''),
                     'params':     info.get('params', ''),
+                    'train_acc':  train_acc,
+                    'test_acc':   test_acc,
                     'iters':      iters,
                     'has_pkl':    has_pkl,
                     'csv_file':   latest.name,
@@ -434,6 +463,7 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
         if not m:
             continue
         model_key, score_str, expert_tag, rest = m.groups()
+        train_acc, test_acc = _parse_trad_acc(PREDICTIONS_DIR / d.name)
         results.append({
             'dir_name':   d.name,
             'model':      model_key,
@@ -445,6 +475,8 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
             'delta_feats':'DF' in expert_tag,
             'features':   rest,
             'params':     '',
+            'train_acc':  train_acc,
+            'test_acc':   test_acc,
             'iters':      iters,
             'has_pkl':    has_pkl,
             'csv_file':   latest.name,
@@ -1444,6 +1476,8 @@ def group_analysis_route():
     group = request.args.get('group', '')
     saved = scan_saved_models()
     simulations = scan_simulations(THIS_YEAR)
+    # Build a quick-lookup map of existing sim results keyed by dir_name.
+    sim_map = {s['dir_name']: s for s in simulations}
     groups_list = []
     if BRACKETS_DIR.is_dir():
         groups_list = [d.name for d in sorted(BRACKETS_DIR.iterdir()) if d.is_dir()]
@@ -1454,7 +1488,7 @@ def group_analysis_route():
         group=group,
         groups_list=groups_list,
         saved_models=saved,
-        simulations=simulations,
+        sim_map=sim_map,
         current_ff_str=current_ff_str,
         current_ff_label=current_ff_label,
         year=THIS_YEAR,
@@ -2470,7 +2504,7 @@ h1 { font-size: 20px; color: #fbbf24; margin-bottom: 4px; }
 /* Simulations section */
 .sims-card {
   background: #1e293b; border: 1px solid #334155; border-radius: 10px;
-  padding: 16px 20px; max-width: 820px; margin-bottom: 18px;
+  padding: 16px 20px; max-width: 100%; margin-bottom: 18px; overflow-x: auto;
 }
 .sims-title {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px;
@@ -2481,6 +2515,10 @@ table.sims-table th {
   text-align: left; padding: 5px 8px; color: #64748b; font-size: 10px;
   text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid #334155; white-space: nowrap;
 }
+table.sims-table th.sortable { cursor: pointer; user-select: none; }
+table.sims-table th.sortable:hover { color: #93c5fd; }
+table.sims-table th.sort-asc::after  { content: ' \25b2'; font-size: 9px; }
+table.sims-table th.sort-desc::after { content: ' \25bc'; font-size: 9px; }
 table.sims-table td {
   padding: 7px 8px; border-bottom: 1px solid #1a2744; color: #cbd5e1; vertical-align: middle;
 }
@@ -2553,49 +2591,23 @@ table.res-table tbody tr:hover td { background: #172554; }
   <a href="/fill_bracket" class="ff-info-link">(change in Fill Bracket &#8599;)</a>
 </div>
 
-{% if simulations %}
-<!-- Existing Simulations -->
+{% if saved_models %}
+<!-- Existing Models -->
 <div class="sims-card">
-  <div class="sims-title">&#9889; Existing Simulations for {{ year }} &mdash; Quick Run</div>
-  <table class="sims-table">
+  <div class="sims-title">&#127936; Models &mdash; Select to Run Simulation</div>
+  <table class="sims-table" id="ga-models-table">
     <thead><tr>
-      <th>Name</th>
-      <th>Model</th>
-      <th>Flags</th>
-      <th>Features</th>
-      <th style="text-align:right">Score</th>
-      <th style="text-align:right">Iters</th>
+      <th class="sortable" data-sort="name" onclick="gaSortBy('name')">Name</th>
+      <th class="sortable" data-sort="model" onclick="gaSortBy('model')">Model</th>
+      <th class="sortable" data-sort="flags" onclick="gaSortBy('flags')">Flags</th>
+      <th class="sortable" data-sort="features" onclick="gaSortBy('features')">Features</th>
+      <th class="sortable sort-desc" style="text-align:right" data-sort="score" onclick="gaSortBy('score')">Score</th>
+      <th class="sortable" style="text-align:right" data-sort="train_acc" onclick="gaSortBy('train_acc')">Train&nbsp;Acc</th>
+      <th class="sortable" style="text-align:right" data-sort="test_acc" onclick="gaSortBy('test_acc')">Test&nbsp;Acc</th>
       <th></th>
       <th></th>
     </tr></thead>
-    <tbody>
-    {% for s in simulations %}
-    {% set flags = (('NY ' if s.norm_years else '') + ('NA ' if s.norm_all else '') + ('CAL ' if s.calibrated else '') + ('DF' if s.delta_feats else ''))|trim %}
-    <tr>
-      <td style="color:#e2e8f0;font-weight:600">{{ s.dir_name }}</td>
-      <td style="color:#93c5fd;font-size:11px">{{ s.model }}</td>
-      <td style="color:#fbbf24;font-size:10px;white-space:nowrap">{{ flags or '&mdash;' }}</td>
-      <td style="color:#94a3b8;font-size:11px">{{ s.features[:35] }}{% if s.features|length > 35 %}&hellip;{% endif %}</td>
-      <td style="color:#fbbf24;font-weight:700;text-align:right">{{ s.score }}pts</td>
-      <td style="color:#64748b;text-align:right">{{ '{:,}'.format(s.iters) }}</td>
-      <td>
-        {% if s.html_file %}
-        <a href="/sim_html/{{ s.dir_name }}/{{ s.html_file }}" target="_blank" class="quick-run-btn" style="text-decoration:none;display:inline-block">&#128200; View</a>
-        {% endif %}
-      </td>
-      <td>
-        {% if s.has_pkl %}
-        <button class="quick-run-btn"
-                onclick='quickRun({{ s.dir_name | tojson }}, {{ s.iters }})'>
-          &#9654; Use This
-        </button>
-        {% else %}
-        <span class="no-pkl-note">No model.pkl</span>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-    </tbody>
+    <tbody id="ga-models-tbody"></tbody>
   </table>
 </div>
 {% endif %}
@@ -2616,8 +2628,7 @@ table.res-table tbody tr:hover td { background: #172554; }
       <select id="model-sel">
         <option value="">-- select model --</option>
         {% for m in saved_models %}
-        {% set flags = (('NY ' if m.norm_years else '') + ('NA ' if m.norm_all else '') + ('CAL ' if m.calibrated else '') + ('DF' if m.delta_feats else ''))|trim %}
-        <option value="{{ m.dir_name }}">{{ m.dir_name }} — {{ m.score }}pts — {{ m.model }}{% if flags %} — {{ flags }}{% endif %} — {{ m.features }}{% if m.params %} [{{ m.params }}]{% endif %}</option>
+        <option value="{{ m.dir_name }}">{{ m.dir_name }}</option>
         {% endfor %}
       </select>
     </div>
@@ -2677,6 +2688,75 @@ table.res-table tbody tr:hover td { background: #172554; }
 <script>
 const THIS_YEAR   = {{ year }};
 const GROUP_INIT  = {{ group | tojson }};
+const GA_MODELS   = {{ saved_models | tojson }};
+const GA_SIM_MAP  = {{ sim_map | tojson }};
+
+let gaSort = { key: 'score', dir: -1 };
+
+function gaSortVal(m, key) {
+  if (key === 'name')      return (m.dir_name  || '').toLowerCase();
+  if (key === 'model')     return (m.model     || '').toLowerCase();
+  if (key === 'flags')     return (m.expert    || '').toLowerCase();
+  if (key === 'features')  return (m.features  || '').toLowerCase();
+  if (key === 'score')     return m.score     != null ? m.score     : -Infinity;
+  if (key === 'train_acc') return m.train_acc != null ? m.train_acc : -Infinity;
+  if (key === 'test_acc')  return m.test_acc  != null ? m.test_acc  : -Infinity;
+  return '';
+}
+
+function gaSortBy(key) {
+  if (gaSort.key === key) { gaSort.dir *= -1; }
+  else { gaSort.key = key; gaSort.dir = (key === 'score' || key === 'train_acc' || key === 'test_acc') ? -1 : 1; }
+  gaRenderModels();
+}
+
+function gaRenderModels() {
+  const sorted = GA_MODELS.slice().sort(function(a, b) {
+    const av = gaSortVal(a, gaSort.key), bv = gaSortVal(b, gaSort.key);
+    if (av < bv) return gaSort.dir; if (av > bv) return -gaSort.dir; return 0;
+  });
+  document.querySelectorAll('#ga-models-table th[data-sort]').forEach(function(th) {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === gaSort.key) th.classList.add(gaSort.dir === 1 ? 'sort-asc' : 'sort-desc');
+  });
+  const tbody = document.getElementById('ga-models-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  const fmtAcc = function(v) { return v == null ? '\u2014' : (v * 100).toFixed(1) + '%'; };
+  sorted.forEach(function(m) {
+    const sim   = GA_SIM_MAP[m.dir_name];
+    const flags = [m.norm_years ? 'NY' : '', m.norm_all ? 'NA' : '', m.calibrated ? 'CAL' : '', m.delta_feats ? 'DF' : ''].filter(Boolean).join('\u00a0') || '\u2014';
+    const feat  = m.features.length > 35 ? m.features.slice(0, 35) + '\u2026' : m.features;
+    const viewBtn = (sim && sim.html_file)
+      ? '<a href="/sim_html/' + encodeURIComponent(m.dir_name) + '/' + encodeURIComponent(sim.html_file) + '" target="_blank" class="quick-run-btn" style="text-decoration:none;display:inline-block">&#128200; View</a>'
+      : '';
+    const useBtn = m.has_pkl
+      ? '<button class="quick-run-btn" onclick=\'quickRun(' + JSON.stringify(m.dir_name) + ')\'>&#9654; Use This</button>'
+      : '<span class="no-pkl-note">No model.pkl</span>';
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.innerHTML =
+      '<td style="color:#e2e8f0;font-weight:600">' + m.dir_name + '</td>' +
+      '<td style="color:#93c5fd;font-size:11px">' + m.model + '</td>' +
+      '<td style="color:#fbbf24;font-size:10px;white-space:nowrap">' + flags + '</td>' +
+      '<td style="color:#94a3b8;font-size:11px">' + feat + '</td>' +
+      '<td style="color:#fbbf24;font-weight:700;text-align:right">' + m.score + 'pts</td>' +
+      '<td style="color:#94a3b8;font-size:11px;font-family:monospace;text-align:right">' + fmtAcc(m.train_acc) + '</td>' +
+      '<td style="color:#94a3b8;font-size:11px;font-family:monospace;text-align:right">' + fmtAcc(m.test_acc)  + '</td>' +
+      '<td>' + viewBtn + '</td>' +
+      '<td>' + useBtn  + '</td>';
+    tr.addEventListener('click', function(e) {
+      if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') return;
+      const sel = document.getElementById('model-sel');
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === m.dir_name) { sel.selectedIndex = i; break; }
+      }
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+gaRenderModels();
 
 function probColor(p) {
   if (p >= 0.40) return '#86efac';
@@ -2784,8 +2864,8 @@ function quickRun(dirName, iters) {
   for (let i = 0; i < sel.options.length; i++) {
     if (sel.options[i].value === dirName) { sel.selectedIndex = i; break; }
   }
-  document.getElementById('iters-inp').value = iters;
-  runAnalysis(dirName, iters);
+  if (iters != null) document.getElementById('iters-inp').value = iters;
+  runAnalysis(dirName, iters || parseInt(document.getElementById('iters-inp').value) || 1000);
 }
 
 function startStream(jobId, iters, dirName) {
@@ -3123,6 +3203,10 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
 .tag-cal { background: #3b1a0a; color: #fdba74; margin-left: 3px; }
 .tag-bt { background: #500724; color: #f9a8d4; }
 .feat-tags { color: #64748b; font-size: 10px; }
+.saved-table th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.saved-table th.sortable:hover { color: #93c5fd; }
+.saved-table th.sort-asc::after  { content: ' \25b2'; font-size: 9px; }
+.saved-table th.sort-desc::after { content: ' \25bc'; font-size: 9px; }
 
 /* ---- simulation card ---- */
 .sim-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
@@ -3196,12 +3280,14 @@ label.feat-chip[title] { cursor: help; }
   <table class="saved-table" id="saved-table" style="display:none">
     <thead><tr>
       <th style="width:30px">#</th>
-      <th>Name</th>
-      <th style="width:70px">Score</th>
-      <th>Model</th>
-      <th style="width:60px">Flags</th>
-      <th>Features</th>
-      <th>Params</th>
+      <th class="sortable" data-sort="name" onclick="savedSortBy('name')">Name</th>
+      <th class="sortable" data-sort="model" onclick="savedSortBy('model')">Model</th>
+      <th class="sortable" style="width:60px" data-sort="flags" onclick="savedSortBy('flags')">Flags</th>
+      <th class="sortable" data-sort="features" onclick="savedSortBy('features')">Features</th>
+      <th class="sortable" data-sort="params" onclick="savedSortBy('params')">Params</th>
+      <th class="sortable sort-desc" style="width:70px;text-align:right" data-sort="score" onclick="savedSortBy('score')">Score</th>
+      <th class="sortable" style="width:72px;text-align:right" data-sort="train_acc" onclick="savedSortBy('train_acc')">Train&nbsp;Acc</th>
+      <th class="sortable" style="width:72px;text-align:right" data-sort="test_acc" onclick="savedSortBy('test_acc')">Test&nbsp;Acc</th>
     </tr></thead>
     <tbody id="saved-tbody"></tbody>
   </table>
@@ -3309,7 +3395,7 @@ label.feat-chip[title] { cursor: help; }
       <span style="font-size:10px;color:#475569">(Z-score each feature per year before training)</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <input type="checkbox" id="norm-all-check" onchange="if(this.checked)document.getElementById('norm-years-check').checked=false" style="accent-color:#10b981;cursor:pointer;width:14px;height:14px">
+      <input type="checkbox" id="norm-all-check" onchange="if(this.checked)document.getElementById('norm-years-check').checked=false" style="accent-color:#10b981;cursor:pointer;width:14px;height:14px" checked>
       <span style="font-size:13px;color:#e2e8f0">Normalize across all years</span>
       <span style="font-size:10px;color:#475569">(single global Z-score scaler across all years)</span>
     </div>
@@ -3319,7 +3405,7 @@ label.feat-chip[title] { cursor: help; }
       <span style="font-size:10px;color:#475569">(Platt scaling &mdash; corrects over/under-confident win probs)</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <input type="checkbox" id="delta-feats-check" style="accent-color:#a855f7;cursor:pointer;width:14px;height:14px">
+      <input type="checkbox" id="delta-feats-check" style="accent-color:#a855f7;cursor:pointer;width:14px;height:14px" checked>
       <span style="font-size:13px;color:#e2e8f0">Delta features</span>
       <span style="font-size:10px;color:#475569">(collapse numeric __1 and __2 into a single team1 &minus; team2 difference)</span>
     </div>
@@ -3414,49 +3500,82 @@ label.feat-chip[title] { cursor: help; }
 const ALL_YEARS = {{ ALL_YEARS_JSON }};
 
 // ---- Saved models ----
-let activeSavedRow  = null;
-let currentDirName  = null;
+let activeSavedRow = null;
+let currentDirName = null;
+let savedModels    = [];
+let savedSort      = { key: 'score', dir: -1 };
+
+function savedSortVal(m, key) {
+  if (key === 'name')      return (m.dir_name  || '').toLowerCase();
+  if (key === 'model')     return (m.model     || '').toLowerCase();
+  if (key === 'flags')     return (m.expert    || '').toLowerCase();
+  if (key === 'features')  return (m.features  || '').toLowerCase();
+  if (key === 'params')    return (m.params    || '').toLowerCase();
+  if (key === 'score')     return m.score     != null ? m.score     : -Infinity;
+  if (key === 'train_acc') return m.train_acc != null ? m.train_acc : -Infinity;
+  if (key === 'test_acc')  return m.test_acc  != null ? m.test_acc  : -Infinity;
+  return '';
+}
+
+function savedSortBy(key) {
+  if (savedSort.key === key) { savedSort.dir *= -1; }
+  else { savedSort.key = key; savedSort.dir = (key === 'score' || key === 'train_acc' || key === 'test_acc') ? -1 : 1; }
+  renderSavedModels();
+}
+
+function renderSavedModels() {
+  const sorted = savedModels.slice().sort(function(a, b) {
+    const av = savedSortVal(a, savedSort.key), bv = savedSortVal(b, savedSort.key);
+    if (av < bv) return savedSort.dir; if (av > bv) return -savedSort.dir; return 0;
+  });
+  document.querySelectorAll('#saved-table th[data-sort]').forEach(function(th) {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === savedSort.key) th.classList.add(savedSort.dir === 1 ? 'sort-asc' : 'sort-desc');
+  });
+  const tbody = document.getElementById('saved-tbody');
+  tbody.innerHTML = '';
+  const fmtAcc = function(v) { return v == null ? '\u2014' : (v * 100).toFixed(1) + '%'; };
+  sorted.forEach(function(m, i) {
+    const tr = document.createElement('tr');
+    tr.className = 'model-row';
+    const nyTag  = m.norm_years  ? '<span class="tag tag-ny">NY</span>'   : '';
+    const naTag  = m.norm_all    ? '<span class="tag tag-na">NA</span>'   : '';
+    const calTag = m.calibrated  ? '<span class="tag tag-cal">CAL</span>' : '';
+    const dfTag  = m.delta_feats ? '<span class="tag" style="background:#a855f7;color:#fff">DF</span>' : '';
+    const flagsTag = (nyTag + naTag + calTag + dfTag) || '\u2014';
+    tr.innerHTML =
+      '<td style="color:#475569">' + (i + 1) + '</td>' +
+      '<td style="color:#e2e8f0;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + m.dir_name.replace(/"/g,'&quot;') + '">' + m.dir_name + '</td>' +
+      '<td>' + m.model.replace(/_/g, '\u00a0') + '</td>' +
+      '<td>' + flagsTag + '</td>' +
+      '<td class="feat-tags">' + m.features.replace(/\+/g, ' &middot; ') + '</td>' +
+      '<td style="color:#64748b;font-size:10px">' + (m.params || '\u2014') + '</td>' +
+      '<td class="score-cell" style="text-align:right">' + m.score + '</td>' +
+      '<td style="color:#94a3b8;font-size:11px;text-align:right;font-family:monospace">' + fmtAcc(m.train_acc) + '</td>' +
+      '<td style="color:#94a3b8;font-size:11px;text-align:right;font-family:monospace">' + fmtAcc(m.test_acc)  + '</td>';
+    tr.addEventListener('click', function() {
+      if (activeSavedRow) activeSavedRow.classList.remove('active');
+      tr.classList.add('active');
+      activeSavedRow = tr;
+      loadSavedResults(m.dir_name);
+    });
+    tbody.appendChild(tr);
+  });
+}
 
 function loadSavedModels() {
   fetch('/saved_models')
     .then(r => r.json())
-    .then(models => {
-      const tbody = document.getElementById('saved-tbody');
-      const table = document.getElementById('saved-table');
-      const empty = document.getElementById('saved-empty');
+    .then(function(models) {
+      const table   = document.getElementById('saved-table');
+      const empty   = document.getElementById('saved-empty');
       const countEl = document.getElementById('saved-count');
-      tbody.innerHTML = '';
-      if (!models.length) {
-        empty.style.display = '';
-        return;
-      }
+      if (!models.length) { empty.style.display = ''; return; }
+      savedModels = models;
       countEl.textContent = models.length + ' model' + (models.length !== 1 ? 's' : '');
       table.style.display = '';
       empty.style.display = 'none';
-      models.forEach(function(m, i) {
-        const tr = document.createElement('tr');
-        tr.className = 'model-row';
-        const nyTag  = m.norm_years  ? '<span class="tag tag-ny">NY</span>'   : '';
-        const naTag  = m.norm_all    ? '<span class="tag tag-na">NA</span>'   : '';
-        const calTag = m.calibrated  ? '<span class="tag tag-cal">CAL</span>' : '';
-        const dfTag  = m.delta_feats ? '<span class="tag" style="background:#a855f7;color:#fff">DF</span>' : '';
-        const flagsTag = (nyTag + naTag + calTag + dfTag) || '\u2014';
-        tr.innerHTML =
-          '<td style="color:#475569">' + (i + 1) + '</td>' +
-          '<td style="color:#e2e8f0;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + m.dir_name.replace(/"/g,'&quot;') + '">' + m.dir_name + '</td>' +
-          '<td class="score-cell">' + m.score + '</td>' +
-          '<td>' + m.model.replace(/_/g, '\u00a0') + '</td>' +
-          '<td>' + flagsTag + '</td>' +
-          '<td class="feat-tags">' + m.features.replace(/\+/g, ' &middot; ') + '</td>' +
-          '<td style="color:#64748b;font-size:10px">' + (m.params || '\u2014') + '</td>';
-        tr.addEventListener('click', function() {
-          if (activeSavedRow) activeSavedRow.classList.remove('active');
-          tr.classList.add('active');
-          activeSavedRow = tr;
-          loadSavedResults(m.dir_name);
-        });
-        tbody.appendChild(tr);
-      });
+      renderSavedModels();
     });
 }
 
