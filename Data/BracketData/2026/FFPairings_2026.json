@@ -1,14 +1,14 @@
 {
-  "pairings": "0-2,1-3",
+  "pairings": "0-1,2-3",
   "pairs": [
     [
       0,
-      2
+      1
     ],
     [
-      1,
+      2,
       3
     ]
   ],
-  "label": "South/Midwest \u00b7 East/West"
+  "label": "South/East \u00b7 Midwest/West"
 }
