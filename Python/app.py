@@ -599,6 +599,89 @@ def saved_bracket(dir_name, year):
     return send_file(str(html_file), mimetype='text/html')
 
 
+@app.route('/save_model_bracket', methods=['POST'])
+def save_model_bracket():
+    """Parse the existing year.html from a Predictions folder and save the
+    model's picks to Brackets/<group>/<name>.json — no model re-run needed."""
+    import re as _re
+    import html as _html_lib
+    import datetime as _dt
+
+    data     = request.get_json(force=True)
+    dir_name = (data.get('dir_name') or '').strip()
+    year     = int(data.get('year') or THIS_YEAR)
+    name     = (data.get('name') or '').strip()
+    group    = (data.get('group') or 'Models').strip()
+
+    if not dir_name:
+        return jsonify({'error': 'dir_name is required.'}), 400
+    if not name:
+        return jsonify({'error': 'Bracket name is required.'}), 400
+    if not group:
+        return jsonify({'error': 'Group name is required.'}), 400
+
+    html_file = PREDICTIONS_DIR / dir_name / f'{year}.html'
+    if not html_file.exists():
+        return jsonify({'error': f'{year}.html not found in Predictions/{dir_name}.'}), 400
+
+    html_text = html_file.read_text(encoding='utf-8')
+
+    # The bracket HTML has 11 round columns (mirrored left→right):
+    #   0=R1-left  1=R2-left  2=S16-left  3=E8-left  4=FF-left
+    #   5=Championship
+    #   6=FF-right  7=E8-right  8=S16-right  9=R2-right  10=R1-right
+    # Teams with class "adv" in each column = winners for that round/side.
+    rnd_blocks = html_text.split('<div class="rnd"')[1:]  # drop text before first column
+    if len(rnd_blocks) != 11:
+        return jsonify({'error': f'Unexpected bracket structure ({len(rnd_blocks)} columns; expected 11).'}), 400
+
+    def _adv_teams(block):
+        """Extract winner names from a round column, in bracket order (by top px)."""
+        hits = []
+        for m in _re.finditer(
+            r'top:(\d+)px[^>]*>.*?class="c adv[^"]*">.*?</span>(.*?)<span',
+            block, _re.DOTALL,
+        ):
+            hits.append((int(m.group(1)), _html_lib.unescape(m.group(2).strip())))
+        hits.sort(key=lambda x: x[0])
+        return [t for _, t in hits]
+
+    # Combine left + right halves in bracket order for each round
+    semi_teams = _adv_teams(rnd_blocks[4]) + _adv_teams(rnd_blocks[6])
+    champ_list  = _adv_teams(rnd_blocks[5])
+    picks = {
+        'r1':       _adv_teams(rnd_blocks[0])  + _adv_teams(rnd_blocks[10]),
+        'r2':       _adv_teams(rnd_blocks[1])  + _adv_teams(rnd_blocks[9]),
+        's16':      _adv_teams(rnd_blocks[2])  + _adv_teams(rnd_blocks[8]),
+        'e8':       _adv_teams(rnd_blocks[3])  + _adv_teams(rnd_blocks[7]),
+        'semi':     semi_teams,
+        'champion': champ_list[0] if champ_list else None,
+    }
+
+    safe_name  = re.sub(r'[^\w\-\. ]', '', name).strip().replace(' ', '_')
+    safe_group = re.sub(r'[^\w\-\. ]', '', group).strip().replace(' ', '_')
+    if not safe_name or not safe_group:
+        return jsonify({'error': 'Name or group contains only invalid characters.'}), 400
+
+    out_dir = BRACKETS_DIR / safe_group
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f'{safe_name}.json'
+
+    bracket_payload = {
+        'name':        name,
+        'group':       group,
+        'year':        year,
+        'created':     _dt.datetime.now().isoformat(timespec='seconds'),
+        'ff_pairings': _load_ff_pairings_str(year),
+        'model_dir':   dir_name,
+        'picks':       picks,
+    }
+    with open(out_path, 'w', encoding='utf-8') as f:
+        json.dump(bracket_payload, f, indent=2)
+
+    return jsonify({'saved': True, 'path': str(out_path.relative_to(REPO_ROOT))})
+
+
 # ---------------------------------------------------------------------------
 # Simulation routes
 # ---------------------------------------------------------------------------
@@ -3193,7 +3276,29 @@ label.feat-chip[title] { cursor: help; }
         <div id="summary-box"></div>
       </div>
 
-      <!-- Simulation card -->
+      <!-- Save bracket to group -->
+      <div class="panel-card" id="save-bracket-card" style="display:none">
+        <div class="panel-title">&#128190; Save Bracket to Groups</div>
+        <p style="font-size:12px;color:#64748b;margin-bottom:10px">
+          Save this model&#39;s <strong style="color:#fbbf24" id="save-bracket-year-lbl"></strong> predicted bracket as a group bracket entry.
+        </p>
+        <div class="sim-form">
+          <div>
+            <label>Name</label>
+            <input type="text" id="save-bracket-name"
+              style="background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:5px 8px;font-size:12px;outline:none;width:320px"
+              placeholder="bracket name">
+          </div>
+          <div>
+            <label>Group</label>
+            <input type="text" id="save-bracket-group"
+              style="background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:5px 8px;font-size:12px;outline:none;width:120px"
+              value="Models">
+          </div>
+          <button id="save-bracket-btn" onclick="saveModelBracket()">&#128190; Save</button>
+        </div>
+        <div id="save-bracket-msg" style="font-size:12px;margin-top:6px"></div>
+      </div>
       <div class="panel-card" id="sim-card">
         <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <span>&#127922; Monte Carlo Simulation</span>
@@ -3309,6 +3414,16 @@ function loadSimCard(dirName) {
   document.getElementById('sim-status-badge').style.display = 'none';
   document.getElementById('sim-btn').disabled = false;
 
+  // Show and populate the save-bracket card
+  const saveCard = document.getElementById('save-bracket-card');
+  if (saveCard) {
+    document.getElementById('save-bracket-name').value = dirName;
+    document.getElementById('save-bracket-year-lbl').textContent = {{ THIS_YEAR }} + ' \u2605';
+    document.getElementById('save-bracket-msg').textContent = '';
+    document.getElementById('save-bracket-btn').disabled = false;
+    saveCard.style.display = '';
+  }
+
   // Populate year selector from ALL_YEARS
   const sel = document.getElementById('sim-year');
   sel.innerHTML = '';
@@ -3322,6 +3437,40 @@ function loadSimCard(dirName) {
 
   // Load previous simulation runs
   loadSimPrev(dirName);
+}
+
+function saveModelBracket() {
+  const name  = document.getElementById('save-bracket-name').value.trim();
+  const group = document.getElementById('save-bracket-group').value.trim();
+  const msg   = document.getElementById('save-bracket-msg');
+  const btn   = document.getElementById('save-bracket-btn');
+  if (!name)  { msg.style.color = '#f87171'; msg.textContent = '\u26a0 Enter a bracket name.'; return; }
+  if (!group) { msg.style.color = '#f87171'; msg.textContent = '\u26a0 Enter a group name.'; return; }
+  if (!currentDirName) return;
+  btn.disabled = true;
+  msg.style.color = '#94a3b8';
+  msg.textContent = 'Saving\u2026';
+  fetch('/save_model_bracket', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dir_name: currentDirName, year: {{ THIS_YEAR }}, name, group }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.disabled = false;
+    if (data.error) {
+      msg.style.color = '#f87171';
+      msg.textContent = '\u26a0 ' + data.error;
+    } else {
+      msg.style.color = '#4ade80';
+      msg.textContent = '\u2713 Saved to ' + data.path;
+    }
+  })
+  .catch(() => {
+    btn.disabled = false;
+    msg.style.color = '#f87171';
+    msg.textContent = '\u26a0 Failed to save.';
+  });
 }
 
 function loadSimPrev(dirName) {
