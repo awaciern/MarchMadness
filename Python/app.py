@@ -317,6 +317,8 @@ def scan_saved_models():
     """
     Scan PREDICTIONS_DIR for completed model folders (not __pending__ dirs).
     Returns a list of dicts sorted by score descending.
+    Folders with model_info.json use that for metadata; legacy name-encoded
+    folders fall back to _SAVED_PATTERN parsing.
     """
     results = []
     if not PREDICTIONS_DIR.is_dir():
@@ -324,18 +326,40 @@ def scan_saved_models():
     for d in PREDICTIONS_DIR.iterdir():
         if not d.is_dir() or d.name.startswith('__'):
             continue
+        years = [y for y in ALL_YEARS if (d / f'{y}.html').exists()]
+        # --- new-style: metadata in model_info.json ---
+        info_file = d / 'model_info.json'
+        if info_file.exists():
+            try:
+                info = json.loads(info_file.read_text())
+                expert_tag = info.get('expert_tag', '')
+                results.append({
+                    'dir_name':   d.name,
+                    'score':      info.get('score', 0),
+                    'model':      info.get('model_key', d.name),
+                    'expert':     expert_tag,
+                    'norm_years': info.get('norm_years', False),
+                    'norm_all':   info.get('norm_all', False),
+                    'calibrated': info.get('calibrate', False),
+                    'delta_feats':info.get('delta_feats', False),
+                    'features':   info.get('features', ''),
+                    'params':     info.get('params', ''),
+                    'years':      years,
+                })
+                continue
+            except Exception:
+                pass
+        # --- legacy: decode metadata from folder name ---
         m = _SAVED_PATTERN.match(d.name)
         if not m:
             continue
         model_key, score_str, expert_tag, rest = m.groups()
         score = int(score_str)
-        # Split features from optional params (params contain '=')
         feat_str, params_str = rest, ''
         pm = re.search(r'_([^_]+=.+)$', rest)
         if pm:
             params_str = pm.group(1)
             feat_str = rest[:pm.start()]
-        years = [y for y in ALL_YEARS if (d / f'{y}.html').exists()]
         results.append({
             'dir_name':   d.name,
             'score':      score,
@@ -358,6 +382,8 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
     Scan SIMULATIONS_DIR for model folders that have CSV results for `year`.
     Returns dicts with dir_name, model, score, iters, and whether a matching
     model.pkl exists in PREDICTIONS_DIR.
+    Folders backed by model_info.json use that for characteristics; legacy
+    name-encoded folders fall back to _SAVED_PATTERN.
     """
     results = []
     if not SIMULATIONS_DIR.is_dir():
@@ -372,21 +398,53 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
         )
         if not csv_files:
             continue
-        m = _SAVED_PATTERN.match(d.name)
-        if not m:
-            continue
-        model_key, score_str, expert_tag, rest = m.groups()
         latest = csv_files[0]
         iters_match = re.search(r'_(\d+)iters\.csv$', latest.name)
         iters = int(iters_match.group(1)) if iters_match else 0
         html_file = latest.with_suffix('.html').name
         has_html  = (d / html_file).exists()
         has_pkl = (PREDICTIONS_DIR / d.name / 'model.pkl').exists()
+        # Try model_info.json from the matching Predictions folder first.
+        info_file = PREDICTIONS_DIR / d.name / 'model_info.json'
+        if info_file.exists():
+            try:
+                info = json.loads(info_file.read_text())
+                expert_tag = info.get('expert_tag', '')
+                results.append({
+                    'dir_name':   d.name,
+                    'model':      info.get('model_key', d.name),
+                    'score':      info.get('score', 0),
+                    'expert':     expert_tag,
+                    'norm_years': info.get('norm_years', False),
+                    'norm_all':   info.get('norm_all', False),
+                    'calibrated': info.get('calibrate', False),
+                    'delta_feats':info.get('delta_feats', False),
+                    'features':   info.get('features', ''),
+                    'params':     info.get('params', ''),
+                    'iters':      iters,
+                    'has_pkl':    has_pkl,
+                    'csv_file':   latest.name,
+                    'html_file':  html_file if has_html else '',
+                })
+                continue
+            except Exception:
+                pass
+        # Legacy: parse from folder name.
+        m = _SAVED_PATTERN.match(d.name)
+        if not m:
+            continue
+        model_key, score_str, expert_tag, rest = m.groups()
         results.append({
             'dir_name':   d.name,
             'model':      model_key,
             'score':      int(score_str),
+            'expert':     expert_tag,
+            'norm_years': 'NY' in expert_tag,
+            'norm_all':   'NA' in expert_tag,
+            'calibrated': 'CAL' in expert_tag,
+            'delta_feats':'DF' in expert_tag,
             'features':   rest,
+            'params':     '',
             'iters':      iters,
             'has_pkl':    has_pkl,
             'csv_file':   latest.name,
@@ -470,6 +528,13 @@ def index():
 def run_prediction():
     data = request.get_json()
 
+    run_name = (data.get('run_name') or '').strip()
+    if not run_name:
+        return jsonify({'error': 'Model name is required.'}), 400
+    # Ensure the name is a safe folder name (no path separators or leading dots).
+    if any(c in run_name for c in ('/', '\\', '\0')) or run_name.startswith('.'):
+        return jsonify({'error': 'Model name contains invalid characters.'}), 400
+
     model   = data.get('model', 'logistic_regression')
     params  = data.get('params', '').strip()   # raw "key=val key=val" string
     features = data.get('features', DEFAULT_FEATURES)
@@ -483,6 +548,7 @@ def run_prediction():
         '--features', *features,
         '--this-year', str(THIS_YEAR),
         '--final-four-pairings', _load_ff_pairings_str(THIS_YEAR),
+        '--run-name', run_name,
     ]
     if params:
         cmd += ['--model-params'] + params.split()
@@ -2493,18 +2559,25 @@ table.res-table tbody tr:hover td { background: #172554; }
   <div class="sims-title">&#9889; Existing Simulations for {{ year }} &mdash; Quick Run</div>
   <table class="sims-table">
     <thead><tr>
-      <th>Score</th>
+      <th>Name</th>
       <th>Model</th>
-      <th>Iters</th>
+      <th>Flags</th>
+      <th>Features</th>
+      <th style="text-align:right">Score</th>
+      <th style="text-align:right">Iters</th>
       <th></th>
       <th></th>
     </tr></thead>
     <tbody>
     {% for s in simulations %}
+    {% set flags = (('NY ' if s.norm_years else '') + ('NA ' if s.norm_all else '') + ('CAL ' if s.calibrated else '') + ('DF' if s.delta_feats else ''))|trim %}
     <tr>
-      <td style="color:#fbbf24;font-weight:700">{{ s.score }}pts</td>
-      <td style="color:#e2e8f0;font-size:11px">{{ s.model }} &mdash; {{ s.features[:40] }}{% if s.features|length > 40 %}&hellip;{% endif %}</td>
-      <td style="color:#64748b">{{ '{:,}'.format(s.iters) }}</td>
+      <td style="color:#e2e8f0;font-weight:600">{{ s.dir_name }}</td>
+      <td style="color:#93c5fd;font-size:11px">{{ s.model }}</td>
+      <td style="color:#fbbf24;font-size:10px;white-space:nowrap">{{ flags or '&mdash;' }}</td>
+      <td style="color:#94a3b8;font-size:11px">{{ s.features[:35] }}{% if s.features|length > 35 %}&hellip;{% endif %}</td>
+      <td style="color:#fbbf24;font-weight:700;text-align:right">{{ s.score }}pts</td>
+      <td style="color:#64748b;text-align:right">{{ '{:,}'.format(s.iters) }}</td>
       <td>
         {% if s.html_file %}
         <a href="/sim_html/{{ s.dir_name }}/{{ s.html_file }}" target="_blank" class="quick-run-btn" style="text-decoration:none;display:inline-block">&#128200; View</a>
@@ -2543,7 +2616,8 @@ table.res-table tbody tr:hover td { background: #172554; }
       <select id="model-sel">
         <option value="">-- select model --</option>
         {% for m in saved_models %}
-        <option value="{{ m.dir_name }}">{{ m.score }}pts &mdash; {{ m.model }} &mdash; {{ m.features }}</option>
+        {% set flags = (('NY ' if m.norm_years else '') + ('NA ' if m.norm_all else '') + ('CAL ' if m.calibrated else '') + ('DF' if m.delta_feats else ''))|trim %}
+        <option value="{{ m.dir_name }}">{{ m.dir_name }} — {{ m.score }}pts — {{ m.model }}{% if flags %} — {{ flags }}{% endif %} — {{ m.features }}{% if m.params %} [{{ m.params }}]{% endif %}</option>
         {% endfor %}
       </select>
     </div>
@@ -3122,6 +3196,7 @@ label.feat-chip[title] { cursor: help; }
   <table class="saved-table" id="saved-table" style="display:none">
     <thead><tr>
       <th style="width:30px">#</th>
+      <th>Name</th>
       <th style="width:70px">Score</th>
       <th>Model</th>
       <th style="width:60px">Flags</th>
@@ -3248,6 +3323,12 @@ label.feat-chip[title] { cursor: help; }
       <span style="font-size:13px;color:#e2e8f0">Delta features</span>
       <span style="font-size:10px;color:#475569">(collapse numeric __1 and __2 into a single team1 &minus; team2 difference)</span>
     </div>
+    <hr style="border:none;border-top:1px solid #334155;margin:14px 0">
+    <label class="field-label">Model Name <span style="color:#f87171">*</span></label>
+    <input type="text" id="run-name-input"
+      style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;padding:8px 10px;font-size:13px;outline:none"
+      placeholder="e.g. RF_AdjEM_NY  (required — used as Predictions folder name)">
+    <p class="hint">This will be the folder name in <code style="color:#fbbf24">Predictions/</code>. Choose a unique, descriptive name.</p>
     <button id="run-btn" onclick="runPrediction()">&#9654; Run Prediction</button>
   </div>
 
@@ -3362,6 +3443,7 @@ function loadSavedModels() {
         const flagsTag = (nyTag + naTag + calTag + dfTag) || '\u2014';
         tr.innerHTML =
           '<td style="color:#475569">' + (i + 1) + '</td>' +
+          '<td style="color:#e2e8f0;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + m.dir_name.replace(/"/g,'&quot;') + '">' + m.dir_name + '</td>' +
           '<td class="score-cell">' + m.score + '</td>' +
           '<td>' + m.model.replace(/_/g, '\u00a0') + '</td>' +
           '<td>' + flagsTag + '</td>' +
@@ -3627,6 +3709,15 @@ function runPrediction() {
   const features = getSelectedFeatures();
   if (!features.length) { alert('Select at least one feature.'); return; }
 
+  const runName   = document.getElementById('run-name-input').value.trim();
+  if (!runName) {
+    document.getElementById('run-name-input').focus();
+    document.getElementById('run-name-input').style.borderColor = '#f87171';
+    alert('Model Name is required before running.');
+    return;
+  }
+  document.getElementById('run-name-input').style.borderColor = '#334155';
+
   const model     = document.getElementById('model-select').value;
   const params    = document.getElementById('params-input').value.trim();
   const normYears = document.getElementById('norm-years-check').checked;
@@ -3643,7 +3734,7 @@ function runPrediction() {
   fetch('/run', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ model, params, features, norm_years: normYears, norm_all: normAll, calibrate, delta_feats: deltaFeats }),
+    body: JSON.stringify({ run_name: runName, model, params, features, norm_years: normYears, norm_all: normAll, calibrate, delta_feats: deltaFeats }),
   })
   .then(r => r.json())
   .then(data => {

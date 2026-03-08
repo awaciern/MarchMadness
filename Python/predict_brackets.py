@@ -24,6 +24,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import pickle
 import shutil
@@ -936,6 +937,15 @@ def main():
             'Output folder name will include a DF indicator.'
         ),
     )
+    parser.add_argument(
+        '--run-name',
+        required=True,
+        help=(
+            'Human-readable name for this model run.  Used as the folder name under '
+            'Predictions/ and stored in model_info.json for display in the UI.  '
+            'Example: "RF_AdjEM_NY".'
+        ),
+    )
     args = parser.parse_args()
 
     data_root = Path(args.data_root)
@@ -985,8 +995,8 @@ def main():
     else:
         numeric_bases = []
         model_feature_list = feature_list
-    # Write to a pending folder; renamed to model+score+features at the end.
-    output_root  = Path(args.output_root) / 'Predictions' / f'__{args.model}__pending'
+    # Write to a pending folder; renamed to the user-supplied run name at the end.
+    output_root  = Path(args.output_root) / 'Predictions' / f'__{args.run_name}__pending'
     output_root.mkdir(parents=True, exist_ok=True)
 
     this_year = args.this_year
@@ -1242,14 +1252,28 @@ def main():
             feat_parts.append(b)
     feat_str = '+'.join(feat_parts)
     params_tag = ('+'.join(f'{k}={v}' for k, v in model_params.items())) if model_params else ''
-    final_dir_name = (
-        f'{args.model}_{int(avg_score_val)}_{expert_tag}_{feat_str}'
-        + (f'_{params_tag}' if params_tag else '')
-    )
+    # Folder name is now simply the user-supplied run name.
+    final_dir_name = args.run_name
     final_output_root = output_root.parent / final_dir_name
     if final_output_root.exists():
         shutil.rmtree(final_output_root)
     output_root.rename(final_output_root)
+    # Write model metadata for the UI to display.
+    model_info = {
+        'run_name':     args.run_name,
+        'model_key':    args.model,
+        'score':        int(avg_score_val),
+        'expert_tag':   expert_tag,
+        'features':     feat_str,
+        'params':       params_tag,
+        'norm_years':   norm_years,
+        'norm_all':     norm_all,
+        'calibrate':    calibrate,
+        'delta_feats':  delta_feats,
+        'model_params': {str(k): str(v) for k, v in model_params.items()},
+        'feature_bases': list(args.features),
+    }
+    (final_output_root / 'model_info.json').write_text(json.dumps(model_info, indent=2))
     # -----------------------------------------------------------------------
     # Save the full-data model as a pickle so it can be re-instantiated.
     # If --this-year was supplied the current-year model was already trained on
