@@ -821,6 +821,8 @@ def bracket_input():
         teams=teams,
         games=games,
         region_names=REGION_NAMES,
+        ff_pairing_options=FF_PAIRING_OPTIONS,
+        ff_pairings_str=_load_ff_pairings_str(THIS_YEAR),
         saved=False,
         error=None,
     )
@@ -852,12 +854,15 @@ def save_bracket():
              'team2': request.form.get(f'game_{i}_team2', '').strip()}
             for i in range(1, 33)
         ])
+        ff_pairings_post = request.form.get('ff_pairings', '0-3,1-2')
         return render_template_string(
             BRACKET_INPUT_HTML,
             year=THIS_YEAR,
             teams=teams,
             games=games_redisplay,
             region_names=REGION_NAMES,
+            ff_pairing_options=FF_PAIRING_OPTIONS,
+            ff_pairings_str=ff_pairings_post,
             saved=False,
             error=f'Missing team name(s) in game(s): {", ".join(str(m) for m in missing[:8])}{"…" if len(missing) > 8 else ""}',
         )
@@ -872,6 +877,23 @@ def save_bracket():
         writer.writeheader()
         writer.writerows(games_out)
 
+    # Save FF pairings to Data/BracketData/<year>/FFPairings_<year>.json
+    ff_pairings_str = request.form.get('ff_pairings', '0-3,1-2')
+    valid_ff = {s for s, _, _ in FF_PAIRING_OPTIONS}
+    if ff_pairings_str not in valid_ff:
+        ff_pairings_str = '0-3,1-2'
+    ff_pairs_list = [[0, 3], [1, 2]]
+    ff_label = ''
+    for s, pairs, label in FF_PAIRING_OPTIONS:
+        if s == ff_pairings_str:
+            ff_pairs_list = pairs
+            ff_label = label
+            break
+    ff_info = {'pairings': ff_pairings_str, 'pairs': ff_pairs_list, 'label': ff_label}
+    import json as _json
+    with open(out_dir / f'FFPairings_{THIS_YEAR}.json', 'w', encoding='utf-8') as f:
+        _json.dump(ff_info, f, indent=2)
+
     games_redisplay = _build_display_games([
         {'team1': g['Team1'], 'team2': g['Team2']} for g in games_out
     ])
@@ -881,6 +903,8 @@ def save_bracket():
         teams=teams,
         games=games_redisplay,
         region_names=REGION_NAMES,
+        ff_pairing_options=FF_PAIRING_OPTIONS,
+        ff_pairings_str=ff_pairings_str,
         saved=True,
         error=None,
     )
@@ -929,7 +953,7 @@ def fill_bracket_route():
         region_names=REGION_NAMES,
         ff_pairings_str=current_ff_str,
         ff_pairings_json=json.dumps(current_ff_pairs),
-        ff_pairing_options=FF_PAIRING_OPTIONS,
+        ff_pairings_label=_ff_pairings_label(current_ff_str),
     )
 
 
@@ -940,11 +964,8 @@ def save_my_bracket():
     name       = (data.get('name') or '').strip()
     group      = (data.get('group') or '').strip()
     picks      = data.get('picks', {})
-    ff_pairings = (data.get('ff_pairings') or '0-3,1-2').strip()
-    # Validate ff_pairings is one of the known options
-    valid_ff = {s for s, _, _ in FF_PAIRING_OPTIONS}
-    if ff_pairings not in valid_ff:
-        ff_pairings = '0-3,1-2'
+    # FF pairings are set at the bracket-setup level; read from server-side file
+    ff_pairings = _load_ff_pairings_str(THIS_YEAR)
 
     if not name:
         return jsonify({'error': 'Bracket name is required.'}), 400
@@ -970,25 +991,6 @@ def save_my_bracket():
     }
     with open(out_path, 'w', encoding='utf-8') as f:
         json.dump(payload, f, indent=2)
-
-    # Persist FF pairings to BracketData so predict/simulate routes use them
-    bracket_data_dir = REPO_ROOT / 'Data' / 'BracketData' / str(THIS_YEAR)
-    bracket_data_dir.mkdir(parents=True, exist_ok=True)
-    ff_pairs_list = [[0, 3], [1, 2]]
-    ff_label = 'South/West · East/Midwest'
-    for s, pairs, label in FF_PAIRING_OPTIONS:
-        if s == ff_pairings:
-            ff_pairs_list = pairs
-            ff_label = label
-            break
-    ff_info = {
-        'pairings': ff_pairings,
-        'pairs':    ff_pairs_list,
-        'label':    ff_label,
-    }
-    ff_path = bracket_data_dir / f'FFPairings_{THIS_YEAR}.json'
-    with open(ff_path, 'w', encoding='utf-8') as f:
-        json.dump(ff_info, f, indent=2)
 
     return jsonify({'saved': True, 'path': str(out_path.relative_to(REPO_ROOT))})
 
@@ -1477,6 +1479,29 @@ button.save-btn {
 button.save-btn:hover { background: #2563eb; }
 .msg-saved { color: #4ade80; font-size: 13px; }
 .msg-error { color: #f87171; font-size: 13px; }
+
+.ff-pairing-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 18px 20px;
+  max-width: 1060px;
+  margin-top: 20px;
+}
+.ff-pairing-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .8px; color: #94a3b8; margin-bottom: 6px;
+}
+.ff-pairing-sub {
+  color: #475569; font-size: 12px; margin-bottom: 12px;
+}
+.ff-radio-group { display: flex; flex-wrap: wrap; gap: 16px; }
+.ff-radio {
+  display: flex; align-items: center; gap: 6px;
+  color: #e2e8f0; font-size: 13px; cursor: pointer;
+}
+.ff-radio input[type=radio] { accent-color: #3b82f6; cursor: pointer; }
+.ff-radio:has(input:checked) { color: #fbbf24; }
 </style>
 </head>
 <body>
@@ -1485,7 +1510,7 @@ button.save-btn:hover { background: #2563eb; }
 <h1>&#127942; {{ year }} Bracket Setup</h1>
 <p class="subtitle">
   Select the team for each seed slot. Autocomplete is sourced from {{ year }} KenPom data.
-  Saving writes <code>Data/BracketData/{{ year }}/Round1_{{ year }}.csv</code>.
+  Saving writes <code>Round1_{{ year }}.csv</code> and <code>FFPairings_{{ year }}.json</code> to <code>Data/BracketData/{{ year }}/</code>.
 </p>
 
 <datalist id="kp-teams">
@@ -1520,10 +1545,24 @@ button.save-btn:hover { background: #2563eb; }
   {% endfor %}
 </div>
 
+<div class="ff-pairing-card">
+  <div class="ff-pairing-title">&#127952; Final Four Pairings</div>
+  <p class="ff-pairing-sub">Which regions face each other in the Final Four?</p>
+  <div class="ff-radio-group">
+    {% for val, pairs, lbl in ff_pairing_options %}
+    <label class="ff-radio">
+      <input type="radio" name="ff_pairings" value="{{ val }}"
+        {% if val == ff_pairings_str %}checked{% endif %}>
+      {{ lbl }}
+    </label>
+    {% endfor %}
+  </div>
+</div>
+
 <div class="action-bar">
-  <button type="submit" class="save-btn">&#128190; Save Bracket</button>
+  <button type="submit" class="save-btn">&#128190; Save Bracket &amp; Pairings</button>
   {% if saved %}
-  <span class="msg-saved">&#10003; Saved to Round1_{{ year }}.csv</span>
+  <span class="msg-saved">&#10003; Saved Round1_{{ year }}.csv and FFPairings_{{ year }}.json</span>
   {% endif %}
   {% if error %}
   <span class="msg-error">&#9888; {{ error }}</span>
@@ -1686,6 +1725,7 @@ a.back-link:hover { color: #93c5fd; }
 .nav-link:hover { border-color: #3b82f6; }
 
 /* ----- ff pairing radios ----- */
+.ff-pairing-display { font-size: 13px; color: #fbbf24; font-weight: 600; margin-top: 3px; }
 .ff-radio-group { display: flex; flex-direction: column; gap: 4px; margin-top: 1px; }
 .ff-radio {
   display: flex; align-items: center; gap: 5px;
@@ -1716,16 +1756,7 @@ a.back-link:hover { color: #93c5fd; }
   </div>
   <div class="field" style="min-width:140px">
     <label>Final Four Pairings</label>
-    <div class="ff-radio-group" id="ff-pairing-sel">
-      {% for val, pairs, lbl in ff_pairing_options %}
-      <label class="ff-radio">
-        <input type="radio" name="ff_pairing" value="{{ val }}"
-          {% if val == ff_pairings_str %}checked{% endif %}
-          onchange="updateFFPairings(this.value)">
-        {{ lbl }}
-      </label>
-      {% endfor %}
-    </div>
+    <div class="ff-pairing-display">{{ ff_pairings_label }}</div>
   </div>
   <button id="save-btn" onclick="saveBracket()">&#128190; Save Bracket</button>
   <span id="save-msg"></span>
@@ -2007,9 +2038,6 @@ function saveBracket() {
   if (!group) { alert('Enter a group name.'); return; }
   if (!state.champ && !confirm('Your bracket is not complete. Save anyway?')) return;
 
-  const ffPairingSel = document.querySelector('input[name="ff_pairing"]:checked');
-  const ffPairingStr = ffPairingSel ? ffPairingSel.value : '0-3,1-2';
-
   const btn = document.getElementById('save-btn');
   const msg = document.getElementById('save-msg');
   btn.disabled = true;
@@ -2020,7 +2048,7 @@ function saveBracket() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name, group, ff_pairings: ffPairingStr,
+      name, group,
       picks: {
         r1:       [...state.r1],
         r2:       [...state.r2],
@@ -2057,12 +2085,7 @@ function loadPicks(picks, ffPairings) {
   });
   (picks.semi || []).forEach((v, i) => { if (i < 2) state.semi[i] = v; });
   state.champ = picks.champion || null;
-  if (ffPairings && FF_PAIRING_MAP[ffPairings]) {
-    FF_PAIRINGS = FF_PAIRING_MAP[ffPairings];
-    const radio = document.querySelector(`input[name="ff_pairing"][value="${ffPairings}"]`);
-    if (radio) radio.checked = true;
-    updateFFLabels();
-  }
+  updateFFLabels();
 }
 
 // ---- initialise R1 buttons with team names from JSON ----
