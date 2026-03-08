@@ -353,6 +353,46 @@ def scan_saved_models():
     return results
 
 
+def scan_simulations(year: int = THIS_YEAR) -> list:
+    """
+    Scan SIMULATIONS_DIR for model folders that have CSV results for `year`.
+    Returns dicts with dir_name, model, score, iters, and whether a matching
+    model.pkl exists in PREDICTIONS_DIR.
+    """
+    results = []
+    if not SIMULATIONS_DIR.is_dir():
+        return results
+    for d in SIMULATIONS_DIR.iterdir():
+        if not d.is_dir():
+            continue
+        csv_files = sorted(
+            d.glob(f'{year}_*iters.csv'),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+        if not csv_files:
+            continue
+        m = _SAVED_PATTERN.match(d.name)
+        if not m:
+            continue
+        model_key, score_str, expert_tag, rest = m.groups()
+        latest = csv_files[0]
+        iters_match = re.search(r'_(\d+)iters\.csv$', latest.name)
+        iters = int(iters_match.group(1)) if iters_match else 0
+        has_pkl = (PREDICTIONS_DIR / d.name / 'model.pkl').exists()
+        results.append({
+            'dir_name':   d.name,
+            'model':      model_key,
+            'score':      int(score_str),
+            'features':   rest,
+            'iters':      iters,
+            'has_pkl':    has_pkl,
+            'csv_file':   latest.name,
+        })
+    results.sort(key=lambda x: x['score'], reverse=True)
+    return results
+
+
 # ---------------------------------------------------------------------------
 # In-memory job store
 # ---------------------------------------------------------------------------
@@ -439,7 +479,7 @@ def run_prediction():
         '--model', model,
         '--features', *features,
         '--this-year', str(THIS_YEAR),
-        '--final-four-pairings', '0-3,1-2',
+        '--final-four-pairings', _load_ff_pairings_str(THIS_YEAR),
     ]
     if params:
         cmd += ['--model-params'] + params.split()
@@ -611,6 +651,7 @@ def simulate():
         '--model', str(pkl_path),
         '--year',  str(year),
         '--num-iters', str(num_iters),
+        '--final-four-pairings', _load_ff_pairings_str(year),
     ]
     if seed is not None:
         cmd += ['--seed', str(seed)]
@@ -683,6 +724,33 @@ def sim_html_route(dir_name, filename):
 SEED_MATCHUPS = [(1, 16), (8, 9), (5, 12), (4, 13), (6, 11), (3, 14), (7, 10), (2, 15)]
 
 REGION_NAMES = ['South', 'East', 'Midwest', 'West']
+
+# All possible Final Four pairings expressed as (str, [[a,b],[c,d]], label)
+FF_PAIRING_OPTIONS = [
+    ('0-3,1-2', [[0, 3], [1, 2]], 'South/West · East/Midwest'),
+    ('0-1,2-3', [[0, 1], [2, 3]], 'South/East · Midwest/West'),
+    ('0-2,1-3', [[0, 2], [1, 3]], 'South/Midwest · East/West'),
+]
+
+
+def _load_ff_pairings_str(year: int = THIS_YEAR) -> str:
+    """Load saved FF pairings string from BracketData, defaulting to '0-3,1-2'."""
+    p = REPO_ROOT / 'Data' / 'BracketData' / str(year) / f'FFPairings_{year}.json'
+    if p.exists():
+        try:
+            data = json.loads(p.read_text())
+            return data.get('pairings', '0-3,1-2')
+        except Exception:
+            pass
+    return '0-3,1-2'
+
+
+def _ff_pairings_label(pairings_str: str) -> str:
+    """Return a human-readable label for a pairings string like '0-3,1-2'."""
+    for s, _, label in FF_PAIRING_OPTIONS:
+        if s == pairings_str:
+            return label
+    return pairings_str
 
 
 def _read_kp_teams(year: int = THIS_YEAR):
@@ -844,22 +912,36 @@ def fill_bracket_route():
     matchups = _load_round1_matchups(THIS_YEAR)
     if not matchups:
         abort(404)
+    current_ff_str = _load_ff_pairings_str(THIS_YEAR)
+    current_ff_pairs = [[0, 3], [1, 2]]
+    for s, pairs, _ in FF_PAIRING_OPTIONS:
+        if s == current_ff_str:
+            current_ff_pairs = pairs
+            break
     return render_template_string(
         FILL_BRACKET_HTML,
         year=THIS_YEAR,
         matchups_json=json.dumps(matchups),
         region_names_json=json.dumps(REGION_NAMES),
         region_names=REGION_NAMES,
+        ff_pairings_str=current_ff_str,
+        ff_pairings_json=json.dumps(current_ff_pairs),
+        ff_pairing_options=FF_PAIRING_OPTIONS,
     )
 
 
 @app.route('/save_my_bracket', methods=['POST'])
 def save_my_bracket():
     import datetime
-    data  = request.get_json(force=True)
-    name  = (data.get('name') or '').strip()
-    group = (data.get('group') or '').strip()
-    picks = data.get('picks', {})
+    data       = request.get_json(force=True)
+    name       = (data.get('name') or '').strip()
+    group      = (data.get('group') or '').strip()
+    picks      = data.get('picks', {})
+    ff_pairings = (data.get('ff_pairings') or '0-3,1-2').strip()
+    # Validate ff_pairings is one of the known options
+    valid_ff = {s for s, _, _ in FF_PAIRING_OPTIONS}
+    if ff_pairings not in valid_ff:
+        ff_pairings = '0-3,1-2'
 
     if not name:
         return jsonify({'error': 'Bracket name is required.'}), 400
@@ -876,14 +958,34 @@ def save_my_bracket():
     out_path = out_dir / f'{safe_name}.json'
 
     payload = {
-        'name':    name,
-        'group':   group,
-        'year':    THIS_YEAR,
-        'created': datetime.datetime.now().isoformat(timespec='seconds'),
-        'picks':   picks,
+        'name':       name,
+        'group':      group,
+        'year':       THIS_YEAR,
+        'created':    datetime.datetime.now().isoformat(timespec='seconds'),
+        'ff_pairings': ff_pairings,
+        'picks':      picks,
     }
     with open(out_path, 'w', encoding='utf-8') as f:
         json.dump(payload, f, indent=2)
+
+    # Persist FF pairings to BracketData so predict/simulate routes use them
+    bracket_data_dir = REPO_ROOT / 'Data' / 'BracketData' / str(THIS_YEAR)
+    bracket_data_dir.mkdir(parents=True, exist_ok=True)
+    ff_pairs_list = [[0, 3], [1, 2]]
+    ff_label = 'South/West · East/Midwest'
+    for s, pairs, label in FF_PAIRING_OPTIONS:
+        if s == ff_pairings:
+            ff_pairs_list = pairs
+            ff_label = label
+            break
+    ff_info = {
+        'pairings': ff_pairings,
+        'pairs':    ff_pairs_list,
+        'label':    ff_label,
+    }
+    ff_path = bracket_data_dir / f'FFPairings_{THIS_YEAR}.json'
+    with open(ff_path, 'w', encoding='utf-8') as f:
+        json.dump(ff_info, f, indent=2)
 
     return jsonify({'saved': True, 'path': str(out_path.relative_to(REPO_ROOT))})
 
@@ -927,12 +1029,12 @@ def my_brackets_route():
 # ---------------------------------------------------------------------------
 
 def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
-                       year: int, num_iters: int, ff_pairings_str: str,
-                       rng_seed):
+                       year: int, num_iters: int, rng_seed):
     """
     Worker thread: run Monte Carlo simulations of the tournament and,
     for each iteration, score every user bracket in the group.
 
+    FF pairings are loaded from Data/BracketData/<year>/FFPairings_<year>.json.
     Streams PROGRESS:<done>/<total> lines through job.queue.
     When finished sets job.results and job.status='done'.
     """
@@ -967,10 +1069,8 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
         numeric_bases      = payload.get('numeric_bases', [])
         model_feature_list = payload.get('model_feature_list', feature_list)
 
-        ff_pairings = (
-            parse_ff_pairings_arg(ff_pairings_str)
-            if ff_pairings_str else [(0, 3), (1, 2)]
-        )
+        ff_pairings_str = _load_ff_pairings_str(year)
+        ff_pairings = parse_ff_pairings_arg(ff_pairings_str)
 
         data_root   = REPO_ROOT
         needs_bt    = any(f.startswith('BT__')    for f in feature_list)
@@ -1115,14 +1215,20 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
 def group_analysis_route():
     group = request.args.get('group', '')
     saved = scan_saved_models()
+    simulations = scan_simulations(THIS_YEAR)
     groups_list = []
     if BRACKETS_DIR.is_dir():
         groups_list = [d.name for d in sorted(BRACKETS_DIR.iterdir()) if d.is_dir()]
+    current_ff_str = _load_ff_pairings_str(THIS_YEAR)
+    current_ff_label = _ff_pairings_label(current_ff_str)
     return render_template_string(
         GROUP_ANALYSIS_HTML,
         group=group,
         groups_list=groups_list,
         saved_models=saved,
+        simulations=simulations,
+        current_ff_str=current_ff_str,
+        current_ff_label=current_ff_label,
         year=THIS_YEAR,
     )
 
@@ -1133,7 +1239,6 @@ def run_group_analysis():
     group_key   = (data.get('group')       or '').strip()
     dir_name    = (data.get('dir_name')    or '').strip()
     num_iters   = int(data.get('num_iters', 1000))
-    ff_pairings = (data.get('ff_pairings') or '0-3,1-2').strip()
     rng_seed    = data.get('seed')
     year        = int(data.get('year', THIS_YEAR))
 
@@ -1155,7 +1260,6 @@ def run_group_analysis():
         target=_run_group_scoring,
         args=(
             job_id, str(pkl_path), group_key, year, num_iters,
-            ff_pairings,
             int(rng_seed) if rng_seed is not None and str(rng_seed).strip() != '' else None,
         ),
         daemon=True,
@@ -1502,6 +1606,15 @@ a.back-link:hover { color: #93c5fd; }
   transition: border-color .15s;
 }
 .nav-link:hover { border-color: #3b82f6; }
+
+/* ----- ff pairing radios ----- */
+.ff-radio-group { display: flex; flex-direction: column; gap: 4px; margin-top: 1px; }
+.ff-radio {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: #94a3b8; cursor: pointer; white-space: nowrap;
+}
+.ff-radio input[type=radio] { accent-color: #ca8a04; cursor: pointer; }
+.ff-radio:has(input:checked) { color: #fbbf24; }
 </style>
 </head>
 <body>
@@ -1522,6 +1635,19 @@ a.back-link:hover { color: #93c5fd; }
   <div class="field">
     <label for="bracket-group">Group</label>
     <input type="text" id="bracket-group" placeholder="e.g. Friends">
+  </div>
+  <div class="field" style="min-width:140px">
+    <label>Final Four Pairings</label>
+    <div class="ff-radio-group" id="ff-pairing-sel">
+      {% for val, pairs, lbl in ff_pairing_options %}
+      <label class="ff-radio">
+        <input type="radio" name="ff_pairing" value="{{ val }}"
+          {% if val == ff_pairings_str %}checked{% endif %}
+          onchange="updateFFPairings(this.value)">
+        {{ lbl }}
+      </label>
+      {% endfor %}
+    </div>
   </div>
   <button id="save-btn" onclick="saveBracket()">&#128190; Save Bracket</button>
   <span id="save-msg"></span>
@@ -1589,9 +1715,9 @@ a.back-link:hover { color: #93c5fd; }
   <div class="ff-section">
     <div class="ff-title">&#127952; Final Four &amp; Championship</div>
     <div class="ff-games">
-      <!-- Semi 0: South vs West -->
+      <!-- Semi 0 -->
       <div>
-        <div class="ff-matchup-label">South vs West</div>
+        <div class="ff-matchup-label" id="ff-label-0">South vs West</div>
         <div class="ff-card">
           <button class="team-btn tbd" id="btn-semi-0-0" onclick="makePick('semi',0,0)" disabled>TBD</button>
           <button class="team-btn tbd" id="btn-semi-0-1" onclick="makePick('semi',0,1)" disabled>TBD</button>
@@ -1606,9 +1732,9 @@ a.back-link:hover { color: #93c5fd; }
         </div>
         <div id="champion-display" class="champ-display" style="display:none"></div>
       </div>
-      <!-- Semi 1: East vs Midwest -->
+      <!-- Semi 1 -->
       <div>
-        <div class="ff-matchup-label">East vs Midwest</div>
+        <div class="ff-matchup-label" id="ff-label-1">East vs Midwest</div>
         <div class="ff-card">
           <button class="team-btn tbd" id="btn-semi-1-0" onclick="makePick('semi',1,0)" disabled>TBD</button>
           <button class="team-btn tbd" id="btn-semi-1-1" onclick="makePick('semi',1,1)" disabled>TBD</button>
@@ -1622,7 +1748,12 @@ a.back-link:hover { color: #93c5fd; }
 <script>
 const R1          = {{ matchups_json | safe }};
 const REGIONS     = {{ region_names_json | safe }};
-const FF_PAIRINGS = [[0, 3], [1, 2]]; // South vs West, East vs Midwest
+const FF_PAIRING_MAP = {
+  '0-3,1-2': [[0, 3], [1, 2]],
+  '0-1,2-3': [[0, 1], [2, 3]],
+  '0-2,1-3': [[0, 2], [1, 3]],
+};
+let FF_PAIRINGS = {{ ff_pairings_json | safe }};
 
 // ---- state ----
 const state = {
@@ -1638,14 +1769,34 @@ const state = {
 const seedOf = {};
 R1.forEach(m => { seedOf[m.team1] = m.seed1; seedOf[m.team2] = m.seed2; });
 
+// ---- FF pairing change ----
+function updateFFPairings(pairingStr) {
+  FF_PAIRINGS = FF_PAIRING_MAP[pairingStr] || [[0, 3], [1, 2]];
+  state.semi[0] = null;
+  state.semi[1] = null;
+  state.champ = null;
+  renderAll();
+  updateFFLabels();
+}
+
+function updateFFLabels() {
+  const regionOf = i => REGIONS[i] || String(i);
+  const l0 = document.getElementById('ff-label-0');
+  const l1 = document.getElementById('ff-label-1');
+  if (l0) l0.textContent = regionOf(FF_PAIRINGS[0][0]) + ' vs ' + regionOf(FF_PAIRINGS[0][1]);
+  if (l1) l1.textContent = regionOf(FF_PAIRINGS[1][0]) + ' vs ' + regionOf(FF_PAIRINGS[1][1]);
+}
+
 // ---- routing helpers ----
 function feedsInto(level, gameIdx) {
   if (level === 'r1')  return { level: 'r2',   gameIdx: Math.floor(gameIdx / 2) };
   if (level === 'r2')  return { level: 's16',  gameIdx: Math.floor(gameIdx / 2) };
   if (level === 's16') return { level: 'e8',   gameIdx: Math.floor(gameIdx / 2) };
   if (level === 'e8') {
-    if (gameIdx === 0 || gameIdx === 3) return { level: 'semi', gameIdx: 0 };
-    if (gameIdx === 1 || gameIdx === 2) return { level: 'semi', gameIdx: 1 };
+    for (let s = 0; s < FF_PAIRINGS.length; s++) {
+      if (FF_PAIRINGS[s].includes(gameIdx)) return { level: 'semi', gameIdx: s };
+    }
+    return null;
   }
   if (level === 'semi') return { level: 'champ', gameIdx: 0 };
   return null;
@@ -1778,6 +1929,9 @@ function saveBracket() {
   if (!group) { alert('Enter a group name.'); return; }
   if (!state.champ && !confirm('Your bracket is not complete. Save anyway?')) return;
 
+  const ffPairingSel = document.querySelector('input[name="ff_pairing"]:checked');
+  const ffPairingStr = ffPairingSel ? ffPairingSel.value : '0-3,1-2';
+
   const btn = document.getElementById('save-btn');
   const msg = document.getElementById('save-msg');
   btn.disabled = true;
@@ -1788,7 +1942,7 @@ function saveBracket() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name, group,
+      name, group, ff_pairings: ffPairingStr,
       picks: {
         r1:       [...state.r1],
         r2:       [...state.r2],
@@ -1818,13 +1972,19 @@ function saveBracket() {
 }
 
 // ---- load saved picks (called from view bracket page) ----
-function loadPicks(picks) {
+function loadPicks(picks, ffPairings) {
   if (!picks) return;
   ['r1','r2','s16','e8'].forEach(lv => {
     (picks[lv] || []).forEach((v, i) => { if (i < state[lv].length) state[lv][i] = v; });
   });
   (picks.semi || []).forEach((v, i) => { if (i < 2) state.semi[i] = v; });
   state.champ = picks.champion || null;
+  if (ffPairings && FF_PAIRING_MAP[ffPairings]) {
+    FF_PAIRINGS = FF_PAIRING_MAP[ffPairings];
+    const radio = document.querySelector(`input[name="ff_pairing"][value="${ffPairings}"]`);
+    if (radio) radio.checked = true;
+    updateFFLabels();
+  }
 }
 
 // ---- initialise R1 buttons with team names from JSON ----
@@ -1851,12 +2011,13 @@ function loadPicks(picks) {
         if (!data) return;
         document.getElementById('bracket-name').value  = data.name  || '';
         document.getElementById('bracket-group').value = data.group || '';
-        loadPicks(data.picks);
+        loadPicks(data.picks, data.ff_pairings);
         renderAll();
       });
   }
 
   updateProgress();
+  updateFFLabels();
 })();
 </script>
 </body>
@@ -2043,6 +2204,47 @@ h1 { font-size: 20px; color: #fbbf24; margin-bottom: 4px; }
   margin-bottom: 14px; display: none; white-space: pre-wrap; font-family: monospace;
 }
 
+/* FF pairings info bar */
+.ff-info-bar {
+  max-width: 820px; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.ff-info-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: #64748b; }
+.ff-info-val {
+  font-size: 12px; font-weight: 600; color: #fbbf24;
+  background: #1a1500; border: 1px solid #78540a; border-radius: 5px; padding: 2px 10px;
+}
+.ff-info-link { font-size: 11px; color: #64748b; text-decoration: none; }
+.ff-info-link:hover { color: #93c5fd; }
+
+/* Simulations section */
+.sims-card {
+  background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+  padding: 16px 20px; max-width: 820px; margin-bottom: 18px;
+}
+.sims-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px;
+  color: #94a3b8; margin-bottom: 10px;
+}
+table.sims-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.sims-table th {
+  text-align: left; padding: 5px 8px; color: #64748b; font-size: 10px;
+  text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid #334155; white-space: nowrap;
+}
+table.sims-table td {
+  padding: 7px 8px; border-bottom: 1px solid #1a2744; color: #cbd5e1; vertical-align: middle;
+}
+table.sims-table tr:last-child td { border-bottom: none; }
+table.sims-table tbody tr:hover td { background: #172554; }
+.quick-run-btn {
+  background: #1e3a5f; color: #93c5fd; border: 1px solid #2563eb; border-radius: 5px;
+  padding: 3px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+  transition: background .12s; white-space: nowrap;
+}
+.quick-run-btn:hover { background: #1d4ed8; color: #fff; }
+.quick-run-btn:disabled { opacity: .5; cursor: not-allowed; }
+.no-pkl-note { font-size: 10px; color: #94a3b8; }
+
 /* Results */
 .results-card {
   background: #1e293b; border: 1px solid #334155; border-radius: 10px;
@@ -2094,6 +2296,47 @@ table.res-table tbody tr:hover td { background: #172554; }
   expected score and probability of winning the group.
 </p>
 
+<!-- Current FF Pairings -->
+<div class="ff-info-bar">
+  <span class="ff-info-label">Final Four Pairings:</span>
+  <span class="ff-info-val">{{ current_ff_label }}</span>
+  <a href="/fill_bracket" class="ff-info-link">(change in Fill Bracket &#8599;)</a>
+</div>
+
+{% if simulations %}
+<!-- Existing Simulations -->
+<div class="sims-card">
+  <div class="sims-title">&#9889; Existing Simulations for {{ year }} &mdash; Quick Run</div>
+  <table class="sims-table">
+    <thead><tr>
+      <th>Score</th>
+      <th>Model</th>
+      <th>Iters</th>
+      <th></th>
+    </tr></thead>
+    <tbody>
+    {% for s in simulations %}
+    <tr>
+      <td style="color:#fbbf24;font-weight:700">{{ s.score }}pts</td>
+      <td style="color:#e2e8f0;font-size:11px">{{ s.model }} &mdash; {{ s.features[:40] }}{% if s.features|length > 40 %}&hellip;{% endif %}</td>
+      <td style="color:#64748b">{{ '{:,}'.format(s.iters) }}</td>
+      <td>
+        {% if s.has_pkl %}
+        <button class="quick-run-btn"
+                onclick="quickRun({{ s.dir_name | tojson }}, {{ s.iters }})">
+          &#9654; Use This
+        </button>
+        {% else %}
+        <span class="no-pkl-note">No model.pkl</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 <!-- Config -->
 <div class="config-card">
   <div class="config-grid">
@@ -2117,10 +2360,6 @@ table.res-table tbody tr:hover td { background: #172554; }
     <div class="field">
       <label for="iters-inp">Iterations</label>
       <input type="number" id="iters-inp" value="2000" min="100" max="100000">
-    </div>
-    <div class="field">
-      <label for="ff-inp">FF Pairings</label>
-      <input type="text" id="ff-inp" value="0-3,1-2" style="width:90px">
     </div>
     <div class="field">
       <label for="seed-inp">Seed (opt.)</label>
@@ -2222,11 +2461,10 @@ function setStatus(text, cls) {
   b.textContent = text;
 }
 
-function runAnalysis() {
+function runAnalysis(dirNameOverride, itersOverride) {
   const group    = document.getElementById('grp-sel').value;
-  const dirName  = document.getElementById('model-sel').value;
-  const iters    = parseInt(document.getElementById('iters-inp').value) || 2000;
-  const ffPairs  = document.getElementById('ff-inp').value.trim();
+  const dirName  = dirNameOverride || document.getElementById('model-sel').value;
+  const iters    = itersOverride   || parseInt(document.getElementById('iters-inp').value) || 2000;
   const seedRaw  = document.getElementById('seed-inp').value.trim();
   const seed     = seedRaw !== '' ? parseInt(seedRaw) : null;
 
@@ -2246,7 +2484,7 @@ function runAnalysis() {
     method:  'POST',
     headers: {'Content-Type': 'application/json'},
     body:    JSON.stringify({ group, dir_name: dirName, num_iters: iters,
-                              ff_pairings: ffPairs, seed, year: THIS_YEAR }),
+                              seed, year: THIS_YEAR }),
   })
   .then(r => r.json())
   .then(data => {
@@ -2266,6 +2504,15 @@ function runAnalysis() {
     document.getElementById('prog-wrap').style.display = 'none';
     setStatus('Error', 'status-error');
   });
+}
+
+function quickRun(dirName, iters) {
+  const sel = document.getElementById('model-sel');
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === dirName) { sel.selectedIndex = i; break; }
+  }
+  document.getElementById('iters-inp').value = iters;
+  runAnalysis(dirName, iters);
 }
 
 function startStream(jobId, iters, dirName) {
