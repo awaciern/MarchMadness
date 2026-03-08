@@ -937,6 +937,27 @@ def _ff_pairings_label(pairings_str: str) -> str:
     return pairings_str
 
 
+def _locked_results_path(year: int = THIS_YEAR) -> Path:
+    return REPO_ROOT / 'Data' / 'BracketData' / str(year) / f'LockedResults_{year}.json'
+
+
+def _load_locked_results(year: int = THIS_YEAR) -> dict:
+    """
+    Load locked game results for `year`.
+    Returns {round_int: [winner_or_None, ...]} or {} if no file exists.
+    """
+    p = _locked_results_path(year)
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding='utf-8'))
+        raw = data.get('round_winners', {})
+        return {int(k): [(v if v else None) for v in v_list]
+                for k, v_list in raw.items()}
+    except Exception:
+        return {}
+
+
 def _read_kp_teams(year: int = THIS_YEAR):
     """Return sorted list of team names from KenPom CSV for the given year."""
     import csv as _csv
@@ -1339,6 +1360,8 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
         round_wins: dict = _defaultdict(lambda: _defaultdict(int))
 
         rng = _np.random.default_rng(rng_seed)
+        # Load locked game results (ground truth) for the current year
+        _locked_results = _load_locked_results(year)
         # (key, sim_round_number, points_per_correct_pick)
         _rnd_cfg = [
             ('r1',   1,  10),
@@ -1364,6 +1387,7 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
                 delta_feats=delta_feats,
                 numeric_bases=numeric_bases,
                 model_feature_list=model_feature_list,
+                locked_results=_locked_results,
             )
 
             for b in brackets:
@@ -1483,6 +1507,11 @@ def group_analysis_route():
         groups_list = [d.name for d in sorted(BRACKETS_DIR.iterdir()) if d.is_dir()]
     current_ff_str = _load_ff_pairings_str(THIS_YEAR)
     current_ff_label = _ff_pairings_label(current_ff_str)
+    # Load round-1 matchups and locked results for live tournament progress UI
+    r1_matchups = _build_display_games(_read_round1_teams(THIS_YEAR))
+    locked_results_raw = _load_locked_results(THIS_YEAR)
+    # Convert to string-keyed for JSON serialisation
+    locked_results_json = {str(k): v for k, v in locked_results_raw.items()}
     return render_template_string(
         GROUP_ANALYSIS_HTML,
         group=group,
@@ -1492,6 +1521,8 @@ def group_analysis_route():
         current_ff_str=current_ff_str,
         current_ff_label=current_ff_label,
         year=THIS_YEAR,
+        r1_matchups=r1_matchups,
+        locked_results=locked_results_json,
     )
 
 
@@ -1559,6 +1590,25 @@ def group_analysis_stream(job_id):
         mimetype='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
     )
+
+
+@app.route('/api/locked_results')
+def api_get_locked_results():
+    """Return locked game results for the current year as {round_str: [winner_or_null, ...]}."""
+    lr = _load_locked_results(THIS_YEAR)
+    return jsonify({str(k): v for k, v in lr.items()})
+
+
+@app.route('/api/locked_results', methods=['POST'])
+def api_save_locked_results():
+    """Save locked game results for the current year."""
+    data = request.get_json(force=True)
+    round_winners = data.get('round_winners', {})
+    p = _locked_results_path(THIS_YEAR)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({'round_winners': round_winners}, indent=2, ensure_ascii=False),
+                 encoding='utf-8')
+    return jsonify({'ok': True})
 
 
 # ---------------------------------------------------------------------------
@@ -2533,6 +2583,48 @@ table.sims-table tbody tr:hover td { background: #172554; }
 .quick-run-btn:disabled { opacity: .5; cursor: not-allowed; }
 .no-pkl-note { font-size: 10px; color: #94a3b8; }
 
+/* Live Tournament Results */
+.lr-card {
+  background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+  padding: 16px 20px; max-width: 100%; margin-bottom: 18px;
+}
+.lr-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: #94a3b8; margin-bottom: 4px; }
+.lr-subtitle { font-size: 11px; color: #64748b; margin-bottom: 12px; }
+.lr-round { margin-bottom: 14px; }
+.lr-round-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: #64748b; margin-bottom: 7px; }
+.lr-games { display: flex; flex-wrap: wrap; gap: 6px; }
+.lr-game {
+  display: flex; align-items: center; gap: 4px;
+  background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 4px 6px;
+}
+.lr-game-incomplete { color: #475569; font-size: 11px; background: #0a1120; }
+.lr-tbd { font-size: 10px; color: #334155; padding: 2px 6px; }
+.lr-team {
+  background: #1e293b; border: 1px solid #334155; border-radius: 4px;
+  padding: 3px 9px; font-size: 11px; color: #94a3b8; cursor: pointer;
+  transition: background .1s, color .1s, border-color .1s;
+  white-space: nowrap;
+}
+.lr-team:hover { background: #1e3a5f; color: #93c5fd; border-color: #2563eb; }
+.lr-team.lr-winner { background: #14432a; color: #86efac; border-color: #16a34a; font-weight: 700; }
+.lr-team.lr-loser  { background: #0a1120; color: #334155; border-color: #1e293b; }
+.lr-vs { font-size: 10px; color: #334155; }
+.lr-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.lr-save-btn {
+  background: #166534; border: 1px solid #16a34a; color: #86efac;
+  border-radius: 5px; padding: 4px 14px; font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: background .1s;
+}
+.lr-save-btn:hover:not(:disabled) { background: #15803d; }
+.lr-save-btn:disabled { opacity: .5; cursor: not-allowed; }
+.lr-clear-btn {
+  background: transparent; border: 1px solid #334155; color: #64748b;
+  border-radius: 5px; padding: 4px 12px; font-size: 11px; cursor: pointer;
+}
+.lr-clear-btn:hover { border-color: #ef4444; color: #f87171; }
+#locked-save-msg { font-size: 11px; }
+#locked-count    { font-size: 10px; color: #64748b; margin-left: 4px; }
+
 /* Results */
 .results-card {
   background: #1e293b; border: 1px solid #334155; border-radius: 10px;
@@ -2612,6 +2704,21 @@ table.res-table tbody tr:hover td { background: #172554; }
 </div>
 {% endif %}
 
+<!-- Live Tournament Results -->
+<div class="lr-card" id="lr-card" style="display:none">
+  <div class="lr-title">&#128274; Live Tournament Results</div>
+  <div class="lr-subtitle">
+    Click a team to lock in the actual outcome of a game. Simulations will treat locked games as certain.
+    Toggle to unlock. <span id="locked-count"></span>
+  </div>
+  <div id="locked-rounds"></div>
+  <div class="lr-actions">
+    <button class="lr-save-btn" id="save-locked-btn" onclick="saveLockedResults()">&#128190; Save</button>
+    <button class="lr-clear-btn" onclick="clearLockedResults()">&#10006; Clear All</button>
+    <span id="locked-save-msg"></span>
+  </div>
+</div>
+
 <!-- Config -->
 <div class="config-card">
   <div class="config-grid">
@@ -2690,6 +2797,8 @@ const THIS_YEAR   = {{ year }};
 const GROUP_INIT  = {{ group | tojson }};
 const GA_MODELS   = {{ saved_models | tojson }};
 const GA_SIM_MAP  = {{ sim_map | tojson }};
+const BRACKET_R1          = {{ r1_matchups | tojson }};
+const LOCKED_RESULTS_INIT = {{ locked_results | tojson }};
 
 let gaSort = { key: 'score', dir: -1 };
 
@@ -2757,6 +2866,194 @@ function gaRenderModels() {
 }
 
 gaRenderModels();
+
+// ---- Locked Tournament Results ----
+(function() {
+  // Deep-copy LOCKED_RESULTS_INIT into mutable lockedResults
+  window.lockedResults = {};
+  for (const k of Object.keys(LOCKED_RESULTS_INIT)) {
+    window.lockedResults[k] = (LOCKED_RESULTS_INIT[k] || []).map(function(v) { return v || null; });
+  }
+})();
+
+function parseFfPairings(s) {
+  return s.split(',').map(function(p) { return p.split('-').map(Number); });
+}
+const FF_PAIRINGS = parseFfPairings('{{ current_ff_str }}');
+
+const ROUND_LABELS_LR = {1:'Round of 64', 2:'Round of 32', 3:'Sweet 16', 4:'Elite Eight', 5:'Final Four', 6:'Championship'};
+
+function buildRoundMatchups(rnd, prevWinners) {
+  if (rnd === 5) {
+    return [
+      [prevWinners[FF_PAIRINGS[0][0]] || null, prevWinners[FF_PAIRINGS[0][1]] || null],
+      [prevWinners[FF_PAIRINGS[1][0]] || null, prevWinners[FF_PAIRINGS[1][1]] || null],
+    ];
+  }
+  var matchups = [];
+  for (var i = 0; i < prevWinners.length; i += 2) {
+    matchups.push([prevWinners[i] || null, prevWinners[i + 1] || null]);
+  }
+  return matchups;
+}
+
+function renderLockedRounds() {
+  var container = document.getElementById('locked-rounds');
+  if (!container) return;
+  container.innerHTML = '';
+
+  var prevMatchupWinners = BRACKET_R1.map(function(g, i) {
+    return (lockedResults['1'] || [])[i] || null;
+  });
+
+  for (var rnd = 1; rnd <= 6; rnd++) {
+    var matchups;
+    if (rnd === 1) {
+      matchups = BRACKET_R1.map(function(g) { return [g.team1, g.team2]; });
+    } else {
+      matchups = buildRoundMatchups(rnd, prevMatchupWinners);
+    }
+
+    var hasGame = matchups.some(function(m) { return m[0] && m[1]; });
+    if (!hasGame) break;
+
+    var lockedForRnd = lockedResults[String(rnd)] || new Array(matchups.length).fill(null);
+
+    var roundDiv = document.createElement('div');
+    roundDiv.className = 'lr-round';
+
+    var labelDiv = document.createElement('div');
+    labelDiv.className = 'lr-round-label';
+    labelDiv.textContent = ROUND_LABELS_LR[rnd];
+    roundDiv.appendChild(labelDiv);
+
+    var gamesDiv = document.createElement('div');
+    gamesDiv.className = 'lr-games';
+
+    for (var gi = 0; gi < matchups.length; gi++) {
+      var t1 = matchups[gi][0], t2 = matchups[gi][1];
+      var gameDiv = document.createElement('div');
+      if (!t1 || !t2) {
+        gameDiv.className = 'lr-game lr-game-incomplete';
+        var tbd = document.createElement('span');
+        tbd.className = 'lr-tbd';
+        tbd.textContent = 'TBD';
+        gameDiv.appendChild(tbd);
+        gamesDiv.appendChild(gameDiv);
+        continue;
+      }
+      gameDiv.className = 'lr-game';
+
+      var winner = lockedForRnd[gi] || null;
+
+      (function(r, g, team1, team2, w) {
+        var btn1 = document.createElement('button');
+        btn1.className = 'lr-team' + (w === team1 ? ' lr-winner' : (w ? ' lr-loser' : ''));
+        btn1.textContent = team1;
+        btn1.addEventListener('click', function() { lockGame(r, g, team1); });
+
+        var vsSpan = document.createElement('span');
+        vsSpan.className = 'lr-vs';
+        vsSpan.textContent = 'vs';
+
+        var btn2 = document.createElement('button');
+        btn2.className = 'lr-team' + (w === team2 ? ' lr-winner' : (w ? ' lr-loser' : ''));
+        btn2.textContent = team2;
+        btn2.addEventListener('click', function() { lockGame(r, g, team2); });
+
+        gameDiv.appendChild(btn1);
+        gameDiv.appendChild(vsSpan);
+        gameDiv.appendChild(btn2);
+      }(rnd, gi, t1, t2, winner));
+
+      gamesDiv.appendChild(gameDiv);
+    }
+    roundDiv.appendChild(gamesDiv);
+    container.appendChild(roundDiv);
+
+    prevMatchupWinners = matchups.map(function(m, i) { return (lockedForRnd[i] || null); });
+  }
+
+  var total = 0;
+  for (var r = 1; r <= 6; r++) {
+    var arr = lockedResults[String(r)] || [];
+    total += arr.filter(function(w) { return w !== null && w !== ''; }).length;
+  }
+  var countEl = document.getElementById('locked-count');
+  if (countEl) countEl.textContent = total > 0 ? '(' + total + ' game' + (total !== 1 ? 's' : '') + ' locked)' : '';
+}
+
+function lockGame(rnd, gi, team) {
+  var rnds = String(rnd);
+  var lengths = {1:32, 2:16, 3:8, 4:4, 5:2, 6:1};
+  if (!lockedResults[rnds]) {
+    lockedResults[rnds] = new Array(lengths[rnd] || 1).fill(null);
+  }
+  var prev = lockedResults[rnds][gi];
+  if (prev === team) {
+    lockedResults[rnds][gi] = null;
+    clearDownstream(rnd);
+  } else {
+    if (prev && prev !== team) { clearDownstream(rnd); }
+    lockedResults[rnds][gi] = team;
+  }
+  renderLockedRounds();
+}
+
+function clearDownstream(rnd) {
+  for (var r = rnd + 1; r <= 6; r++) {
+    delete lockedResults[String(r)];
+  }
+}
+
+function saveLockedResults() {
+  var btn   = document.getElementById('save-locked-btn');
+  var msgEl = document.getElementById('locked-save-msg');
+  if (btn) btn.disabled = true;
+  if (msgEl) { msgEl.textContent = 'Saving\u2026'; msgEl.style.color = '#94a3b8'; }
+  var toSave = {};
+  for (var rnd of Object.keys(lockedResults)) {
+    var arr = lockedResults[rnd];
+    if (arr && arr.some(function(w) { return w !== null && w !== ''; })) {
+      toSave[rnd] = arr;
+    }
+  }
+  fetch('/api/locked_results', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({round_winners: toSave}),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (btn) btn.disabled = false;
+    if (data.ok) {
+      if (msgEl) { msgEl.textContent = '\u2713 Saved'; msgEl.style.color = '#86efac'; }
+      setTimeout(function() { if (msgEl) msgEl.textContent = ''; }, 2000);
+    } else {
+      if (msgEl) { msgEl.textContent = 'Error saving'; msgEl.style.color = '#f87171'; }
+    }
+  })
+  .catch(function() {
+    if (btn) btn.disabled = false;
+    if (msgEl) { msgEl.textContent = 'Error saving'; msgEl.style.color = '#f87171'; }
+  });
+}
+
+function clearLockedResults() {
+  if (!confirm('Clear all locked game results?')) return;
+  lockedResults = {};
+  saveLockedResults();
+  renderLockedRounds();
+}
+
+function initLockedResults() {
+  if (!BRACKET_R1 || !BRACKET_R1.length || !BRACKET_R1[0].team1) return;
+  var card = document.getElementById('lr-card');
+  if (card) card.style.display = '';
+  renderLockedRounds();
+}
+
+initLockedResults();
 
 function probColor(p) {
   if (p >= 0.40) return '#86efac';

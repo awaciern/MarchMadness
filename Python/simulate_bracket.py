@@ -154,9 +154,12 @@ def _simulate_one(
     delta_feats: bool = False,
     numeric_bases: list = None,
     model_feature_list: list = None,
+    locked_results: dict = None,
 ) -> dict:
     """
     Run one complete bracket simulation.
+    locked_results, if provided, is {round_int: [winner_or_None, ...]} where a
+    non-None entry forces that game slot's outcome regardless of the model.
     Returns {round_number: [winning_team_names]} for rounds 1–6.
     """
     if model_feature_list is None:
@@ -206,10 +209,16 @@ def _simulate_one(
             teams2 = df_rnd['Team__2'].tolist()
             draws  = rng.random(len(teams1))
 
-        winners = [
-            teams1[k] if draws[k] < proba[k, 1] else teams2[k]
-            for k in range(len(teams1))
-        ]
+        _locked_rnd = (locked_results or {}).get(rnd, [])
+        winners = []
+        for k in range(len(teams1)):
+            _forced = _locked_rnd[k] if k < len(_locked_rnd) else None
+            if _forced:
+                winners.append(_forced)
+            elif draws[k] < proba[k, 1]:
+                winners.append(teams1[k])
+            else:
+                winners.append(teams2[k])
         results[rnd] = winners
         prev_winners = winners
 
@@ -229,6 +238,7 @@ def run_simulations(
     delta_feats: bool = False,
     numeric_bases: list = None,
     model_feature_list: list = None,
+    locked_results: Optional[dict] = None,
 ) -> pd.DataFrame:
     """
     Run `num_iters` Monte Carlo bracket simulations for `year`.
@@ -323,6 +333,7 @@ def run_simulations(
             delta_feats=delta_feats,
             numeric_bases=numeric_bases,
             model_feature_list=model_feature_list,
+            locked_results=locked_results,
         )
         for rnd, winners in sim.items():
             for team in winners:
