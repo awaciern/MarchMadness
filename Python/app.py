@@ -359,6 +359,7 @@ def scan_saved_models():
                     'norm_all':   info.get('norm_all', False),
                     'calibrated': info.get('calibrate', False),
                     'delta_feats':info.get('delta_feats', False),
+                    'exclude_years': info.get('exclude_years', []),
                     'features':   info.get('features', ''),
                     'params':     info.get('params', ''),
                     'train_acc':  train_acc,
@@ -446,6 +447,7 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
                     'norm_all':   info.get('norm_all', False),
                     'calibrated': info.get('calibrate', False),
                     'delta_feats':info.get('delta_feats', False),
+                    'exclude_years': info.get('exclude_years', []),
                     'features':   info.get('features', ''),
                     'params':     info.get('params', ''),
                     'train_acc':  train_acc,
@@ -607,6 +609,10 @@ def run_prediction():
                 pass
     if data.get('delta_feats'):
         cmd.append('--delta-feats')
+    exclude_years = data.get('exclude_years', [])
+    if exclude_years:
+        cmd.append('--exclude-years')
+        cmd.extend(str(y) for y in exclude_years)
 
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = Job()
@@ -2777,6 +2783,7 @@ table.res-table tbody tr:hover td { background: #172554; }
         <th class="sortable" data-sort="name" onclick="gaSortBy('name')">Name</th>
         <th class="sortable" data-sort="model" onclick="gaSortBy('model')">Model</th>
         <th class="sortable" data-sort="flags" onclick="gaSortBy('flags')">Flags</th>
+        <th>Excl.</th>
         <th class="sortable" data-sort="features" onclick="gaSortBy('features')">Features</th>
         <th class="sortable sort-desc" style="text-align:right" data-sort="score" onclick="gaSortBy('score')">Score</th>
         <th class="sortable" style="text-align:right" data-sort="train_acc" onclick="gaSortBy('train_acc')">Train&nbsp;Acc</th>
@@ -2914,6 +2921,7 @@ function gaRenderModels() {
   sorted.forEach(function(m) {
     const sim   = GA_SIM_MAP[m.dir_name];
     const flags = [m.norm_years ? 'NY' : '', m.norm_all ? 'NA' : '', m.calibrated ? 'CAL' : '', m.delta_feats ? 'DF' : ''].filter(Boolean).join('\u00a0') || '\u2014';
+    const exclStr = (m.exclude_years && m.exclude_years.length) ? m.exclude_years.join(', ') : '\u2014';
     const feat  = m.features.length > 35 ? m.features.slice(0, 35) + '\u2026' : m.features;
     const viewBtn = (sim && sim.html_file)
       ? '<a href="/sim_html/' + encodeURIComponent(m.dir_name) + '/' + encodeURIComponent(sim.html_file) + '" target="_blank" class="quick-run-btn" style="text-decoration:none;display:inline-block">&#128200; View</a>'
@@ -2927,6 +2935,7 @@ function gaRenderModels() {
       '<td style="color:#e2e8f0;font-weight:600">' + m.dir_name + '</td>' +
       '<td style="color:#93c5fd;font-size:11px">' + m.model + '</td>' +
       '<td style="color:#fbbf24;font-size:10px;white-space:nowrap">' + flags + '</td>' +
+      '<td style="color:#94a3b8;font-size:11px;white-space:nowrap">' + exclStr + '</td>' +
       '<td style="color:#94a3b8;font-size:11px">' + feat + '</td>' +
       '<td style="color:#fbbf24;font-weight:700;text-align:right">' + m.score + 'pts</td>' +
       '<td style="color:#94a3b8;font-size:11px;font-family:monospace;text-align:right">' + fmtAcc(m.train_acc) + '</td>' +
@@ -3866,6 +3875,7 @@ label.feat-chip[title] { cursor: help; }
         <th class="sortable" data-sort="name" onclick="savedSortBy('name')">Name</th>
         <th class="sortable" data-sort="model" onclick="savedSortBy('model')">Model</th>
         <th class="sortable" style="width:60px" data-sort="flags" onclick="savedSortBy('flags')">Flags</th>
+        <th>Excl.</th>
         <th class="sortable" data-sort="features" onclick="savedSortBy('features')">Features</th>
         <th class="sortable" data-sort="params" onclick="savedSortBy('params')">Params</th>
         <th class="sortable sort-desc" style="width:70px;text-align:right" data-sort="score" onclick="savedSortBy('score')">Score</th>
@@ -4023,6 +4033,13 @@ label.feat-chip[title] { cursor: help; }
       <span style="font-size:13px;color:#e2e8f0">Delta features</span>
       <span style="font-size:10px;color:#475569">(collapse numeric __1 and __2 into a single team1 &minus; team2 difference)</span>
     </div>
+    <div style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+        <span style="font-size:13px;color:#e2e8f0">Exclude years from training</span>
+        <span style="font-size:10px;color:#475569">(omit these years from training data and evaluation)</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px" id="excl-years-wrap"></div>
+    </div>
     <hr style="border:none;border-top:1px solid #334155;margin:14px 0">
     <label class="field-label">Model Name <span style="color:#f87171">*</span></label>
     <input type="text" id="run-name-input"
@@ -4165,11 +4182,13 @@ function renderSavedModels() {
     const calTag = m.calibrated  ? '<span class="tag tag-cal">CAL</span>' : '';
     const dfTag  = m.delta_feats ? '<span class="tag" style="background:#a855f7;color:#fff">DF</span>' : '';
     const flagsTag = (nyTag + naTag + calTag + dfTag) || '\u2014';
+    const exclStr = (m.exclude_years && m.exclude_years.length) ? m.exclude_years.join(', ') : '\u2014';
     tr.innerHTML =
       '<td style="color:#475569">' + (i + 1) + '</td>' +
       '<td style="color:#e2e8f0;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + m.dir_name.replace(/"/g,'&quot;') + '">' + m.dir_name + '</td>' +
       '<td>' + m.model.replace(/_/g, '\u00a0') + '</td>' +
       '<td>' + flagsTag + '</td>' +
+      '<td style="color:#94a3b8;font-size:11px;white-space:nowrap">' + exclStr + '</td>' +
       '<td class="feat-tags">' + m.features.replace(/\+/g, ' &middot; ') + '</td>' +
       '<td style="color:#64748b;font-size:10px">' + (m.params || '\u2014') + '</td>' +
       '<td class="score-cell" style="text-align:right">' + m.score + '</td>' +
@@ -4226,6 +4245,28 @@ function loadSavedResults(dirName) {
 }
 
 loadSavedModels();
+
+function initExclYears() {
+  const wrap = document.getElementById('excl-years-wrap');
+  if (!wrap) return;
+  ALL_YEARS.forEach(function(y) {
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;cursor:pointer;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 7px;font-size:11px;color:#94a3b8;user-select:none';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = y;
+    cb.style.cssText = 'accent-color:#f87171;cursor:pointer;width:11px;height:11px';
+    cb.addEventListener('change', function() {
+      lbl.style.background = cb.checked ? '#450a0a' : '#1e293b';
+      lbl.style.borderColor = cb.checked ? '#f87171' : '#334155';
+      lbl.style.color       = cb.checked ? '#fca5a5' : '#94a3b8';
+    });
+    lbl.appendChild(cb);
+    lbl.appendChild(document.createTextNode('\u00a0' + y));
+    wrap.appendChild(lbl);
+  });
+}
+initExclYears();
 
 // ---- Simulation ----
 function loadSimCard(dirName) {
@@ -4479,6 +4520,7 @@ function runPrediction() {
   const calibrateTempRaw = document.getElementById('calibrate-temp-inp').value.trim();
   const calibrateTemperature = calibrateTempRaw !== '' ? parseFloat(calibrateTempRaw) : null;
   const deltaFeats   = document.getElementById('delta-feats-check').checked;
+  const excludeYears = Array.from(document.querySelectorAll('#excl-years-wrap input[type="checkbox"]:checked')).map(function(cb) { return parseInt(cb.value, 10); });
 
   // Reset UI
   document.getElementById('log-box').innerHTML = '';
@@ -4497,6 +4539,7 @@ function runPrediction() {
       calibrate_target: calibrateTarget,
       calibrate_temperature: calibrateTemperature,
       delta_feats: deltaFeats,
+      exclude_years: excludeYears,
     }),
   })
   .then(r => r.json())

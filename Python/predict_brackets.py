@@ -1143,6 +1143,18 @@ def main():
         ),
     )
     parser.add_argument(
+        '--exclude-years',
+        nargs='*',
+        type=int,
+        default=[],
+        metavar='YEAR',
+        help=(
+            'Years to exclude from both training data and evaluation. '
+            'These years are removed from the leave-one-year-out loop and from all '
+            'training datasets.  Example: --exclude-years 2012 2013'
+        ),
+    )
+    parser.add_argument(
         '--run-name',
         required=True,
         help=(
@@ -1209,10 +1221,13 @@ def main():
 
     # Build the list of years to process: all completed years, plus the current
     # year appended at the end if it was supplied and isn't already in ALL_YEARS.
-    years_to_process = list(ALL_YEARS)
+    exclude_years = set(args.exclude_years or [])
+    years_to_process = [y for y in ALL_YEARS if y not in exclude_years]
     if this_year is not None and this_year not in years_to_process:
         years_to_process.append(this_year)
     num_eval_years = len(years_to_process) - (1 if this_year is not None else 0)
+    if exclude_years:
+        print(f'Excluding years from training data: {sorted(exclude_years)}')
 
     # -----------------------------------------------------------------------
     # Load the full game dataset once (used to build per-year training sets).
@@ -1281,11 +1296,11 @@ def main():
 
         # --- Train a model for this year -----------------------------------
         if is_current:
-            # Current year: train on ALL historical data (no test set).
-            df_train = df_all_raw.copy()
+            # Current year: train on all historical data (no test set), minus excluded years.
+            df_train = df_all_raw[~df_all_raw['Year'].isin(exclude_years)].copy() if exclude_years else df_all_raw.copy()
         else:
-            # Historical year: train on every other year to avoid leakage.
-            df_train = df_all_raw[df_all_raw['Year'] != year].copy()
+            # Historical year: train on every other year to avoid leakage, minus excluded years.
+            df_train = df_all_raw[~df_all_raw['Year'].isin({year} | exclude_years)].copy()
 
         df_test_year = df_all_raw[df_all_raw['Year'] == year].copy() if not is_current else None
 
@@ -1392,7 +1407,7 @@ def main():
     # Traditional random train/test split model (for reference comparison).
     # -----------------------------------------------------------------------
     print(f'\n{"="*50}\nTRADITIONAL 67/33 TRAIN-TEST SPLIT MODEL\n{"="*50}')
-    df_trad = df_all_raw[df_all_raw['Year'].isin(ALL_YEARS)].copy()
+    df_trad = df_all_raw[df_all_raw['Year'].isin(ALL_YEARS) & ~df_all_raw['Year'].isin(exclude_years)].copy()
     if cat_encoders:
         df_trad = apply_label_encoders(df_trad, cat_encoders)
     if norm_info is not None:
@@ -1500,6 +1515,7 @@ def main():
         'calibrate_target':   calibrate_target if (calibrate and calibrate_mode == 'stretch') else None,
         'calibrate_temperature': calibrate_temperature if calibrate else None,
         'delta_feats':        delta_feats,
+        'exclude_years':      sorted(exclude_years),
         'model_params':   {str(k): str(v) for k, v in model_params.items()},
         'feature_bases':  list(args.features),
         'trad_train_acc': round(trad_train_acc, 4),
