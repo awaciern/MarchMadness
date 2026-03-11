@@ -31,6 +31,7 @@ REPO_ROOT        = Path(__file__).resolve().parents[1]
 PYTHON_EXE       = str(REPO_ROOT / 'env' / 'bin' / 'python3')
 PREDICT_SCRIPT   = str(Path(__file__).resolve().parent / 'predict_brackets.py')
 SIMULATE_SCRIPT  = str(Path(__file__).resolve().parent / 'simulate_bracket.py')
+FEATURE_VIZ_SCRIPT = str(Path(__file__).resolve().parent / 'feature_viz.py')
 PREDICTIONS_DIR  = REPO_ROOT / 'Predictions'
 SIMULATIONS_DIR  = REPO_ROOT / 'Simulations'
 BRACKETS_DIR     = REPO_ROOT / 'Brackets'
@@ -104,7 +105,7 @@ DEFAULT_FEATURES = ['WinPct', 'KP_AdjO', 'KP_AdjD', 'AdjEM']
 # Simplified UI feature lists (6 categories shown in the web form)
 # ---------------------------------------------------------------------------
 
-UI_BASIC_BASES = ['WinPct', 'Conf', 'Seed']
+UI_BASIC_BASES = ['WinPct', 'Wins', 'Losses', 'Conf', 'Seed']
 
 UI_KP_BASES = [
     'AdjEM', 'Rk_AdjEM',
@@ -131,12 +132,14 @@ UI_STATS_BASES = [
 ]
 
 UI_BT2W_BASES = [
+    '2W_Wins', '2W_Losses',
     '2W_Barthag', '2W_Rk_Barthag',
     '2W_WAB', '2W_Rk_WAB',
     '2W_AdjO', '2W_Rk_AdjO', '2W_AdjD', '2W_Rk_AdjD', '2W_AdjT', '2W_Rk_AdjT',
 ]
 
 UI_BTHOT_BASES = [
+    'HOT_Wins', 'HOT_Losses',
     'HOT_Barthag', 'HOT_Rk_Barthag',
     'HOT_WAB', 'HOT_Rk_WAB',
     'HOT_AdjO', 'HOT_Rk_AdjO', 'HOT_AdjD', 'HOT_Rk_AdjD', 'HOT_AdjT', 'HOT_Rk_AdjT',
@@ -1632,6 +1635,39 @@ def api_save_locked_results():
     return jsonify({'ok': True})
 
 
+@app.route('/features')
+def feature_explorer():
+    return Response(FEATURE_VIZ_HTML, mimetype='text/html')
+
+
+@app.route('/api/feature_analysis', methods=['POST'])
+def api_feature_analysis():
+    data = request.get_json(force=True) or {}
+    exclude_years = data.get('exclude_years', [])
+    rounds        = data.get('rounds', [])
+    features      = data.get('features', [])
+    top_n         = int(data.get('top_n', 40))
+
+    cmd = [PYTHON_EXE, FEATURE_VIZ_SCRIPT, '--data-root', str(REPO_ROOT)]
+    if exclude_years:
+        cmd += ['--exclude-years'] + [str(y) for y in exclude_years]
+    if rounds:
+        cmd += ['--rounds'] + [str(r) for r in rounds]
+    if features:
+        cmd += ['--features'] + features
+    cmd += ['--top-n', str(top_n)]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            return jsonify({'error': result.stderr[-2000:] or 'Analysis failed.'}), 500
+        return Response(result.stdout, mimetype='application/json')
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Analysis timed out (>2 min).'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
@@ -1639,6 +1675,456 @@ def api_save_locked_results():
 # ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
+
+FEATURE_VIZ_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feature Explorer — March Madness</title>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
+body { font-family: "Segoe UI", Arial, sans-serif; background:#0f172a; color:#e2e8f0; min-height:100vh; }
+a { color:#93c5fd; }
+a.back-link { display:inline-flex; align-items:center; gap:5px; color:#64748b; font-size:12px; text-decoration:none; padding:20px 24px 0; transition:color .15s; }
+a.back-link:hover { color:#93c5fd; }
+.page-header { padding:12px 24px 18px; border-bottom:1px solid #1e293b; }
+h1 { font-size:22px; color:#fbbf24; margin-bottom:3px; }
+.subtitle { color:#64748b; font-size:12px; }
+.layout { display:flex; gap:0; min-height:calc(100vh - 100px); }
+.sidebar { width:260px; min-width:220px; background:#0b1120; border-right:1px solid #1e293b; padding:16px 14px; display:flex; flex-direction:column; gap:14px; overflow-y:auto; }
+.main { flex:1; padding:18px 20px; min-width:0; }
+.section-title { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#475569; margin-bottom:7px; }
+.group-chips { display:flex; flex-direction:column; gap:5px; }
+.group-chip { display:flex; align-items:center; gap:7px; cursor:pointer; padding:4px 6px; border-radius:5px; font-size:12px; color:#cbd5e1; transition:background .12s; }
+.group-chip:hover { background:#1e293b; }
+.group-chip input { cursor:pointer; width:13px; height:13px; }
+.year-chips { display:flex; flex-wrap:wrap; gap:4px; }
+.year-chip { display:inline-flex; align-items:center; gap:3px; cursor:pointer; background:#1e293b; border:1px solid #334155; border-radius:4px; padding:2px 6px; font-size:10px; color:#94a3b8; user-select:none; }
+.year-chip.excl { background:#450a0a; border-color:#f87171; color:#fca5a5; }
+.round-chips { display:flex; flex-wrap:wrap; gap:4px; }
+.round-chip { display:inline-flex; align-items:center; gap:3px; cursor:pointer; background:#1e293b; border:1px solid #334155; border-radius:4px; padding:3px 8px; font-size:11px; color:#94a3b8; user-select:none; }
+.round-chip.sel { background:#0c2340; border-color:#3b82f6; color:#93c5fd; }
+.topn-row { display:flex; align-items:center; gap:8px; }
+.topn-row label { font-size:12px; color:#94a3b8; white-space:nowrap; }
+.topn-row input { width:62px; background:#0f172a; border:1px solid #334155; border-radius:4px; color:#e2e8f0; padding:4px 6px; font-size:12px; }
+.analyze-btn { background:linear-gradient(135deg,#1d4ed8,#2563eb); color:#fff; border:none; border-radius:7px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; width:100%; transition:opacity .15s; }
+.analyze-btn:hover { opacity:.88; }
+.analyze-btn:disabled { opacity:.4; cursor:default; }
+.status-bar { font-size:11px; color:#64748b; margin-top:4px; text-align:center; min-height:16px; }
+.tabs { display:flex; gap:0; border-bottom:1px solid #1e293b; margin-bottom:16px; }
+.tab { padding:8px 16px; font-size:12px; font-weight:600; color:#475569; cursor:pointer; border-bottom:2px solid transparent; transition:color .15s, border-color .15s; white-space:nowrap; }
+.tab.active { color:#fbbf24; border-bottom-color:#fbbf24; }
+.tab:hover:not(.active) { color:#94a3b8; }
+.chart-panel { display:none; }
+.chart-panel.active { display:block; }
+.chart-box { background:#0b1120; border:1px solid #1e293b; border-radius:8px; padding:4px; margin-bottom:14px; min-height:300px; }
+.info-bar { font-size:11px; color:#475569; margin-bottom:10px; padding:7px 10px; background:#0b1120; border-radius:5px; border:1px solid #1e293b; display:flex; gap:16px; flex-wrap:wrap; }
+.info-item { display:flex; gap:4px; }
+.info-label { color:#334155; }
+.info-val { color:#94a3b8; font-weight:600; }
+.legend-row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+.legend-dot { display:inline-flex; align-items:center; gap:5px; font-size:10px; color:#94a3b8; }
+.legend-dot span { width:10px; height:10px; border-radius:50%; display:inline-block; }
+.empty-msg { color:#475569; font-size:13px; padding:40px; text-align:center; }
+.tab-desc { font-size:11px; color:#475569; margin-bottom:10px; }
+.matrix-note { font-size:10px; color:#334155; margin-bottom:6px; }
+</style>
+</head>
+<body>
+<a href="/" class="back-link">&#8592; Back to Predictor</a>
+<div class="page-header">
+  <h1>&#128200; Feature Explorer</h1>
+  <p class="subtitle">Explore which features best predict tournament outcomes across all historical years.</p>
+</div>
+<div class="layout">
+
+  <!-- === SIDEBAR === -->
+  <div class="sidebar">
+    <div>
+      <div class="section-title">Feature Groups</div>
+      <div class="group-chips">
+        <label class="group-chip"><input type="checkbox" id="grp-common" checked> <span style="color:#60a5fa">&#9679;</span> Common (Win%, Wins&hellip;)</label>
+        <label class="group-chip"><input type="checkbox" id="grp-kp" checked> <span style="color:#34d399">&#9679;</span> KenPom (AdjEM, AdjO&hellip;)</label>
+        <label class="group-chip"><input type="checkbox" id="grp-bt" checked> <span style="color:#fbbf24">&#9679;</span> BartTorvik (Barthag&hellip;)</label>
+        <label class="group-chip"><input type="checkbox" id="grp-bt2w"> <span style="color:#a78bfa">&#9679;</span> 2-Week BT Snapshot</label>
+        <label class="group-chip"><input type="checkbox" id="grp-bthot"> <span style="color:#f472b6">&#9679;</span> Hotness (2W&minus;Season)</label>
+        <label class="group-chip"><input type="checkbox" id="grp-seed" checked> <span style="color:#67e8f9">&#9679;</span> Seed</label>
+      </div>
+    </div>
+    <div>
+      <div class="section-title">Exclude Years</div>
+      <div class="year-chips" id="year-chips"></div>
+    </div>
+    <div>
+      <div class="section-title">Tournament Rounds</div>
+      <div class="round-chips" id="round-chips"></div>
+    </div>
+    <div>
+      <div class="section-title">Top N (bar charts)</div>
+      <div class="topn-row">
+        <label>Show top</label>
+        <input type="number" id="topn-inp" value="30" min="5" max="120" step="5">
+        <label>features</label>
+      </div>
+    </div>
+    <button class="analyze-btn" id="analyze-btn" onclick="runAnalysis()">&#9654; Analyze</button>
+    <div class="status-bar" id="status-bar">Select options and click Analyze.</div>
+  </div>
+
+  <!-- === MAIN === -->
+  <div class="main">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('corr')">&#128200; Win Correlation</div>
+      <div class="tab" onclick="switchTab('rf')">&#127795; RF Importance</div>
+      <div class="tab" onclick="switchTab('rnd')">&#128337; By Round</div>
+      <div class="tab" onclick="switchTab('matrix')">&#9707; Correlation Matrix</div>
+    </div>
+    <div id="info-bar" class="info-bar" style="display:none">
+      <div class="info-item"><span class="info-label">Games:</span><span class="info-val" id="info-games"></span></div>
+      <div class="info-item"><span class="info-label">Years:</span><span class="info-val" id="info-years"></span></div>
+      <div class="info-item"><span class="info-label">Rounds:</span><span class="info-val" id="info-rounds"></span></div>
+      <div class="info-item"><span class="info-label">Features analyzed:</span><span class="info-val" id="info-feats"></span></div>
+    </div>
+    <div class="legend-row" id="legend-row"></div>
+
+    <!-- Tab: Win Correlation -->
+    <div id="panel-corr" class="chart-panel active">
+      <p class="tab-desc">Point-biserial correlation between (team1 stat &minus; team2 stat) and whether team1 won. Higher absolute correlation = stronger predictor. Positive = higher is better for team1.</p>
+      <div class="chart-box" id="chart-corr"><div class="empty-msg">Run analysis to see results.</div></div>
+    </div>
+
+    <!-- Tab: RF Importance -->
+    <div id="panel-rf" class="chart-panel">
+      <p class="tab-desc">Feature importances from a Random Forest trained on all data (200 trees). Shows how much each feature delta contributes to splits in the trees.</p>
+      <div class="chart-box" id="chart-rf"><div class="empty-msg">Run analysis to see results.</div></div>
+    </div>
+
+    <!-- Tab: By Round -->
+    <div id="panel-rnd" class="chart-panel">
+      <p class="tab-desc">Win-prediction correlation for the top 15 features broken down by tournament round. Shows which features matter most in early vs. late rounds.</p>
+      <div class="chart-box" id="chart-rnd"><div class="empty-msg">Run analysis to see results.</div></div>
+      <div class="chart-box" id="chart-winrate" style="margin-top:10px"><div class="empty-msg"></div></div>
+    </div>
+
+    <!-- Tab: Correlation Matrix -->
+    <div id="panel-matrix" class="chart-panel">
+      <p class="tab-desc">Pearson correlation between feature deltas (team1&minus;team2 for each stat). Highlights redundancy between features &mdash; highly correlated pairs are interchangeable in a model.</p>
+      <p class="matrix-note">Limited to first 40 selected features for performance.</p>
+      <div class="chart-box" id="chart-matrix"><div class="empty-msg">Run analysis to see results.</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ALL_YEARS = __ALL_YEARS_JSON__;
+const FEATURE_BASES = {
+  common: ['WinPct','Wins','Losses'],
+  kp:     ['KP_AdjO','KP_Rk_AdjO','KP_AdjD','KP_Rk_AdjD','KP_AdjT','KP_Rk_AdjT','AdjEM','Rk_AdjEM','Luck','Rk_Luck','SOS_AdjEM','Rk_SOS_AdjEM','SOS_AdjO','Rk_SOS_AdjO','SOS_AdjD','Rk_SOS_AdjD','NCSOS_AdjEM','Rk_NCSOS_AdjEM'],
+  bt:     ['BT_AdjO','BT_Rk_AdjO','BT_AdjD','BT_Rk_AdjD','BT_AdjT','BT_Rk_AdjT','Barthag','Rk_Barthag','EFG%','Rk_EFG%','EFGD%','Rk_EFGD%','TOR','Rk_TOR','TORD','Rk_TORD','ORB','Rk_ORB','DRB','Rk_DRB','FTR','Rk_FTR','FTRD','Rk_FTRD','2P%','Rk_2P%','2P%D','Rk_2P%D','3P%','Rk_3P%','3P%D','Rk_3P%D','3PR','Rk_3PR','3PRD','Rk_3PRD','WAB','Rk_WAB'],
+  bt2w:   ['2W_WinPct','2W_Wins','2W_Losses','2W_AdjO','2W_Rk_AdjO','2W_AdjD','2W_Rk_AdjD','2W_AdjT','2W_Rk_AdjT','2W_Barthag','2W_Rk_Barthag','2W_EFG%','2W_Rk_EFG%','2W_EFGD%','2W_Rk_EFGD%','2W_TOR','2W_Rk_TOR','2W_TORD','2W_Rk_TORD','2W_ORB','2W_Rk_ORB','2W_DRB','2W_Rk_DRB','2W_FTR','2W_Rk_FTR','2W_FTRD','2W_Rk_FTRD','2W_2P%','2W_Rk_2P%','2W_2P%D','2W_Rk_2P%D','2W_3P%','2W_Rk_3P%','2W_3P%D','2W_Rk_3P%D','2W_3PR','2W_Rk_3PR','2W_3PRD','2W_Rk_3PRD','2W_WAB','2W_Rk_WAB'],
+  bthot:  ['HOT_WinPct','HOT_Wins','HOT_Losses','HOT_AdjO','HOT_Rk_AdjO','HOT_AdjD','HOT_Rk_AdjD','HOT_AdjT','HOT_Rk_AdjT','HOT_Barthag','HOT_Rk_Barthag','HOT_EFG%','HOT_Rk_EFG%','HOT_EFGD%','HOT_Rk_EFGD%','HOT_TOR','HOT_Rk_TOR','HOT_TORD','HOT_Rk_TORD','HOT_ORB','HOT_Rk_ORB','HOT_DRB','HOT_Rk_DRB','HOT_FTR','HOT_Rk_FTR','HOT_FTRD','HOT_Rk_FTRD','HOT_2P%','HOT_Rk_2P%','HOT_2P%D','HOT_Rk_2P%D','HOT_3P%','HOT_Rk_3P%','HOT_3P%D','HOT_Rk_3P%D','HOT_3PR','HOT_Rk_3PR','HOT_3PRD','HOT_Rk_3PRD','HOT_WAB','HOT_Rk_WAB'],
+  seed:   ['Seed'],
+};
+const GROUP_COLORS = {common:'#60a5fa', kp:'#34d399', bt:'#fbbf24', bt2w:'#a78bfa', bthot:'#f472b6', seed:'#67e8f9', other:'#94a3b8'};
+const ROUND_NAMES = {1:'R64',2:'R32',3:'S16',4:'E8',5:'F4',6:'Final'};
+const PLOT_LAYOUT_BASE = {
+  paper_bgcolor:'#0b1120', plot_bgcolor:'#0b1120',
+  font:{color:'#94a3b8', family:'Segoe UI,Arial,sans-serif', size:11},
+  margin:{l:20,r:20,t:30,b:20},
+  xaxis:{gridcolor:'#1e293b', zerolinecolor:'#334155'},
+  yaxis:{gridcolor:'#1e293b'},
+};
+const PLOTLY_CONFIG = {responsive:true, displayModeBar:false};
+
+let currentTab = 'corr';
+let vizData = null;
+const selectedRounds = new Set([1,2,3,4,5,6]);
+
+/* --- Init year chips --- */
+(function() {
+  const wrap = document.getElementById('year-chips');
+  ALL_YEARS.forEach(function(y) {
+    const chip = document.createElement('span');
+    chip.className = 'year-chip';
+    chip.textContent = y;
+    chip.dataset.year = y;
+    chip.addEventListener('click', function() {
+      chip.classList.toggle('excl');
+    });
+    wrap.appendChild(chip);
+  });
+})();
+
+/* --- Init round chips --- */
+(function() {
+  const wrap = document.getElementById('round-chips');
+  [1,2,3,4,5,6].forEach(function(r) {
+    const chip = document.createElement('span');
+    chip.className = 'round-chip sel';
+    chip.textContent = ROUND_NAMES[r] || ('R'+r);
+    chip.dataset.round = r;
+    chip.addEventListener('click', function() {
+      if (chip.classList.contains('sel')) {
+        if (document.querySelectorAll('.round-chip.sel').length > 1) {
+          chip.classList.remove('sel');
+          selectedRounds.delete(r);
+        }
+      } else {
+        chip.classList.add('sel');
+        selectedRounds.add(r);
+      }
+    });
+    wrap.appendChild(chip);
+  });
+})();
+
+/* --- Legend --- */
+function buildLegend() {
+  const row = document.getElementById('legend-row');
+  row.innerHTML = '';
+  Object.entries(GROUP_COLORS).forEach(function([g, col]) {
+    if (g === 'other') return;
+    const names = {common:'Common', kp:'KenPom', bt:'BartTorvik', bt2w:'2-Week BT', bthot:'Hotness', seed:'Seed'};
+    const el = document.createElement('span');
+    el.className = 'legend-dot';
+    el.innerHTML = `<span style="background:${col}"></span>${names[g] || g}`;
+    row.appendChild(el);
+  });
+}
+
+/* --- Tab switching --- */
+function switchTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tab').forEach(function(t, i) {
+    const names = ['corr','rf','rnd','matrix'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.chart-panel').forEach(function(p) {
+    p.classList.toggle('active', p.id === 'panel-' + name);
+  });
+  if (vizData) renderTab(name);
+}
+
+/* --- Build feature list from selected groups --- */
+function getSelectedFeatures() {
+  const feats = [];
+  if (document.getElementById('grp-common').checked) feats.push(...FEATURE_BASES.common);
+  if (document.getElementById('grp-kp').checked)     feats.push(...FEATURE_BASES.kp);
+  if (document.getElementById('grp-bt').checked)     feats.push(...FEATURE_BASES.bt);
+  if (document.getElementById('grp-bt2w').checked)   feats.push(...FEATURE_BASES.bt2w);
+  if (document.getElementById('grp-bthot').checked)  feats.push(...FEATURE_BASES.bthot);
+  if (document.getElementById('grp-seed').checked)   feats.push(...FEATURE_BASES.seed);
+  return feats;
+}
+
+/* --- Run analysis --- */
+function runAnalysis() {
+  const features = getSelectedFeatures();
+  if (!features.length) { alert('Select at least one feature group.'); return; }
+  const excludeYears = Array.from(document.querySelectorAll('.year-chip.excl')).map(function(c) { return parseInt(c.dataset.year); });
+  const rounds = Array.from(selectedRounds);
+  const topN = parseInt(document.getElementById('topn-inp').value) || 30;
+
+  document.getElementById('analyze-btn').disabled = true;
+  document.getElementById('status-bar').textContent = 'Analyzing\u2026 (may take 15-60s)';
+  document.getElementById('status-bar').style.color = '#fbbf24';
+
+  fetch('/api/feature_analysis', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({features, exclude_years: excludeYears, rounds, top_n: topN}),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    document.getElementById('analyze-btn').disabled = false;
+    if (data.error) {
+      document.getElementById('status-bar').textContent = 'Error: ' + data.error;
+      document.getElementById('status-bar').style.color = '#f87171';
+      return;
+    }
+    vizData = data;
+    document.getElementById('status-bar').textContent = 'Done.';
+    document.getElementById('status-bar').style.color = '#34d399';
+    document.getElementById('info-bar').style.display = 'flex';
+    document.getElementById('info-games').textContent = data.n_games.toLocaleString();
+    document.getElementById('info-years').textContent = data.years_used.join(', ');
+    document.getElementById('info-rounds').textContent = data.rounds_used.map(function(r) { return ROUND_NAMES[r] || ('R'+r); }).join(', ');
+    document.getElementById('info-feats').textContent = data.n_features;
+    buildLegend();
+    renderTab(currentTab);
+  })
+  .catch(function(e) {
+    document.getElementById('analyze-btn').disabled = false;
+    document.getElementById('status-bar').textContent = 'Request failed: ' + e;
+    document.getElementById('status-bar').style.color = '#f87171';
+  });
+}
+
+/* --- Render helpers --- */
+function colorForGroup(g) { return GROUP_COLORS[g] || GROUP_COLORS.other; }
+
+function renderTab(name) {
+  if (name === 'corr')   renderCorr();
+  if (name === 'rf')     renderRF();
+  if (name === 'rnd')    renderRound();
+  if (name === 'matrix') renderMatrix();
+}
+
+/* --- Tab 1: Win Correlation --- */
+function renderCorr() {
+  const el = document.getElementById('chart-corr');
+  if (!vizData || !vizData.win_correlation.length) { el.innerHTML = '<div class="empty-msg">No correlation data.</div>'; return; }
+  const topN = parseInt(document.getElementById('topn-inp').value) || 30;
+  const data = vizData.win_correlation.slice(0, topN);
+  const labels = data.map(function(d) { return d.label; }).reverse();
+  const corrs  = data.map(function(d) { return d.corr; }).reverse();
+  const colors = data.map(function(d) { return colorForGroup(d.group); }).reverse();
+  const texts  = data.map(function(d) {
+    return `Corr: ${d.corr.toFixed(3)}  |  Win rate when higher: ${(d.win_rate_higher*100).toFixed(1)}%  |  n=${d.n.toLocaleString()}`;
+  }).reverse();
+
+  const trace = {
+    type: 'bar', orientation: 'h',
+    x: corrs, y: labels,
+    marker: {color: colors, opacity: 0.88},
+    hovertext: texts, hoverinfo: 'y+text',
+    text: corrs.map(function(c) { return c.toFixed(3); }),
+    textposition: 'outside',
+    textfont: {size:9, color:'#64748b'},
+  };
+  const h = Math.max(320, data.length * 22 + 60);
+  const layout = Object.assign({}, PLOT_LAYOUT_BASE, {
+    title: {text:'Win Correlation (point-biserial)', font:{color:'#cbd5e1',size:13}},
+    height: h,
+    margin: {l:130,r:60,t:36,b:40},
+    xaxis: Object.assign({}, PLOT_LAYOUT_BASE.xaxis, {title:{text:'Correlation with Win',font:{size:11}}, range:[-0.55,0.55], zeroline:true}),
+    yaxis: Object.assign({}, PLOT_LAYOUT_BASE.yaxis, {tickfont:{size:10}}),
+    shapes: [{type:'line',x0:0,x1:0,y0:-0.5,y1:data.length-0.5,line:{color:'#334155',width:1,dash:'dot'}}],
+  });
+  el.innerHTML = '';
+  Plotly.newPlot(el, [trace], layout, PLOTLY_CONFIG);
+}
+
+/* --- Tab 2: RF Importance --- */
+function renderRF() {
+  const el = document.getElementById('chart-rf');
+  if (!vizData || !vizData.rf_importance.length) { el.innerHTML = '<div class="empty-msg">No RF importance data.</div>'; return; }
+  const data = vizData.rf_importance;
+  const labels = data.map(function(d) { return d.label; }).reverse();
+  const imps   = data.map(function(d) { return d.importance; }).reverse();
+  const colors = data.map(function(d) { return colorForGroup(d.group); }).reverse();
+  const texts  = data.map(function(d) { return `Importance: ${(d.importance*100).toFixed(2)}%`; }).reverse();
+
+  const trace = {
+    type: 'bar', orientation: 'h',
+    x: imps, y: labels,
+    marker: {color: colors, opacity: 0.88},
+    hovertext: texts, hoverinfo: 'y+text',
+    text: imps.map(function(v) { return (v*100).toFixed(2)+'%'; }),
+    textposition: 'outside',
+    textfont: {size:9, color:'#64748b'},
+  };
+  const h = Math.max(320, data.length * 22 + 60);
+  const layout = Object.assign({}, PLOT_LAYOUT_BASE, {
+    title: {text:'Random Forest Feature Importance (200 trees)', font:{color:'#cbd5e1',size:13}},
+    height: h,
+    margin: {l:130,r:70,t:36,b:40},
+    xaxis: Object.assign({}, PLOT_LAYOUT_BASE.xaxis, {title:{text:'Importance',font:{size:11}}}),
+    yaxis: Object.assign({}, PLOT_LAYOUT_BASE.yaxis, {tickfont:{size:10}}),
+  });
+  el.innerHTML = '';
+  Plotly.newPlot(el, [trace], layout, PLOTLY_CONFIG);
+}
+
+/* --- Tab 3: By Round --- */
+function renderRound() {
+  const el = document.getElementById('chart-rnd');
+  if (!vizData || !vizData.round_breakdown.length) { el.innerHTML = '<div class="empty-msg">No round breakdown data.</div>'; return; }
+  const rndData = vizData.round_breakdown;
+  const allRounds = vizData.rounds_used;
+  const roundLabels = allRounds.map(function(r) { return ROUND_NAMES[r] || ('R'+r); });
+
+  // Heatmap: x = rounds, y = features (top 15), z = correlation
+  const features = rndData.map(function(d) { return d.label; });
+  const zValues = rndData.map(function(d) {
+    return allRounds.map(function(r) {
+      const rd = d.rounds.find(function(x) { return x.round === r; });
+      return rd && rd.corr !== null ? rd.corr : null;
+    });
+  });
+  const hoverTexts = rndData.map(function(d) {
+    return allRounds.map(function(r) {
+      const rd = d.rounds.find(function(x) { return x.round === r; });
+      if (!rd || rd.corr === null) return d.label + '<br>No data';
+      return `${d.label}<br>Round: ${ROUND_NAMES[r]||r}<br>Corr: ${rd.corr.toFixed(3)}<br>n=${rd.n}`;
+    });
+  });
+
+  const trace = {
+    type: 'heatmap',
+    x: roundLabels,
+    y: features,
+    z: zValues,
+    text: hoverTexts, hoverinfo: 'text',
+    colorscale: [
+      [0, '#7c3aed'], [0.25, '#1d4ed8'], [0.5, '#0f172a'],
+      [0.75, '#b45309'], [1, '#b91c1c']
+    ],
+    zmid: 0,
+    colorbar: {tickfont:{color:'#64748b',size:9}, outlinecolor:'#1e293b', bgcolor:'#0b1120', len:0.8},
+    xgap: 2, ygap: 2,
+  };
+  const h = Math.max(320, features.length * 28 + 80);
+  const layout = Object.assign({}, PLOT_LAYOUT_BASE, {
+    title: {text:'Win Correlation by Round (top 15 features)', font:{color:'#cbd5e1',size:13}},
+    height: h,
+    margin: {l:130,r:80,t:36,b:50},
+    xaxis: Object.assign({}, PLOT_LAYOUT_BASE.xaxis, {gridcolor:'#0b1120'}),
+    yaxis: Object.assign({}, PLOT_LAYOUT_BASE.yaxis, {tickfont:{size:10}}),
+  });
+  el.innerHTML = '';
+  Plotly.newPlot(el, [trace], layout, PLOTLY_CONFIG);
+  document.getElementById('chart-winrate').innerHTML = '';
+}
+
+/* --- Tab 4: Correlation Matrix --- */
+function renderMatrix() {
+  const el = document.getElementById('chart-matrix');
+  const m = vizData && vizData.corr_matrix;
+  if (!m || !m.features.length) { el.innerHTML = '<div class="empty-msg">No matrix data.</div>'; return; }
+  const labels = m.labels;
+  const z = m.matrix;
+  const colors = m.groups ? m.groups.map(function(g) { return colorForGroup(g); }) : [];
+  const h = Math.max(380, labels.length * 18 + 100);
+  const trace = {
+    type: 'heatmap',
+    x: labels, y: labels.slice().reverse(), z: z.slice().reverse(),
+    colorscale: [
+      [0, '#1e3a5f'], [0.25, '#1d4ed8'], [0.5, '#0f172a'],
+      [0.75, '#b45309'], [1, '#7c2d12']
+    ],
+    zmid: 0, zmin: -1, zmax: 1,
+    colorbar: {tickfont:{color:'#64748b',size:9}, outlinecolor:'#1e293b', bgcolor:'#0b1120', len:0.8},
+    xgap: 1, ygap: 1,
+    hovertemplate: '%{y} \u2194 %{x}<br>r = %{z:.3f}<extra></extra>',
+  };
+  const layout = Object.assign({}, PLOT_LAYOUT_BASE, {
+    title: {text:'Feature-to-Feature Correlation Matrix (Pearson)', font:{color:'#cbd5e1',size:13}},
+    height: h,
+    margin: {l:110,r:60,t:36,b:110},
+    xaxis: Object.assign({}, PLOT_LAYOUT_BASE.xaxis, {tickangle:-55, tickfont:{size:9}, gridcolor:'#0b1120'}),
+    yaxis: Object.assign({}, PLOT_LAYOUT_BASE.yaxis, {tickfont:{size:9}, gridcolor:'#0b1120'}),
+  });
+  el.innerHTML = '';
+  Plotly.newPlot(el, [trace], layout, PLOTLY_CONFIG);
+}
+</script>
+</body>
+</html>"""
+
+FEATURE_VIZ_HTML = FEATURE_VIZ_HTML.replace('__ALL_YEARS_JSON__', json.dumps(ALL_YEARS))
+
 
 BRACKET_INPUT_HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -3856,6 +4342,7 @@ label.feat-chip[title] { cursor: help; }
 <a href="/bracket_input" style="display:inline-flex;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 14px;font-size:12px;color:#93c5fd;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#334155'">&#127942; Set Up {{ THIS_YEAR }} Bracket</a>
 <a href="/fill_bracket" style="display:inline-flex;align-items:center;gap:6px;background:#1a1500;border:1px solid #78540a;border-radius:7px;padding:6px 14px;font-size:12px;color:#fbbf24;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#ca8a04'" onmouseout="this.style.borderColor='#78540a'">&#10003; Fill Out My Bracket</a>
 <a href="/my_brackets" style="display:inline-flex;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 14px;font-size:12px;color:#93c5fd;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#334155'">&#128196; My Brackets</a>
+<a href="/features" style="display:inline-flex;align-items:center;gap:6px;background:#0f1f12;border:1px solid #166534;border-radius:7px;padding:6px 14px;font-size:12px;color:#4ade80;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#22c55e'" onmouseout="this.style.borderColor='#166534'">&#128200; Feature Explorer</a>
 </div>
 
 <!-- ===== SAVED MODELS ===== -->
