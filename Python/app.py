@@ -2605,6 +2605,9 @@ table.sims-table tbody tr:hover td { background: #172554; }
 .lr-clear-btn:hover { border-color: #ef4444; color: #f87171; }
 #locked-save-msg { font-size: 11px; }
 #locked-count { font-size: 10px; color: #64748b; margin-left: 4px; }
+.lr-toggle { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
+.lr-toggle:hover { color: #cbd5e1; }
+.bk-toggle-icon { font-size: 10px; color: #64748b; margin-left: auto; }
 
 /* Bracket grid */
 .bk-wrap { display: flex; flex-direction: row; align-items: flex-start; overflow-x: auto; padding-bottom: 4px; gap: 0; }
@@ -2726,7 +2729,24 @@ table.res-table tbody tr:hover td { background: #172554; }
 <div class="ff-info-bar">
   <span class="ff-info-label">Final Four Pairings:</span>
   <span class="ff-info-val">{{ current_ff_label }}</span>
-  <a href="/fill_bracket" class="ff-info-link">(change in Fill Bracket &#8599;)</a>
+</div>
+
+<!-- Live Tournament Results Bracket -->
+<div class="lr-card" id="lr-card" style="display:none">
+  <div class="lr-title lr-toggle" onclick="toggleBracket()">
+    &#128274; Live Tournament Results
+    <span id="bk-toggle-icon" class="bk-toggle-icon">&#9660;</span>
+    <span id="locked-count" style="font-size:10px;color:#64748b;margin-left:4px"></span>
+  </div>
+  <div id="bk-body" style="display:none">
+    <div class="lr-subtitle">Click a team to mark them as the winner &mdash; they advance to the next round. Click again to un-lock. Simulations will treat locked results as certain.</div>
+    <div id="bk-container"></div>
+    <div class="lr-actions">
+      <button class="lr-save-btn" id="save-locked-btn" onclick="saveLockedResults()">&#128190; Save Results</button>
+      <button class="lr-clear-btn" onclick="clearLockedResults()">&#10006; Clear All</button>
+      <span id="locked-save-msg"></span>
+    </div>
+  </div>
 </div>
 
 {% if saved_models %}
@@ -2749,18 +2769,6 @@ table.res-table tbody tr:hover td { background: #172554; }
   </table>
 </div>
 {% endif %}
-
-<!-- Live Tournament Results Bracket -->
-<div class="lr-card" id="lr-card" style="display:none">
-  <div class="lr-title">&#128274; Live Tournament Results</div>
-  <div class="lr-subtitle">Click a team to mark them as the winner &mdash; they advance to the next round. Click again to un-lock. Simulations will treat locked results as certain. <span id="locked-count"></span></div>
-  <div id="bk-container"></div>
-  <div class="lr-actions">
-    <button class="lr-save-btn" id="save-locked-btn" onclick="saveLockedResults()">&#128190; Save Results</button>
-    <button class="lr-clear-btn" onclick="clearLockedResults()">&#10006; Clear All</button>
-    <span id="locked-save-msg"></span>
-  </div>
-</div>
 
 <!-- Config -->
 <div class="config-card">
@@ -2948,9 +2956,10 @@ var BK_BTN    = (BK_SLOT - BK_GAP) / 2;  // 22px button height
 var BK_COL_W       = 118;  // round column
 var BK_COL_CENTER_W = 122; // FF/Champ column
 // Per-region height = 8 games × BK_SLOT
-var BK_REGION_H = 8 * BK_SLOT;  // 416
-// Total column height = 2 regions stacked
-var BK_HALF_H   = 2 * BK_REGION_H; // 832
+var BK_REGION_H  = 8 * BK_SLOT;    // 416
+var BK_RGN_LABEL = 14;             // px reserved above each region for its name label
+// Total column height = 2 regions stacked (each region has a label row above it)
+var BK_HALF_H    = 2 * (BK_REGION_H + BK_RGN_LABEL); // 860
 
 // Region definitions: [regionName, r1StartIdx]
 // r1StartIdx = start index in BRACKET_R1/lockedResults[1] arrays
@@ -3043,7 +3052,8 @@ function renderBracket() {
     col.className = 'bk-col ' + side + (rnd === 4 ? ' bk-e8' : '');
     col.style.height = (BK_HALF_H + 18) + 'px';  // +18 for header
 
-    var regionY = regionInHalf * BK_REGION_H;
+    // Each region is preceded by BK_RGN_LABEL px for its name label
+    var regionY = regionInHalf * (BK_REGION_H + BK_RGN_LABEL) + BK_RGN_LABEL;
     var gamesInRound = 8 >> (rnd - 1);  // 8,4,2,1
 
     for (var i = 0; i < gamesInRound; i++) {
@@ -3079,7 +3089,7 @@ function renderBracket() {
     var lbl = document.createElement('div');
     lbl.className = 'bk-region-hdr';
     lbl.textContent = name;
-    lbl.style.top = (regionInHalf * BK_REGION_H + 18) + 'px';
+    lbl.style.top = (18 + regionInHalf * (BK_REGION_H + BK_RGN_LABEL)) + 'px';
     col.appendChild(lbl);
   }
 
@@ -3135,9 +3145,8 @@ function renderBracket() {
     return (W[4] || [])[gi] || null;
   });
 
-  // FF game positions: center vertically at BK_REGION_H (boundary of top+bottom regions)
-  var ffTop = BK_REGION_H - BK_SLOT / 2;  // 416 - 26 = 390
-  var champTop = BK_REGION_H - BK_SLOT / 2;
+  // FF game: center between the two region bands, accounting for label rows
+  var ffTop = BK_RGN_LABEL + BK_REGION_H + Math.floor(BK_RGN_LABEL / 2) - Math.floor(BK_SLOT / 2);
 
   function makeCenterCol(label, rnd, gi, t1, t2, seed1, seed2) {
     var col = document.createElement('div');
@@ -3280,6 +3289,15 @@ function clearLockedResults() {
   lockedResults = {};
   saveLockedResults();
   renderBracket();
+}
+
+function toggleBracket() {
+  var body = document.getElementById('bk-body');
+  var icon = document.getElementById('bk-toggle-icon');
+  if (!body) return;
+  var expanding = body.style.display === 'none';
+  body.style.display = expanding ? '' : 'none';
+  if (icon) icon.textContent = expanding ? '\u25b2' : '\u25bc';
 }
 
 function initLockedResults() {
