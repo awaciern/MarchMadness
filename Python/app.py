@@ -2767,21 +2767,26 @@ table.res-table tbody tr:hover td { background: #172554; }
 {% if saved_models %}
 <!-- Existing Models -->
 <div class="sims-card">
-  <div class="sims-title">&#127936; Models &mdash; Select to Run Simulation</div>
-  <table class="sims-table" id="ga-models-table">
-    <thead><tr>
-      <th class="sortable" data-sort="name" onclick="gaSortBy('name')">Name</th>
-      <th class="sortable" data-sort="model" onclick="gaSortBy('model')">Model</th>
-      <th class="sortable" data-sort="flags" onclick="gaSortBy('flags')">Flags</th>
-      <th class="sortable" data-sort="features" onclick="gaSortBy('features')">Features</th>
-      <th class="sortable sort-desc" style="text-align:right" data-sort="score" onclick="gaSortBy('score')">Score</th>
-      <th class="sortable" style="text-align:right" data-sort="train_acc" onclick="gaSortBy('train_acc')">Train&nbsp;Acc</th>
-      <th class="sortable" style="text-align:right" data-sort="test_acc" onclick="gaSortBy('test_acc')">Test&nbsp;Acc</th>
-      <th></th>
-      <th></th>
-    </tr></thead>
-    <tbody id="ga-models-tbody"></tbody>
-  </table>
+  <div class="sims-title" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="toggleGaModels()">
+    <span>&#127936; Models &mdash; Select to Run Simulation</span>
+    <span id="ga-models-toggle" style="font-size:10px;color:#94a3b8">&#9660;</span>
+  </div>
+  <div id="ga-models-body" style="display:none">
+    <table class="sims-table" id="ga-models-table">
+      <thead><tr>
+        <th class="sortable" data-sort="name" onclick="gaSortBy('name')">Name</th>
+        <th class="sortable" data-sort="model" onclick="gaSortBy('model')">Model</th>
+        <th class="sortable" data-sort="flags" onclick="gaSortBy('flags')">Flags</th>
+        <th class="sortable" data-sort="features" onclick="gaSortBy('features')">Features</th>
+        <th class="sortable sort-desc" style="text-align:right" data-sort="score" onclick="gaSortBy('score')">Score</th>
+        <th class="sortable" style="text-align:right" data-sort="train_acc" onclick="gaSortBy('train_acc')">Train&nbsp;Acc</th>
+        <th class="sortable" style="text-align:right" data-sort="test_acc" onclick="gaSortBy('test_acc')">Test&nbsp;Acc</th>
+        <th></th>
+        <th></th>
+      </tr></thead>
+      <tbody id="ga-models-tbody"></tbody>
+    </table>
+  </div>
 </div>
 {% endif %}
 
@@ -2885,10 +2890,18 @@ function gaSortBy(key) {
   gaRenderModels();
 }
 
+function toggleGaModels() {
+  const body = document.getElementById('ga-models-body');
+  const icon = document.getElementById('ga-models-toggle');
+  const shown = body.style.display !== 'none';
+  body.style.display = shown ? 'none' : '';
+  icon.innerHTML = shown ? '&#9660;' : '&#9650;';
+}
+
 function gaRenderModels() {
   const sorted = GA_MODELS.slice().sort(function(a, b) {
     const av = gaSortVal(a, gaSort.key), bv = gaSortVal(b, gaSort.key);
-    if (av < bv) return gaSort.dir; if (av > bv) return -gaSort.dir; return 0;
+    if (av < bv) return -gaSort.dir; if (av > bv) return gaSort.dir; return 0;
   });
   document.querySelectorAll('#ga-models-table th[data-sort]').forEach(function(th) {
     th.classList.remove('sort-asc', 'sort-desc');
@@ -3838,25 +3851,30 @@ label.feat-chip[title] { cursor: help; }
 
 <!-- ===== SAVED MODELS ===== -->
 <div class="panel-card saved-section">
-  <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center">
+  <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleSavedModels()">
     <span>Existing Models</span>
-    <span id="saved-count" style="color:#475569;font-size:11px"></span>
+    <span style="display:flex;align-items:center;gap:8px">
+      <span id="saved-count" style="color:#475569;font-size:11px"></span>
+      <span id="saved-models-toggle" style="font-size:10px;color:#64748b">&#9660;</span>
+    </span>
   </div>
-  <div id="saved-empty" style="color:#475569;font-size:12px;display:none">No saved models found in Predictions/.</div>
-  <table class="saved-table" id="saved-table" style="display:none">
-    <thead><tr>
-      <th style="width:30px">#</th>
-      <th class="sortable" data-sort="name" onclick="savedSortBy('name')">Name</th>
-      <th class="sortable" data-sort="model" onclick="savedSortBy('model')">Model</th>
-      <th class="sortable" style="width:60px" data-sort="flags" onclick="savedSortBy('flags')">Flags</th>
-      <th class="sortable" data-sort="features" onclick="savedSortBy('features')">Features</th>
-      <th class="sortable" data-sort="params" onclick="savedSortBy('params')">Params</th>
-      <th class="sortable sort-desc" style="width:70px;text-align:right" data-sort="score" onclick="savedSortBy('score')">Score</th>
-      <th class="sortable" style="width:72px;text-align:right" data-sort="train_acc" onclick="savedSortBy('train_acc')">Train&nbsp;Acc</th>
-      <th class="sortable" style="width:72px;text-align:right" data-sort="test_acc" onclick="savedSortBy('test_acc')">Test&nbsp;Acc</th>
-    </tr></thead>
-    <tbody id="saved-tbody"></tbody>
-  </table>
+  <div id="saved-models-body" style="display:none">
+    <div id="saved-empty" style="color:#475569;font-size:12px;display:none">No saved models found in Predictions/.</div>
+    <table class="saved-table" id="saved-table" style="display:none">
+      <thead><tr>
+        <th style="width:30px">#</th>
+        <th class="sortable" data-sort="name" onclick="savedSortBy('name')">Name</th>
+        <th class="sortable" data-sort="model" onclick="savedSortBy('model')">Model</th>
+        <th class="sortable" style="width:60px" data-sort="flags" onclick="savedSortBy('flags')">Flags</th>
+        <th class="sortable" data-sort="features" onclick="savedSortBy('features')">Features</th>
+        <th class="sortable" data-sort="params" onclick="savedSortBy('params')">Params</th>
+        <th class="sortable sort-desc" style="width:70px;text-align:right" data-sort="score" onclick="savedSortBy('score')">Score</th>
+        <th class="sortable" style="width:72px;text-align:right" data-sort="train_acc" onclick="savedSortBy('train_acc')">Train&nbsp;Acc</th>
+        <th class="sortable" style="width:72px;text-align:right" data-sort="test_acc" onclick="savedSortBy('test_acc')">Test&nbsp;Acc</th>
+      </tr></thead>
+      <tbody id="saved-tbody"></tbody>
+    </table>
+  </div>
 </div>
 
 <div class="layout">
@@ -4119,10 +4137,18 @@ function savedSortBy(key) {
   renderSavedModels();
 }
 
+function toggleSavedModels() {
+  const body = document.getElementById('saved-models-body');
+  const icon = document.getElementById('saved-models-toggle');
+  const shown = body.style.display !== 'none';
+  body.style.display = shown ? 'none' : '';
+  icon.innerHTML = shown ? '&#9660;' : '&#9650;';
+}
+
 function renderSavedModels() {
   const sorted = savedModels.slice().sort(function(a, b) {
     const av = savedSortVal(a, savedSort.key), bv = savedSortVal(b, savedSort.key);
-    if (av < bv) return savedSort.dir; if (av > bv) return -savedSort.dir; return 0;
+    if (av < bv) return -savedSort.dir; if (av > bv) return savedSort.dir; return 0;
   });
   document.querySelectorAll('#saved-table th[data-sort]').forEach(function(th) {
     th.classList.remove('sort-asc', 'sort-desc');
