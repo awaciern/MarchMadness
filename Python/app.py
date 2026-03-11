@@ -590,6 +590,21 @@ def run_prediction():
         cmd.append('--norm-all')
     if data.get('calibrate'):
         cmd.append('--calibrate')
+        cal_mode = data.get('calibrate_mode', 'stretch')
+        cmd += ['--calibrate-mode', cal_mode]
+        if cal_mode == 'stretch':
+            try:
+                cal_target = float(data.get('calibrate_target', 0.97))
+                if 0.5 < cal_target < 1.0:
+                    cmd += ['--calibrate-target', str(cal_target)]
+            except (TypeError, ValueError):
+                pass
+        cal_temp = data.get('calibrate_temperature')
+        if cal_temp is not None:
+            try:
+                cmd += ['--calibrate-temperature', str(float(cal_temp))]
+            except (TypeError, ValueError):
+                pass
     if data.get('delta_feats'):
         cmd.append('--delta-feats')
 
@@ -3950,10 +3965,40 @@ label.feat-chip[title] { cursor: help; }
       <span style="font-size:13px;color:#e2e8f0">Normalize across all years</span>
       <span style="font-size:10px;color:#475569">(single global Z-score scaler across all years)</span>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <input type="checkbox" id="calibrate-check" style="accent-color:#f97316;cursor:pointer;width:14px;height:14px">
-      <span style="font-size:13px;color:#e2e8f0">Calibrate probabilities</span>
-      <span style="font-size:10px;color:#475569">(Platt scaling &mdash; corrects over/under-confident win probs)</span>
+    <div style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="calibrate-check" style="accent-color:#f97316;cursor:pointer;width:14px;height:14px" onchange="toggleCalibrateOpts()">
+        <span style="font-size:13px;color:#e2e8f0">Calibrate probabilities</span>
+        <span style="font-size:10px;color:#475569">(temperature scaling &mdash; adjusts win-prob confidence; never changes predicted winners)</span>
+      </div>
+      <div id="calibrate-opts" style="display:none;margin-top:8px;margin-left:22px;display:none;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="font-size:11px;color:#94a3b8">Mode</label>
+            <select id="calibrate-mode-sel" style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;padding:3px 6px;font-size:11px" onchange="toggleCalibrateTarget()">
+              <option value="stretch">stretch &mdash; map peak to target</option>
+              <option value="nll">nll &mdash; minimize OOF log-loss</option>
+            </select>
+          </div>
+          <div id="cal-target-wrap" style="display:flex;align-items:center;gap:6px">
+            <label style="font-size:11px;color:#94a3b8">Target max prob</label>
+            <input type="number" id="calibrate-target-inp" value="0.97" min="0.51" max="0.999" step="0.01"
+              style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;padding:3px 6px;font-size:11px;width:70px">
+            <span style="font-size:10px;color:#475569">(0.51&ndash;0.999)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="font-size:11px;color:#94a3b8">Override T</label>
+            <input type="number" id="calibrate-temp-inp" placeholder="auto" min="0.05" max="20" step="0.05"
+              style="background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;padding:3px 6px;font-size:11px;width:70px">
+            <span style="font-size:10px;color:#475569">(optional &mdash; auto if blank)</span>
+          </div>
+        </div>
+        <p style="font-size:10px;color:#475569;margin:0">
+          <strong style="color:#94a3b8">stretch:</strong> scales logits so the highest OOF prediction lands at the target probability.
+          Expands conservative models; compresses overconfident ones.
+          Near-50%% predictions are barely moved either way.
+        </p>
+      </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <input type="checkbox" id="delta-feats-check" style="accent-color:#a855f7;cursor:pointer;width:14px;height:14px" checked>
@@ -4375,6 +4420,16 @@ function classifyLine(text) {
 
 let currentJobId = null;
 
+function toggleCalibrateOpts() {
+  const checked = document.getElementById('calibrate-check').checked;
+  const opts = document.getElementById('calibrate-opts');
+  opts.style.display = checked ? 'flex' : 'none';
+}
+function toggleCalibrateTarget() {
+  const mode = document.getElementById('calibrate-mode-sel').value;
+  document.getElementById('cal-target-wrap').style.display = mode === 'stretch' ? 'flex' : 'none';
+}
+
 function runPrediction() {
   const features = getSelectedFeatures();
   if (!features.length) { alert('Select at least one feature.'); return; }
@@ -4390,10 +4445,14 @@ function runPrediction() {
 
   const model     = document.getElementById('model-select').value;
   const params    = document.getElementById('params-input').value.trim();
-  const normYears = document.getElementById('norm-years-check').checked;
-  const normAll   = document.getElementById('norm-all-check').checked;
-  const calibrate  = document.getElementById('calibrate-check').checked;
-  const deltaFeats = document.getElementById('delta-feats-check').checked;
+  const normYears    = document.getElementById('norm-years-check').checked;
+  const normAll      = document.getElementById('norm-all-check').checked;
+  const calibrate    = document.getElementById('calibrate-check').checked;
+  const calibrateMode   = document.getElementById('calibrate-mode-sel').value;
+  const calibrateTarget = parseFloat(document.getElementById('calibrate-target-inp').value) || 0.97;
+  const calibrateTempRaw = document.getElementById('calibrate-temp-inp').value.trim();
+  const calibrateTemperature = calibrateTempRaw !== '' ? parseFloat(calibrateTempRaw) : null;
+  const deltaFeats   = document.getElementById('delta-feats-check').checked;
 
   // Reset UI
   document.getElementById('log-box').innerHTML = '';
@@ -4404,7 +4463,15 @@ function runPrediction() {
   fetch('/run', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ run_name: runName, model, params, features, norm_years: normYears, norm_all: normAll, calibrate, delta_feats: deltaFeats }),
+    body: JSON.stringify({
+      run_name: runName, model, params, features,
+      norm_years: normYears, norm_all: normAll,
+      calibrate,
+      calibrate_mode: calibrateMode,
+      calibrate_target: calibrateTarget,
+      calibrate_temperature: calibrateTemperature,
+      delta_feats: deltaFeats,
+    }),
   })
   .then(r => r.json())
   .then(data => {

@@ -40,9 +40,8 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.frozen import FrozenEstimator
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold
+from scipy.optimize import minimize_scalar
 from bracket_html import format_bracket_html
 
 # ---------------------------------------------------------------------------
@@ -608,11 +607,174 @@ def parse_ff_pairings_arg(arg: str) -> List[Tuple[int, int]]:
 
 
 # ---------------------------------------------------------------------------
+# Temperature scaling calibration
+# ---------------------------------------------------------------------------
+
+class TemperatureScaledModel:
+    """
+    Wraps a fitted sklearn-style model and applies temperature scaling to
+    predicted probabilities.  predict() is identical to the base model so
+    the projected winner is always preserved; only predict_proba() changes.
+
+    Temperature scaling: raw logit  log(p/(1-p))  is divided by T before
+    converting back to a probability via sigmoid.
+      T > 1  compresses probabilities toward 0.5 (confidence reduction).
+      T < 1  stretches probabilities away from 0.5 (confidence amplification).
+      T = 1  leaves probabilities unchanged.
+
+    Because the sign of the logit is preserved for any T > 0, the predicted
+    winner (team with p > 0.5) can never change.  Near-50%% predictions have
+    logits close to zero, so dividing by T barely moves them regardless of T.
+    """
+
+    def __init__(self, base_model, temperature: float):
+        self.base_model  = base_model
+        self.temperature = float(temperature)
+
+    # Delegate unknown attribute access to the base model so sklearn utilities work.
+    def __getattr__(self, name):
+        return getattr(self.base_model, name)
+
+    def predict(self, X):
+        return self.base_model.predict(X)
+
+    def score(self, X, y):
+        return self.base_model.score(X, y)
+
+    def predict_proba(self, X):
+        raw = self.base_model.predict_proba(X)
+        raw = np.clip(raw, 1e-9, 1.0 - 1e-9)
+        logit_1 = np.log(raw[:, 1]) - np.log(raw[:, 0])  # log-odds for class 1
+        scaled_logit = logit_1 / self.temperature
+        p1 = 1.0 / (1.0 + np.exp(-scaled_logit))
+        return np.column_stack([1.0 - p1, p1])
+
+
+def _collect_oof_logits(
+    model_key: str,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    model_params: dict,
+    n_folds: int = 5,
+    seed: int = 0,
+) -> np.ndarray:
+    """Run stratified k-fold CV and return OOF log-odds (logit for class 1)."""
+    params = dict(model_params or {})
+    if model_key == 'svc' and 'probability' not in params:
+        params['probability'] = True
+    kf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    y_arr = y_train.values.astype(int)
+    oof_logits = np.zeros(len(X_train))
+    for train_idx, val_idx in kf.split(X_train, y_arr):
+        clf = MODEL_REGISTRY[model_key](**params)
+        clf.fit(X_train.iloc[train_idx], y_train.iloc[train_idx])
+        proba = clf.predict_proba(X_train.iloc[val_idx])
+        proba = np.clip(proba, 1e-9, 1.0 - 1e-9)
+        oof_logits[val_idx] = np.log(proba[:, 1]) - np.log(proba[:, 0])
+    return oof_logits
+
+
+def fit_temperature_stretch(
+    model_key: str,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    model_params: dict,
+    p_target: float = 0.97,
+    percentile: float = 98.0,
+    n_folds: int = 5,
+    seed: int = 0,
+) -> float:
+    """
+    Find a temperature T that rescales the model's probability range so that
+    the most-confident OOF prediction maps to approximately ``p_target``.
+
+    Algorithm
+    ---------
+    1. Collect OOF logits via k-fold CV (unbiased: each row is scored by a
+       model that never saw it during training).
+    2. Compute the observed 'peak' logit magnitude using a high percentile
+       (e.g. 98th) of |logit| to be robust against lone outliers.
+    3. Set  T = L_observed / L_target  where L_target = logit(p_target).
+
+    Behaviour
+    ---------
+    * If the model is conservative (e.g. max prediction 70%% but target 97%%),
+      T < 1 and probabilities are stretched outward from 50%%.
+    * If the model is overconfident (e.g. max prediction 99.9%%),
+      T > 1 and extreme probabilities are compressed back toward 50%%.
+    * Near-50%% predictions have logits ≈ 0 and are barely affected in either case.
+    * T is always bounded to [0.05, 20] to avoid numerical extremes.
+    """
+    oof_logits = _collect_oof_logits(model_key, X_train, y_train, model_params, n_folds, seed)
+    L_observed = float(np.percentile(np.abs(oof_logits), percentile))
+    if L_observed < 1e-6:
+        return 1.0  # degenerate model; no calibration
+    L_target = float(np.log(p_target / (1.0 - p_target)))
+    T = L_observed / L_target
+    return float(np.clip(T, 0.05, 20.0))
+
+
+def fit_temperature_nll(
+    model_key: str,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    model_params: dict,
+    n_folds: int = 5,
+    seed: int = 0,
+) -> float:
+    """
+    Find the temperature T in (0.1, 20) that minimises out-of-fold NLL.
+
+    Unlike the stretch mode, this fits T to actual game outcomes, so the
+    direction (compress or expand) is determined by data.  Useful when the
+    model's raw probabilities are already well-calibrated and you mainly want
+    a principled adjustment rather than a hard target.
+    """
+    oof_logits = _collect_oof_logits(model_key, X_train, y_train, model_params, n_folds, seed)
+    y_arr = y_train.values.astype(int)
+
+    def neg_log_likelihood(T: float) -> float:
+        if T <= 0:
+            return 1e9
+        p1 = 1.0 / (1.0 + np.exp(-oof_logits / T))
+        p1 = np.clip(p1, 1e-9, 1.0 - 1e-9)
+        return -float(np.mean(y_arr * np.log(p1) + (1 - y_arr) * np.log(1 - p1)))
+
+    result = minimize_scalar(neg_log_likelihood, bounds=(0.1, 20.0), method='bounded')
+    return float(result.x)
+
+
+# ---------------------------------------------------------------------------
 # Model training
 # ---------------------------------------------------------------------------
 
-def build_and_train_model(model_key: str, X_train: pd.DataFrame, y_train: pd.Series,
-                          model_params: dict = None, calibrate: bool = False):
+def build_and_train_model(
+    model_key: str,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    model_params: dict = None,
+    calibrate: bool = False,
+    calibrate_temperature: float = None,
+    calibrate_mode: str = 'stretch',
+    calibrate_target: float = 0.97,
+):
+    """
+    Train the requested model.  When ``calibrate=True``, wraps the fitted
+    model in a ``TemperatureScaledModel`` that preserves predicted winners
+    while rescaling win-probability confidence.
+
+    Calibration modes
+    -----------------
+    stretch (default)
+        Scale logits so the most-confident OOF prediction maps to
+        ``calibrate_target`` (default 0.97).  Works in both directions:
+        expands conservative models, compresses overconfident ones.
+    nll
+        Minimise out-of-fold NLL; direction is determined by the data.
+
+    If ``calibrate_temperature`` is given it overrides the auto-fit for
+    either mode and is used directly.
+    """
     if model_key not in MODEL_REGISTRY:
         raise ValueError(f"Unknown model '{model_key}'. Options: {list(MODEL_REGISTRY)}")
     params = dict(model_params or {})
@@ -623,11 +785,14 @@ def build_and_train_model(model_key: str, X_train: pd.DataFrame, y_train: pd.Ser
     estimator = MODEL_REGISTRY[model_key](**params)
     estimator.fit(X_train, y_train)
     if calibrate:
-        # Wrap with Platt scaling (sigmoid) fitted on the same training data.
-        # FrozenEstimator signals that the base estimator is already fitted.
-        cal = CalibratedClassifierCV(FrozenEstimator(estimator), method='sigmoid')
-        cal.fit(X_train, y_train)
-        return cal
+        if calibrate_temperature is not None:
+            T = float(calibrate_temperature)
+        elif calibrate_mode == 'nll':
+            T = fit_temperature_nll(model_key, X_train, y_train, params)
+        else:  # 'stretch' (default)
+            T = fit_temperature_stretch(model_key, X_train, y_train, params,
+                                        p_target=calibrate_target)
+        return TemperatureScaledModel(estimator, T)
     return estimator
 
 
@@ -918,9 +1083,49 @@ def main():
         action='store_true',
         default=False,
         help=(
-            'Apply Platt scaling (sigmoid calibration) to the trained model to produce '
-            'better-calibrated win probabilities. Fitted on the same training data used '
-            'to train the base model. Output folder name will include a CAL indicator.'
+            'Apply temperature scaling to predicted win probabilities. '
+            'Predicted winners are never changed — only the confidence adjusts. '
+            'Near-50%% predictions are barely affected regardless of the mode. '
+            'See --calibrate-mode and --calibrate-target for tuning. '
+            'Output folder name will include a CAL indicator.'
+        ),
+    )
+    parser.add_argument(
+        '--calibrate-mode',
+        default='stretch',
+        choices=['stretch', 'nll'],
+        help=(
+            'How to fit the calibration temperature T when --calibrate is active. '
+            '"stretch" (default): scale OOF logits so the most-confident prediction '
+            'maps to --calibrate-target. Works in both directions (expands conservative '
+            'models, compresses overconfident ones). '
+            '"nll": minimise out-of-fold NLL; direction determined by data. '
+            'Has no effect without --calibrate.'
+        ),
+    )
+    parser.add_argument(
+        '--calibrate-target',
+        type=float,
+        default=0.97,
+        metavar='P',
+        help=(
+            'Target maximum win probability for --calibrate-mode stretch. '
+            'The most confident OOF prediction is scaled to this value; all '
+            'others are scaled proportionally in logit space. '
+            'Must be in (0.5, 1.0). Default: 0.97. '
+            'Has no effect without --calibrate or when --calibrate-mode nll is set.'
+        ),
+    )
+    parser.add_argument(
+        '--calibrate-temperature',
+        type=float,
+        default=None,
+        metavar='T',
+        help=(
+            'Override the auto-fitted temperature with a fixed value (any T > 0). '
+            'T > 1 compresses probabilities toward 50%%; T < 1 stretches them away. '
+            'T = 1 leaves probabilities unchanged. '
+            'Has no effect without --calibrate.'
         ),
     )
     parser.add_argument(
@@ -1025,7 +1230,10 @@ def main():
     # Normalisation (optional) — fit scalers on numeric columns only.
     norm_years = args.norm_years
     norm_all   = args.norm_all
-    calibrate  = args.calibrate
+    calibrate             = args.calibrate
+    calibrate_mode        = args.calibrate_mode
+    calibrate_target      = args.calibrate_target
+    calibrate_temperature = args.calibrate_temperature
     if norm_years and norm_all:
         parser.error('--norm-years and --norm-all are mutually exclusive.')
     norm_info: dict = None
@@ -1047,7 +1255,16 @@ def main():
         print(f'Normalisation:           global Z-score    ({len(norm_info["cols"])} numeric columns)')
     else:
         print(f'Normalisation:           OFF')
-    print(f'Probability calibration: {"ON (Platt sigmoid)" if calibrate else "OFF"}')
+    if calibrate:
+        if calibrate_temperature is not None:
+            _cal_desc = f'ON (T={calibrate_temperature:.3f}, fixed)'
+        elif calibrate_mode == 'stretch':
+            _cal_desc = f'ON (mode=stretch, target={calibrate_target:.0%}, T=auto-fit)'
+        else:
+            _cal_desc = 'ON (mode=nll, T=auto-fit via OOF NLL)'
+    else:
+        _cal_desc = 'OFF'
+    print(f'Probability calibration: {_cal_desc}')
 
     print(f'Model type: {args.model}')
 
@@ -1093,7 +1310,13 @@ def main():
 
         X_tr = df_train[model_feature_list]
         y_tr = df_train['Win__1']
-        model = build_and_train_model(args.model, X_tr, y_tr, model_params, calibrate=calibrate)
+        model = build_and_train_model(
+            args.model, X_tr, y_tr, model_params,
+            calibrate=calibrate, calibrate_temperature=calibrate_temperature,
+            calibrate_mode=calibrate_mode, calibrate_target=calibrate_target,
+        )
+        if calibrate and hasattr(model, 'temperature'):
+            print(f'  Calibration temperature T={model.temperature:.4f}')
 
         train_acc = model.score(X_tr, y_tr)
         if not is_current:
@@ -1183,7 +1406,11 @@ def main():
         df_tr_t = pd.concat([X_tr_t, y_tr_t], axis=1)
         df_tr_t = mirror_augment(df_tr_t, model_feature_list)
         X_tr_t, y_tr_t = df_tr_t[model_feature_list], df_tr_t['Win__1']
-    model_trad = build_and_train_model(args.model, X_tr_t, y_tr_t, model_params, calibrate=calibrate)
+    model_trad = build_and_train_model(
+        args.model, X_tr_t, y_tr_t, model_params,
+        calibrate=calibrate, calibrate_temperature=calibrate_temperature,
+        calibrate_mode=calibrate_mode, calibrate_target=calibrate_target,
+    )
     trad_train_acc = model_trad.score(X_tr_t, y_tr_t)
     trad_test_acc  = model_trad.score(X_te_t, y_te_t)
     print(f'  Train acc: {trad_train_acc:.4f}  |  Test acc: {trad_test_acc:.4f}')
@@ -1268,8 +1495,11 @@ def main():
         'params':         params_tag,
         'norm_years':     norm_years,
         'norm_all':       norm_all,
-        'calibrate':      calibrate,
-        'delta_feats':    delta_feats,
+        'calibrate':          calibrate,
+        'calibrate_mode':     calibrate_mode if calibrate else None,
+        'calibrate_target':   calibrate_target if (calibrate and calibrate_mode == 'stretch') else None,
+        'calibrate_temperature': calibrate_temperature if calibrate else None,
+        'delta_feats':        delta_feats,
         'model_params':   {str(k): str(v) for k, v in model_params.items()},
         'feature_bases':  list(args.features),
         'trad_train_acc': round(trad_train_acc, 4),
@@ -1292,7 +1522,11 @@ def main():
             df_full = apply_year_norm(df_full, norm_info)
         if delta_feats and numeric_bases:
             df_full = apply_delta_transform(df_full, numeric_bases)
-        full_model = build_and_train_model(args.model, df_full[model_feature_list], df_full['Win__1'], model_params, calibrate=calibrate)
+        full_model = build_and_train_model(
+            args.model, df_full[model_feature_list], df_full['Win__1'], model_params,
+            calibrate=calibrate, calibrate_temperature=calibrate_temperature,
+            calibrate_mode=calibrate_mode, calibrate_target=calibrate_target,
+        )
 
     pickle_payload = {
         'model':              full_model,
