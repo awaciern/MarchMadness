@@ -154,6 +154,7 @@ MODELS = [
     ('gradient_boosting',   'Gradient Boosting'),
     ('adaboost',            'AdaBoost'),
     ('gpc',                 'Gaussian Process'),
+    ('mlp',                 'Neural Network (MLP)'),
 ]
 
 FEATURE_DESCRIPTIONS = {

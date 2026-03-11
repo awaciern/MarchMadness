@@ -40,6 +40,7 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from scipy.optimize import minimize_scalar
 from bracket_html import format_bracket_html
@@ -135,6 +136,7 @@ MODEL_REGISTRY = {
     'gradient_boosting':      GradientBoostingClassifier,
     'adaboost':               AdaBoostClassifier,
     'gpc':                    GaussianProcessClassifier,
+    'mlp':                    MLPClassifier,
 }
 
 # ---------------------------------------------------------------------------
