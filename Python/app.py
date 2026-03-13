@@ -331,6 +331,21 @@ def _parse_trad_acc(folder: Path):
         return float(m.group(1)), float(m.group(2))
     return None, None
 
+def scan_sim_datasets() -> list:
+    """Return sorted list of SimulatedData identifiers available in Data/."""
+    data_dir = REPO_ROOT / 'Data'
+    ids = []
+    if not data_dir.is_dir():
+        return ids
+    for d in sorted(data_dir.iterdir()):
+        prefix = 'SimulatedData'
+        if d.is_dir() and d.name.startswith(prefix):
+            identifier = d.name[len(prefix):]
+            if identifier and (d / 'All.csv').exists():
+                ids.append(identifier)
+    return ids
+
+
 def scan_saved_models():
     """
     Scan PREDICTIONS_DIR for completed model folders (not __pending__ dirs).
@@ -364,6 +379,7 @@ def scan_saved_models():
                     'calibrated': info.get('calibrate', False),
                     'delta_feats':info.get('delta_feats', False),
                     'exclude_years': info.get('exclude_years', []),
+                    'sim_data':   info.get('sim_data', None),
                     'features':   info.get('features', ''),
                     'params':     info.get('params', ''),
                     'train_acc':  train_acc,
@@ -452,6 +468,7 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
                     'calibrated': info.get('calibrate', False),
                     'delta_feats':info.get('delta_feats', False),
                     'exclude_years': info.get('exclude_years', []),
+                    'sim_data':   info.get('sim_data', None),
                     'features':   info.get('features', ''),
                     'params':     info.get('params', ''),
                     'train_acc':  train_acc,
@@ -559,6 +576,7 @@ def index():
         ui_bthot_bases=UI_BTHOT_BASES,
         default_features=DEFAULT_FEATURES,
         feature_descs=FEATURE_DESCRIPTIONS,
+        sim_datasets=scan_sim_datasets(),
     )
 
 
@@ -617,6 +635,9 @@ def run_prediction():
     if exclude_years:
         cmd.append('--exclude-years')
         cmd.extend(str(y) for y in exclude_years)
+    sim_data = (data.get('sim_data') or '').strip() or None
+    if sim_data:
+        cmd += ['--sim-data', sim_data]
 
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = Job()
@@ -3271,6 +3292,7 @@ table.res-table tbody tr:hover td { background: #172554; }
         <th class="sortable" data-sort="model" onclick="gaSortBy('model')">Model</th>
         <th class="sortable" data-sort="flags" onclick="gaSortBy('flags')">Flags</th>
         <th>Excl.</th>
+        <th>SimData</th>
         <th class="sortable" data-sort="features" onclick="gaSortBy('features')">Features</th>
         <th class="sortable sort-desc" style="text-align:right" data-sort="score" onclick="gaSortBy('score')">Score</th>
         <th class="sortable" style="text-align:right" data-sort="train_acc" onclick="gaSortBy('train_acc')">Train&nbsp;Acc</th>
@@ -3409,6 +3431,7 @@ function gaRenderModels() {
     const sim   = GA_SIM_MAP[m.dir_name];
     const flags = [m.norm_years ? 'NY' : '', m.norm_all ? 'NA' : '', m.calibrated ? 'CAL' : '', m.delta_feats ? 'DF' : ''].filter(Boolean).join('\u00a0') || '\u2014';
     const exclStr = (m.exclude_years && m.exclude_years.length) ? m.exclude_years.join(', ') : '\u2014';
+    const simDataStr = m.sim_data ? m.sim_data : '\u2014';
     const feat  = m.features.length > 35 ? m.features.slice(0, 35) + '\u2026' : m.features;
     const viewBtn = (sim && sim.html_file)
       ? '<a href="/sim_html/' + encodeURIComponent(m.dir_name) + '/' + encodeURIComponent(sim.html_file) + '" target="_blank" class="quick-run-btn" style="text-decoration:none;display:inline-block">&#128200; View</a>'
@@ -3423,6 +3446,7 @@ function gaRenderModels() {
       '<td style="color:#93c5fd;font-size:11px">' + m.model + '</td>' +
       '<td style="color:#fbbf24;font-size:10px;white-space:nowrap">' + flags + '</td>' +
       '<td style="color:#94a3b8;font-size:11px;white-space:nowrap">' + exclStr + '</td>' +
+      '<td style="color:#94a3b8;font-size:11px">' + simDataStr + '</td>' +
       '<td style="color:#94a3b8;font-size:11px">' + feat + '</td>' +
       '<td style="color:#fbbf24;font-weight:700;text-align:right">' + m.score + 'pts</td>' +
       '<td style="color:#94a3b8;font-size:11px;font-family:monospace;text-align:right">' + fmtAcc(m.train_acc) + '</td>' +
@@ -4364,6 +4388,7 @@ label.feat-chip[title] { cursor: help; }
         <th class="sortable" data-sort="model" onclick="savedSortBy('model')">Model</th>
         <th class="sortable" style="width:60px" data-sort="flags" onclick="savedSortBy('flags')">Flags</th>
         <th>Excl.</th>
+        <th>SimData</th>
         <th class="sortable" data-sort="features" onclick="savedSortBy('features')">Features</th>
         <th class="sortable" data-sort="params" onclick="savedSortBy('params')">Params</th>
         <th class="sortable sort-desc" style="width:70px;text-align:right" data-sort="score" onclick="savedSortBy('score')">Score</th>
@@ -4528,6 +4553,15 @@ label.feat-chip[title] { cursor: help; }
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:5px" id="excl-years-wrap"></div>
     </div>
+    <div style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+        <span style="font-size:13px;color:#e2e8f0">Simulated training data</span>
+        <span style="font-size:10px;color:#475569">(augments training with simulated games; testing always uses real data only)</span>
+      </div>
+      <select id="sim-data-sel" style="background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:5px 8px;font-size:12px;outline:none;min-width:220px">
+        <option value="">None (real data only)</option>
+      </select>
+    </div>
     <hr style="border:none;border-top:1px solid #334155;margin:14px 0">
     <label class="field-label">Model Name <span style="color:#f87171">*</span></label>
     <input type="text" id="run-name-input"
@@ -4617,6 +4651,7 @@ label.feat-chip[title] { cursor: help; }
 
 <script>
 const ALL_YEARS = {{ ALL_YEARS_JSON }};
+const SIM_DATASETS = {{ sim_datasets|tojson }};
 
 // ---- Saved models ----
 let activeSavedRow = null;
@@ -4671,12 +4706,14 @@ function renderSavedModels() {
     const dfTag  = m.delta_feats ? '<span class="tag" style="background:#a855f7;color:#fff">DF</span>' : '';
     const flagsTag = (nyTag + naTag + calTag + dfTag) || '\u2014';
     const exclStr = (m.exclude_years && m.exclude_years.length) ? m.exclude_years.join(', ') : '\u2014';
+    const simDataStr = m.sim_data ? m.sim_data : '\u2014';
     tr.innerHTML =
       '<td style="color:#475569">' + (i + 1) + '</td>' +
       '<td style="color:#e2e8f0;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + m.dir_name.replace(/"/g,'&quot;') + '">' + m.dir_name + '</td>' +
       '<td>' + m.model.replace(/_/g, '\u00a0') + '</td>' +
       '<td>' + flagsTag + '</td>' +
       '<td style="color:#94a3b8;font-size:11px;white-space:nowrap">' + exclStr + '</td>' +
+      '<td style="color:#94a3b8;font-size:11px">' + simDataStr + '</td>' +
       '<td class="feat-tags">' + m.features.replace(/\+/g, ' &middot; ') + '</td>' +
       '<td style="color:#64748b;font-size:10px">' + (m.params || '\u2014') + '</td>' +
       '<td class="score-cell" style="text-align:right">' + m.score + '</td>' +
@@ -4755,6 +4792,18 @@ function initExclYears() {
   });
 }
 initExclYears();
+
+function initSimDataSel() {
+  const sel = document.getElementById('sim-data-sel');
+  if (!sel) return;
+  (SIM_DATASETS || []).forEach(function(id) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = 'SimulatedData' + id;
+    sel.appendChild(opt);
+  });
+}
+initSimDataSel();
 
 // ---- Simulation ----
 function loadSimCard(dirName) {
@@ -5009,6 +5058,7 @@ function runPrediction() {
   const calibrateTemperature = calibrateTempRaw !== '' ? parseFloat(calibrateTempRaw) : null;
   const deltaFeats   = document.getElementById('delta-feats-check').checked;
   const excludeYears = Array.from(document.querySelectorAll('#excl-years-wrap input[type="checkbox"]:checked')).map(function(cb) { return parseInt(cb.value, 10); });
+  const simData = document.getElementById('sim-data-sel').value || null;
 
   // Reset UI
   document.getElementById('log-box').innerHTML = '';
@@ -5028,6 +5078,7 @@ function runPrediction() {
       calibrate_temperature: calibrateTemperature,
       delta_feats: deltaFeats,
       exclude_years: excludeYears,
+      sim_data: simData,
     }),
   })
   .then(r => r.json())

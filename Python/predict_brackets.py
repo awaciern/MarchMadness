@@ -1157,6 +1157,16 @@ def main():
         ),
     )
     parser.add_argument(
+        '--sim-data',
+        default=None,
+        metavar='IDENTIFIER',
+        help=(
+            'Identifier of a simulated data source to augment training with. '
+            'Must match a directory Data/SimulatedData<IDENTIFIER>/ containing All.csv. '
+            'Simulated data is only used for model training; testing always uses real data.'
+        ),
+    )
+    parser.add_argument(
         '--run-name',
         required=True,
         help=(
@@ -1241,6 +1251,21 @@ def main():
     if dropped:
         print(f'Note: dropped {dropped}/{pre_drop} rows with NaN in selected features.')
 
+    # Load simulated augmentation data if requested (training only; never used for testing).
+    df_sim_raw = None
+    sim_data_id = args.sim_data
+    if sim_data_id:
+        sim_path = data_root / 'Data' / f'SimulatedData{sim_data_id}' / 'All.csv'
+        if not sim_path.exists():
+            parser.error(f'--sim-data: dataset not found at {sim_path}')
+        df_sim_raw = pd.read_csv(sim_path)
+        pre_sim = len(df_sim_raw)
+        df_sim_raw = df_sim_raw.dropna(subset=feature_list)
+        dropped_sim = pre_sim - len(df_sim_raw)
+        print(f'Simulated data:  SimulatedData{sim_data_id} '
+              f'({len(df_sim_raw)} rows'
+              + (f', {dropped_sim} dropped for NaN' if dropped_sim else '') + ')')
+
     # Fit label encoders on the full dataset so all values are known.
     cat_encoders = fit_label_encoders(df_all_raw, cat_cols) if cat_cols else {}
 
@@ -1305,6 +1330,19 @@ def main():
             df_train = df_all_raw[~df_all_raw['Year'].isin({year} | exclude_years)].copy()
 
         df_test_year = df_all_raw[df_all_raw['Year'] == year].copy() if not is_current else None
+
+        # Augment training set with simulated data (year-exclusion mirrored; no sim in test).
+        if df_sim_raw is not None:
+            if is_current:
+                df_sim_slice = (
+                    df_sim_raw[~df_sim_raw['Year'].isin(exclude_years)].copy()
+                    if exclude_years else df_sim_raw.copy()
+                )
+            else:
+                df_sim_slice = df_sim_raw[
+                    ~df_sim_raw['Year'].isin({year} | exclude_years)
+                ].copy()
+            df_train = pd.concat([df_train, df_sim_slice], ignore_index=True)
 
         if cat_encoders:
             df_train = apply_label_encoders(df_train, cat_encoders)
@@ -1518,6 +1556,7 @@ def main():
         'calibrate_temperature': calibrate_temperature if calibrate else None,
         'delta_feats':        delta_feats,
         'exclude_years':      sorted(exclude_years),
+        'sim_data':           sim_data_id,
         'model_params':   {str(k): str(v) for k, v in model_params.items()},
         'feature_bases':  list(args.features),
         'trad_train_acc': round(trad_train_acc, 4),
