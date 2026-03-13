@@ -42,6 +42,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bracket_html import format_bracket_html
 from predict_brackets import (
     load_bracket_round,
     load_kenpom,
@@ -58,6 +59,7 @@ from predict_brackets import (
     derive_ff_pairings_from_data,
     parse_ff_pairings_arg,
     ALL_YEARS,
+    TemperatureScaledModel,  # needed so pickle.load can deserialise calibrated models
 )
 
 # ---------------------------------------------------------------------------
@@ -125,6 +127,51 @@ def get_actual_results(data_root: Path, year: int) -> dict:
                 actual[team] = label
 
     return actual
+
+
+def get_actual_winners_by_round(data_root: Path, year: int) -> dict:
+    """
+    Return {rnd_int: [winning_team, ...]} for rounds 1–6 using the actual
+    bracket CSV files.  Used for per-game scoring of simulated brackets.
+    Returns an empty dict if bracket data is unavailable.
+    """
+    result: dict = {}
+    for rnd in range(1, 7):
+        try:
+            df = load_bracket_round(data_root, year, rnd)
+            if 'Winning_Team' in df.columns:
+                result[rnd] = df['Winning_Team'].dropna().tolist()
+        except Exception:
+            break
+    return result
+
+
+def score_sim_bracket(sim: dict, actual_by_rnd: dict) -> tuple:
+    """
+    Score a single simulation result against actual per-round winners.
+
+    A pick is correct when the simulated winner is in the set of actual
+    winners for that round (set-based: order doesn't matter).
+
+    Returns
+    -------
+    (total_score, correct_by_round, num_correct_by_round)
+      total_score          : int  — ESPN-style ESPN pts (R1=10, R2=20, …)
+      correct_by_round     : list[list[bool]]  — per-pick booleans, 6 rounds
+      num_correct_by_round : list[int]         — correct count per round
+    """
+    correct_by_round: list = []
+    num_correct_by_round: list = []
+    total = 0
+    for rnd in range(1, 7):
+        picks = sim.get(rnd, [])
+        actual_set = set(actual_by_rnd.get(rnd, []))
+        correct = [p in actual_set for p in picks]
+        n = sum(correct)
+        correct_by_round.append(correct)
+        num_correct_by_round.append(n)
+        total += n * (2 ** (rnd - 1)) * 10
+    return total, correct_by_round, num_correct_by_round
 
 
 # ---------------------------------------------------------------------------
@@ -239,13 +286,20 @@ def run_simulations(
     numeric_bases: list = None,
     model_feature_list: list = None,
     locked_results: Optional[dict] = None,
-) -> pd.DataFrame:
+    actual_winners_by_rnd: Optional[dict] = None,
+) -> tuple:
     """
     Run `num_iters` Monte Carlo bracket simulations for `year`.
 
-    Returns a DataFrame (64 rows) with columns:
-        Team, Seed, R16, S16, E8, FF, Final, Champ
-    Values are probabilities (0–1), sorted by Champ desc → FF desc → … → R16 desc.
+    Returns a tuple (df, best_bracket_info) where:
+      df                : DataFrame (64 rows) with probability columns
+                          Team, Seed, R16, S16, E8, FF, Final, Champ
+                          Sorted by Champ desc → FF desc → … → R16 desc.
+      best_bracket_info : dict (or None if actual_winners_by_rnd not provided)
+                          Keys: total_score, correct_by_round,
+                          num_correct_by_round, pred_teams_by_round,
+                          pred_seeds_by_round, pred_probs_by_round,
+                          iter_idx, team_seed_map
     """
     if numeric_bases is None:
         numeric_bases = []
@@ -311,6 +365,11 @@ def run_simulations(
     rng = np.random.default_rng(seed)
     round_wins: dict = defaultdict(lambda: defaultdict(int))  # team → rnd → count
 
+    # Best-bracket tracking (only when actual results are supplied)
+    best_score: int  = -1
+    best_sim:   dict = None
+    best_iter:  int  = -1
+
     _prog_interval = max(1, num_iters // 100)
     print(f'Running {num_iters:,} simulations for {year}...', flush=True)
     for i in range(num_iters):
@@ -339,6 +398,14 @@ def run_simulations(
             for team in winners:
                 round_wins[team][rnd] += 1
 
+        # Track best-scoring simulated bracket vs actual results
+        if actual_winners_by_rnd:
+            it_score, _, _ = score_sim_bracket(sim, actual_winners_by_rnd)
+            if it_score > best_score:
+                best_score = it_score
+                best_sim   = {rnd: list(ws) for rnd, ws in sim.items()}
+                best_iter  = i + 1
+
     print(f'  {num_iters}/{num_iters} — done.    ', flush=True)
 
     # --- Build results DataFrame ------------------------------------------
@@ -353,7 +420,29 @@ def run_simulations(
 
     # Sort: Champ desc, then FF, E8, S16, R16 desc
     df = df.sort_values(list(reversed(ROUND_LABELS)), ascending=False).reset_index(drop=True)
-    return df
+
+    # --- Build best-bracket info (if actual results were provided) --------
+    best_bracket_info: Optional[dict] = None
+    if best_sim is not None:
+        b_total, b_correct, b_num_correct = score_sim_bracket(best_sim, actual_winners_by_rnd)
+        best_bracket_info = {
+            'total_score':          b_total,
+            'correct_by_round':     b_correct,
+            'num_correct_by_round': b_num_correct,
+            'pred_teams_by_round':  [best_sim[rnd] for rnd in range(1, 7)],
+            'pred_seeds_by_round':  [
+                [team_seed_map.get(t, '?') for t in best_sim[rnd]]
+                for rnd in range(1, 7)
+            ],
+            'pred_probs_by_round':  [
+                [float('nan')] * len(best_sim[rnd])
+                for rnd in range(1, 7)
+            ],
+            'iter_idx':   best_iter,
+            'team_seed_map': team_seed_map,
+        }
+
+    return df, best_bracket_info
 
 
 # ---------------------------------------------------------------------------
@@ -580,7 +669,11 @@ def main():
     print()
 
     # --- Run simulations --------------------------------------------------
-    df_results = run_simulations(
+    actual_winners_by_rnd: dict = {}
+    if args.year in ALL_YEARS:
+        actual_winners_by_rnd = get_actual_winners_by_round(data_root, args.year)
+
+    df_results, best_bracket_info = run_simulations(
         model=model,
         data_root=data_root,
         year=args.year,
@@ -593,6 +686,7 @@ def main():
         delta_feats=delta_feats,
         numeric_bases=numeric_bases,
         model_feature_list=model_feature_list,
+        actual_winners_by_rnd=actual_winners_by_rnd or None,
     )
 
     # --- Actual results (only for historical years with bracket data) ------
@@ -628,6 +722,46 @@ def main():
 
     print(f'\nHTML saved to: {html_out}')
     print(f'CSV  saved to: {csv_out}')
+
+    # --- Best simulated bracket (historical years only) -------------------
+    if best_bracket_info is not None:
+        bb      = best_bracket_info
+        b_score = bb['total_score']
+        b_iter  = bb['iter_idx']
+        b_num   = bb['num_correct_by_round']
+
+        _rnd_sizes = [32, 16, 8, 4, 2, 1]
+        print(f'\nBest simulated bracket: {b_score} pts (iteration #{b_iter:,})')
+        for idx, (lbl, sz) in enumerate(zip(ROUND_FULL, _rnd_sizes)):
+            n_cor = b_num[idx]
+            rnd_pts = n_cor * (2 ** idx) * 10
+            print(f'  {lbl:<18}: {n_cor:>2}/{sz} correct  ({rnd_pts} pts)')
+        n_total = sum(b_num)
+        print(f'  {"Total":18}: {n_total:>2}/63 correct')
+
+        # Load feat_bases from pickle (list of base names used in training)
+        feat_bases = payload.get('feature_bases', feature_list)
+
+        try:
+            best_html = format_bracket_html(
+                data_root              = data_root,
+                year                   = args.year,
+                pred_teams_by_round    = bb['pred_teams_by_round'],
+                pred_seeds_by_round    = bb['pred_seeds_by_round'],
+                pred_probs_by_round    = bb['pred_probs_by_round'],
+                correct_by_round       = bb['correct_by_round'],
+                num_correct_by_round   = bb['num_correct_by_round'],
+                total_score            = bb['total_score'],
+                is_current             = False,
+                model_key              = f'{model_key} (Best Sim #{b_iter:,})',
+                feat_bases             = feat_bases,
+                ff_pairings            = ff_pairings,
+            )
+            best_html_out = out_dir / f'{args.year}_best_bracket.html'
+            best_html_out.write_text(best_html, encoding='utf-8')
+            print(f'\nBest bracket saved to: {best_html_out}')
+        except Exception as _e:
+            print(f'\nWARNING: could not render best bracket HTML: {_e}', file=sys.stderr)
 
 
 if __name__ == '__main__':

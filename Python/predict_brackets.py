@@ -633,9 +633,32 @@ class TemperatureScaledModel:
         self.base_model  = base_model
         self.temperature = float(temperature)
 
+    # Explicit pickle support — must NOT go through __getattr__ or sklearn's
+    # BaseEstimator.__getstate__ (which lives on the wrapped model) would be
+    # returned, serialising the inner model's dict instead of ours.
+    def __getstate__(self):
+        return {'base_model': self.base_model, 'temperature': self.temperature}
+
+    def __setstate__(self, state):
+        if 'base_model' not in state:
+            raise RuntimeError(
+                'This model pickle was saved with a buggy version of '
+                'TemperatureScaledModel and cannot be loaded. '
+                'Please re-run training (predict_brackets.py) to regenerate it.'
+            )
+        self.base_model  = state['base_model']
+        self.temperature = state['temperature']
+
     # Delegate unknown attribute access to the base model so sklearn utilities work.
     def __getattr__(self, name):
-        return getattr(self.base_model, name)
+        # During unpickling __init__ hasn't run yet, so accessing self.base_model
+        # via normal attribute lookup would re-enter __getattr__ and recurse forever.
+        # Use object.__getattribute__ to bypass __getattr__ entirely.
+        try:
+            base = object.__getattribute__(self, 'base_model')
+        except AttributeError:
+            raise AttributeError(name)
+        return getattr(base, name)
 
     def predict(self, X):
         return self.base_model.predict(X)

@@ -857,6 +857,8 @@ def run_sim_job(job_id: str, cmd: list):
             job.queue.put(line)
             if 'HTML saved to:' in line:
                 job.output_dir = Path(line.split('HTML saved to:', 1)[1].strip())
+            elif 'Best bracket saved to:' in line:
+                job.best_bracket_path = Path(line.split('Best bracket saved to:', 1)[1].strip())
         proc.wait()
         job.status = 'done' if proc.returncode == 0 else 'error'
     except Exception as exc:
@@ -912,10 +914,16 @@ def sim_stream(job_id):
                 yield 'data: {"type":"timeout"}\n\n'
                 break
             if line is None:
+                bbp = getattr(job, 'best_bracket_path', None)
+                best_bracket_url = (
+                    f'/sim_html/{bbp.parent.name}/{bbp.name}'
+                    if bbp and bbp.exists() else None
+                )
                 payload = {
-                    'type':      'done',
-                    'status':    job.status,
-                    'html_path': str(job.output_dir) if job.output_dir else None,
+                    'type':             'done',
+                    'status':           job.status,
+                    'html_path':        str(job.output_dir) if job.output_dir else None,
+                    'best_bracket_url': best_bracket_url,
                 }
                 yield f'data: {json.dumps(payload)}\n\n'
                 break
@@ -932,6 +940,7 @@ def sim_stream(job_id):
 def sim_list_route(dir_name):
     sim_dir = SIMULATIONS_DIR / dir_name
     files = []
+    best_brackets = []
     if sim_dir.is_dir():
         files = [
             f.name for f in sorted(
@@ -940,7 +949,14 @@ def sim_list_route(dir_name):
                 reverse=True,
             )
         ]
-    return jsonify({'files': files, 'dir_name': dir_name})
+        best_brackets = [
+            f.name for f in sorted(
+                sim_dir.glob('*best_bracket.html'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+        ]
+    return jsonify({'files': files, 'best_brackets': best_brackets, 'dir_name': dir_name})
 
 
 @app.route('/sim_html/<path:dir_name>/<path:filename>')
@@ -1312,6 +1328,7 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
             _simulate_one, to_html, get_actual_results, ROUND_LABELS as _ROUND_LABELS,
         )
         from predict_brackets import (                 # pylint: disable=import-error
+            TemperatureScaledModel,  # noqa: F401 – must be imported before pickle.load
             load_bracket_round, load_kenpom,
             load_barttorvik, load_barttorvik_2week, load_barttorvik_hotness,
             attach_kenpom, attach_barttorvik,
@@ -4644,6 +4661,14 @@ label.feat-chip[title] { cursor: help; }
           <div class="sim-prog-track"><div id="sim-progress-bar"></div></div>
         </div>
         <div id="sim-log"></div>
+        <div id="sim-best-bracket-wrap" style="display:none;margin-top:8px;text-align:center">
+          <a id="sim-best-bracket-link" href="#" target="_blank"
+             style="display:inline-block;padding:6px 14px;background:#14432a;color:#86efac;
+                    border:1px solid #22c55e;border-radius:6px;text-decoration:none;
+                    font-size:0.85rem;font-weight:600">
+            &#127942; View Best Simulated Bracket
+          </a>
+        </div>
         <div id="sim-prev" style="display:none">
           <div class="sim-prev-title">Previous Simulations</div>
           <div id="sim-links" class="year-grid"></div>
@@ -4906,6 +4931,7 @@ function loadSimCard(dirName) {
   document.getElementById('sim-log').style.display = 'none';
   document.getElementById('sim-log').innerHTML = '';
   document.getElementById('sim-status-badge').style.display = 'none';
+  document.getElementById('sim-best-bracket-wrap').style.display = 'none';
   document.getElementById('sim-btn').disabled = false;
 
   // Show and populate the save-bracket card
@@ -4974,6 +5000,20 @@ function loadSimPrev(dirName) {
       const links = document.getElementById('sim-links');
       const prev  = document.getElementById('sim-prev');
       links.innerHTML = '';
+      var hasAny = false;
+      if (data.best_brackets && data.best_brackets.length) {
+        data.best_brackets.forEach(function(fname) {
+          const a = document.createElement('a');
+          a.href = '/sim_html/' + encodeURIComponent(dirName) + '/' + fname;
+          a.target = '_blank';
+          const yr = fname.replace('_best_bracket.html', '');
+          a.textContent = '\u2605 ' + yr + ' Best Bracket';
+          a.className = 'sim-file-link';
+          a.style.cssText = 'background:#14432a;color:#86efac;border-color:#22c55e;font-weight:600';
+          links.appendChild(a);
+          hasAny = true;
+        });
+      }
       if (data.files && data.files.length) {
         data.files.forEach(function(fname) {
           const a = document.createElement('a');
@@ -4982,11 +5022,10 @@ function loadSimPrev(dirName) {
           a.textContent = fname.replace('_', ' ').replace('iters.html', ' iters');
           a.className = 'sim-file-link';
           links.appendChild(a);
+          hasAny = true;
         });
-        prev.style.display = '';
-      } else {
-        prev.style.display = 'none';
       }
+      prev.style.display = hasAny ? '' : 'none';
     });
 }
 
@@ -5065,6 +5104,11 @@ function startSimStream(jobId) {
         badge.className = 'status-badge status-done';
         badge.textContent = 'Done';
         loadSimPrev(currentDirName);
+        if (msg.best_bracket_url) {
+          const lnk = document.getElementById('sim-best-bracket-link');
+          lnk.href = msg.best_bracket_url;
+          document.getElementById('sim-best-bracket-wrap').style.display = '';
+        }
       } else {
         badge.className = 'status-badge status-error';
         badge.textContent = 'Error';
