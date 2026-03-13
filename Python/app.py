@@ -377,10 +377,15 @@ def scan_saved_models():
                     'norm_years': info.get('norm_years', False),
                     'norm_all':   info.get('norm_all', False),
                     'calibrated': info.get('calibrate', False),
+                    'calibrate_mode':        info.get('calibrate_mode', 'stretch'),
+                    'calibrate_target':      info.get('calibrate_target', 0.97),
+                    'calibrate_temperature': info.get('calibrate_temperature', None),
                     'delta_feats':info.get('delta_feats', False),
                     'exclude_years': info.get('exclude_years', []),
                     'sim_data':   info.get('sim_data', None),
                     'features':   info.get('features', ''),
+                    'feature_bases': info.get('feature_bases', []),
+                    'model_params_str': ' '.join(f'{k}={v}' for k, v in info.get('model_params', {}).items()),
                     'params':     info.get('params', ''),
                     'train_acc':  train_acc,
                     'test_acc':   test_acc,
@@ -4724,9 +4729,97 @@ function renderSavedModels() {
       tr.classList.add('active');
       activeSavedRow = tr;
       loadSavedResults(m.dir_name);
+      populateFormFromModel(m);
     });
     tbody.appendChild(tr);
   });
+}
+
+function populateFormFromModel(m) {
+  // Model type
+  const modelSel = document.getElementById('model-select');
+  if (modelSel && m.model) {
+    for (let i = 0; i < modelSel.options.length; i++) {
+      if (modelSel.options[i].value === m.model) { modelSel.selectedIndex = i; break; }
+    }
+  }
+
+  // Model params
+  const paramsInput = document.getElementById('params-input');
+  if (paramsInput) paramsInput.value = m.model_params_str || '';
+
+  // Feature chips — uncheck all, then check the ones in feature_bases
+  const allChipInputs = document.querySelectorAll('.feat-chip input[type="checkbox"]');
+  allChipInputs.forEach(function(cb) {
+    const wasChecked = cb.checked;
+    const shouldCheck = (m.feature_bases || []).includes(cb.value);
+    cb.checked = shouldCheck;
+    const lbl = cb.closest('label');
+    if (lbl) lbl.classList.toggle('selected', shouldCheck);
+    // Trigger any change listeners on the label if state changed
+  });
+
+  // Normalisation checkboxes
+  const normYearsChk = document.getElementById('norm-years-check');
+  const normAllChk   = document.getElementById('norm-all-check');
+  if (normYearsChk) normYearsChk.checked = !!m.norm_years;
+  if (normAllChk)   normAllChk.checked   = !!m.norm_all;
+
+  // Delta features
+  const deltaChk = document.getElementById('delta-feats-check');
+  if (deltaChk) deltaChk.checked = !!m.delta_feats;
+
+  // Calibration
+  const calChk = document.getElementById('calibrate-check');
+  if (calChk) {
+    calChk.checked = !!m.calibrated;
+    // Show/hide calibration options (mirror the existing onchange logic)
+    const calOpts = document.getElementById('calibrate-options');
+    if (calOpts) calOpts.style.display = m.calibrated ? '' : 'none';
+  }
+  const calModeSel = document.getElementById('calibrate-mode-sel');
+  if (calModeSel && m.calibrate_mode) {
+    for (let i = 0; i < calModeSel.options.length; i++) {
+      if (calModeSel.options[i].value === m.calibrate_mode) { calModeSel.selectedIndex = i; break; }
+    }
+  }
+  const calTargetInp = document.getElementById('calibrate-target-inp');
+  if (calTargetInp && m.calibrate_target != null) calTargetInp.value = m.calibrate_target;
+  const calTempInp = document.getElementById('calibrate-temp-inp');
+  if (calTempInp) calTempInp.value = (m.calibrate_temperature != null) ? m.calibrate_temperature : '';
+
+  // Exclude-years chips
+  document.querySelectorAll('#excl-years-wrap input[type="checkbox"]').forEach(function(cb) {
+    const shouldCheck = (m.exclude_years || []).includes(parseInt(cb.value, 10));
+    cb.checked = shouldCheck;
+    const lbl = cb.closest('label');
+    if (lbl) {
+      lbl.style.background   = shouldCheck ? '#450a0a' : '#1e293b';
+      lbl.style.borderColor  = shouldCheck ? '#f87171' : '#334155';
+      lbl.style.color        = shouldCheck ? '#fca5a5' : '#94a3b8';
+    }
+  });
+
+  // Sim data dropdown
+  const simSel = document.getElementById('sim-data-sel');
+  if (simSel) {
+    const target = m.sim_data || '';
+    for (let i = 0; i < simSel.options.length; i++) {
+      if (simSel.options[i].value === target) { simSel.selectedIndex = i; break; }
+    }
+  }
+
+  // Run name — suggest a copy so user doesn't accidentally overwrite
+  const runNameInput = document.getElementById('run-name-input');
+  if (runNameInput) runNameInput.value = m.dir_name + '_copy';
+
+  // Flash the form panel briefly to signal it was populated
+  const formPanel = document.querySelector('.form-panel');
+  if (formPanel) {
+    formPanel.style.transition = 'box-shadow 0.15s';
+    formPanel.style.boxShadow = '0 0 0 2px #3b82f6';
+    setTimeout(function() { formPanel.style.boxShadow = ''; }, 600);
+  }
 }
 
 function loadSavedModels() {
