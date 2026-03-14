@@ -1713,6 +1713,167 @@ def api_feature_analysis():
 
 
 # ---------------------------------------------------------------------------
+# Feature Table
+# ---------------------------------------------------------------------------
+
+@app.route('/feature_table')
+def feature_table_route():
+    return Response(FEATURE_TABLE_HTML, mimetype='text/html')
+
+
+@app.route('/api/feature_table_data/<int:year>')
+def api_feature_table_data(year):
+    import pandas as pd
+
+    kp_path = REPO_ROOT / 'Data' / 'KenPomData' / f'{year}.csv'
+    if not kp_path.exists():
+        return jsonify({'error': f'No KenPom data for {year}'}), 404
+
+    kp_df = pd.read_csv(kp_path)
+
+    # Build team → seed map.
+    team_seed_map: dict = {}
+    seeded = kp_df[kp_df['Seed'].notna() & (kp_df['Seed'].astype(str).str.strip() != '')]
+    if len(seeded) > 0:
+        kp_df = seeded.copy()
+        for _, row in kp_df.iterrows():
+            try:
+                team_seed_map[str(row['Team'])] = int(float(row['Seed']))
+            except Exception:
+                pass
+    else:
+        r1_path = REPO_ROOT / 'Data' / 'BracketData' / str(year) / f'Round1_{year}.csv'
+        if r1_path.exists():
+            r1_df = pd.read_csv(r1_path)
+            for _, row in r1_df.iterrows():
+                for side in ('Team1', 'Team2'):
+                    t = str(row.get(side, ''))
+                    s = row.get(f'{side}_Seed')
+                    if t and t != 'nan' and pd.notna(s):
+                        try:
+                            team_seed_map[t] = int(float(s))
+                        except Exception:
+                            pass
+        tournament_teams = set(team_seed_map.keys())
+        kp_df = kp_df[kp_df['Team'].astype(str).isin(tournament_teams)].copy()
+
+    # Tournament finish for completed years (2025 and earlier).
+    has_finish = year <= 2025
+    finish_map: dict = {}
+    if has_finish:
+        bracket_dir = REPO_ROOT / 'Data' / 'BracketData' / str(year)
+        round_labels = {
+            1: ('R32', 1), 2: ('Sweet 16', 2), 3: ('Elite 8', 3),
+            4: ('Final Four', 4), 5: ('Runner-Up', 5), 6: ('Champion', 6),
+        }
+        for team in kp_df['Team'].astype(str):
+            finish_map[team] = ('R64', 0)
+        for r in range(1, 7):
+            csv_path = bracket_dir / f'Round{r}_{year}.csv'
+            if not csv_path.exists():
+                break
+            r_df = pd.read_csv(csv_path)
+            for _, row in r_df.iterrows():
+                winner = str(row.get('WinningTeam', ''))
+                if winner and winner != 'nan' and winner in finish_map:
+                    finish_map[winner] = round_labels[r]
+
+    def _flt(val, dec=2):
+        if val is None:
+            return None
+        try:
+            v = float(val)
+            return None if pd.isna(v) else round(v, dec)
+        except Exception:
+            return None
+
+    def load_team_map(csv_path):
+        if not csv_path.exists():
+            return {}
+        df = pd.read_csv(csv_path)
+        return {str(r['Team']): r for _, r in df.iterrows()}
+
+    bt_map  = load_team_map(REPO_ROOT / 'Data' / 'BartTorvikData'       / f'{year}.csv')
+    tw_map  = load_team_map(REPO_ROOT / 'Data' / '2WeekBartTorvikData'   / f'{year}.csv')
+    hot_map = load_team_map(REPO_ROOT / 'Data' / 'HotnessBartTorvikData' / f'{year}.csv')
+
+    # (csv_col, json_key, decimal_places)
+    KP_COLS = [
+        ('Rk_AdjEM',       'Rk_AdjEM',       0), ('AdjEM',         'AdjEM',         2),
+        ('AdjO',           'KP_AdjO',         1), ('Rk_AdjO',       'KP_Rk_AdjO',    0),
+        ('AdjD',           'KP_AdjD',         1), ('Rk_AdjD',       'KP_Rk_AdjD',    0),
+        ('AdjT',           'KP_AdjT',         1), ('Rk_AdjT',       'KP_Rk_AdjT',    0),
+        ('Luck',           'Luck',            3), ('Rk_Luck',       'Rk_Luck',        0),
+        ('SOS_AdjEM',      'SOS_AdjEM',       2), ('Rk_SOS_AdjEM',  'Rk_SOS_AdjEM',  0),
+        ('SOS_AdjO',       'SOS_AdjO',        1), ('Rk_SOS_AdjO',   'Rk_SOS_AdjO',   0),
+        ('SOS_AdjD',       'SOS_AdjD',        1), ('Rk_SOS_AdjD',   'Rk_SOS_AdjD',   0),
+        ('NCSOS_AdjEM',    'NCSOS_AdjEM',     2), ('Rk_NCSOS_AdjEM','Rk_NCSOS_AdjEM',0),
+    ]
+    # BT shared base: (csv_col, key_suffix, dec)
+    # AdjO/AdjD/AdjT get BT_ prefix; all others use suffix directly as json_key
+    BT_BASE = [
+        ('AdjO',    'BT_AdjO',   1), ('Rk_AdjO',    'BT_Rk_AdjO',   0),
+        ('AdjD',    'BT_AdjD',   1), ('Rk_AdjD',    'BT_Rk_AdjD',   0),
+        ('AdjT',    'BT_AdjT',   1), ('Rk_AdjT',    'BT_Rk_AdjT',   0),
+        ('Barthag', 'Barthag',   4), ('Rk_Barthag', 'Rk_Barthag',   0),
+        ('EFG%',    'EFG%',      1), ('Rk_EFG%',    'Rk_EFG%',      0),
+        ('EFGD%',   'EFGD%',     1), ('Rk_EFGD%',   'Rk_EFGD%',     0),
+        ('TOR',     'TOR',       1), ('Rk_TOR',     'Rk_TOR',        0),
+        ('TORD',    'TORD',      1), ('Rk_TORD',    'Rk_TORD',       0),
+        ('ORB',     'ORB',       1), ('Rk_ORB',     'Rk_ORB',        0),
+        ('DRB',     'DRB',       1), ('Rk_DRB',     'Rk_DRB',        0),
+        ('FTR',     'FTR',       1), ('Rk_FTR',     'Rk_FTR',        0),
+        ('FTRD',    'FTRD',      1), ('Rk_FTRD',    'Rk_FTRD',       0),
+        ('2P%',     '2P%',       1), ('Rk_2P%',     'Rk_2P%',        0),
+        ('2P%D',    '2P%D',      1), ('Rk_2P%D',    'Rk_2P%D',       0),
+        ('3P%',     '3P%',       1), ('Rk_3P%',     'Rk_3P%',        0),
+        ('3P%D',    '3P%D',      1), ('Rk_3P%D',    'Rk_3P%D',       0),
+        ('3PR',     '3PR',       1), ('Rk_3PR',     'Rk_3PR',        0),
+        ('3PRD',    '3PRD',      1), ('Rk_3PRD',    'Rk_3PRD',       0),
+        ('WAB',     'WAB',       1), ('Rk_WAB',     'Rk_WAB',        0),
+    ]
+    TW_EXTRA  = [('WinPct','2W_WinPct',4),('Wins','2W_Wins',0),('Losses','2W_Losses',0)]
+    TW_COLS   = TW_EXTRA  + [(c, f'2W_{c}',  d) for c, j, d in BT_BASE]
+    HOT_EXTRA = [('WinPct','HOT_WinPct',4),('Wins','HOT_Wins',0),('Losses','HOT_Losses',0)]
+    HOT_COLS  = HOT_EXTRA + [(c, f'HOT_{c}', d) for c, j, d in BT_BASE]
+
+    def extract(src_map, team, col_defs):
+        if team not in src_map:
+            return {jk: None for _, jk, _ in col_defs}
+        row = src_map[team]
+        return {jk: _flt(row.get(cv), dec) for cv, jk, dec in col_defs}
+
+    rows = []
+    for _, krow in kp_df.iterrows():
+        team = str(krow['Team'])
+        seed = team_seed_map.get(team)
+        if seed is None:
+            try:
+                seed = int(float(krow['Seed']))
+            except Exception:
+                seed = None
+        d: dict = {
+            'Team':   team,
+            'Seed':   seed,
+            'Conf':   str(krow.get('Conf', '')),
+            'WL':     str(krow.get('W-L', '')),
+            'WinPct': _flt(krow.get('WinPct'), 4),
+        }
+        for cv, jk, dec in KP_COLS:
+            d[jk] = _flt(krow.get(cv), dec)
+        d.update(extract(bt_map,  team, BT_BASE))
+        d.update(extract(tw_map,  team, TW_COLS))
+        d.update(extract(hot_map, team, HOT_COLS))
+        if has_finish:
+            label, order = finish_map.get(team, ('N/A', -1))
+            d['Finish']      = label
+            d['FinishOrder'] = order
+        rows.append(d)
+
+    return jsonify({'year': year, 'rows': rows, 'has_finish': has_finish})
+
+
+# ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
 
@@ -2168,6 +2329,321 @@ function renderMatrix() {
 </html>"""
 
 FEATURE_VIZ_HTML = FEATURE_VIZ_HTML.replace('__ALL_YEARS_JSON__', json.dumps(ALL_YEARS))
+
+
+# ---------------------------------------------------------------------------
+# Feature Table HTML
+# ---------------------------------------------------------------------------
+FEATURE_TABLE_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feature Table &#8212; March Madness</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",Arial,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+a{color:#93c5fd}
+a.back-link{display:inline-flex;align-items:center;gap:5px;color:#64748b;font-size:12px;text-decoration:none;padding:18px 24px 0;transition:color .15s}
+a.back-link:hover{color:#93c5fd}
+.page-header{padding:10px 24px 14px;border-bottom:1px solid #1e293b}
+h1{font-size:22px;color:#fbbf24;margin-bottom:3px}
+.subtitle{color:#64748b;font-size:12px}
+.controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 24px;border-bottom:1px solid #1e293b;background:#0b1120}
+.ctrl-label{font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:7px}
+select.ctrl-select{background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;padding:4px 10px;cursor:pointer}
+#team-filter{background:#1e293b;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:12px;padding:4px 10px;width:170px}
+#team-filter::placeholder{color:#475569}
+.ctrl-sep{width:1px;height:22px;background:#1e293b}
+.grp-btn{padding:3px 11px;border-radius:12px;border:1px solid;font-size:11px;font-weight:700;cursor:pointer;user-select:none;transition:opacity .15s}
+.grp-btn.off{opacity:.4}
+.rank-toggle{display:flex;align-items:center;gap:5px;font-size:11px;color:#64748b;cursor:pointer;user-select:none}
+.rank-toggle input{cursor:pointer;accent-color:#fbbf24}
+.stat-bar{padding:5px 24px;font-size:11px;color:#475569;min-height:20px}
+.table-wrap{overflow-x:auto;padding:0 12px 40px}
+table{border-collapse:collapse;font-size:11.5px;white-space:nowrap;min-width:100%}
+thead th{background:#0b1120;color:#94a3b8;font-weight:600;padding:6px 8px;text-align:right;cursor:pointer;user-select:none;position:sticky;z-index:2;transition:color .12s}
+thead tr:first-child th{top:0;z-index:3;border-bottom:1px solid #0f172a;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:4px 8px}
+thead tr:last-child th{top:25px;z-index:2;border-bottom:1px solid #1e293b}
+thead th[data-sort]:hover{color:#e2e8f0}
+thead th.sort-asc::after{content:" \25B2";color:#fbbf24;font-size:9px}
+thead th.sort-desc::after{content:" \25BC";color:#fbbf24;font-size:9px}
+.th-team{text-align:left!important;min-width:140px}
+.th-conf{text-align:left!important}
+.th-rk{color:#334155!important;font-weight:400!important;min-width:36px}
+tbody tr{border-bottom:1px solid #0f172a;transition:background .08s}
+tbody tr:hover{background:#1a2438}
+tbody td{padding:5px 8px;text-align:right;color:#cbd5e1}
+.td-team{text-align:left!important;color:#e2e8f0!important;font-weight:500}
+.td-conf{text-align:left!important;color:#94a3b8!important;font-size:11px}
+.td-rk{color:#334155!important;font-size:11px}
+.seed-badge{display:inline-block;min-width:20px;text-align:center;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:1px 4px;font-size:10px;color:#94a3b8;font-weight:700}
+.finish-badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;font-weight:700}
+.fb-champion{background:#422006;color:#fbbf24;border:1px solid #92400e}
+.fb-runnerup{background:#1c1917;color:#d4d4d4;border:1px solid #57534e}
+.fb-f4{background:#1e1b4b;color:#a5b4fc;border:1px solid #3730a3}
+.fb-e8{background:#0f172a;color:#67e8f9;border:1px solid #164e63}
+.fb-s16{background:#052e16;color:#4ade80;border:1px solid #166534}
+.fb-r32{background:#0f172a;color:#7dd3fc;border:1px solid #1e3a5f}
+.fb-r64{background:#0f172a;color:#475569;border:1px solid #1e293b}
+.fb-na{background:#0f172a;color:#334155;border:1px solid #1e293b}
+.loading{text-align:center;padding:40px;color:#475569;font-size:14px}
+.error-msg{text-align:center;padding:40px;color:#f87171;font-size:13px}
+.pos{color:#4ade80}.neg{color:#f87171}
+</style>
+</head>
+<body>
+<a href="/" class="back-link">&#8592; Back to Predictor</a>
+<div class="page-header">
+  <h1>&#128202; Feature Table</h1>
+  <p class="subtitle">Feature values for all tournament teams. Toggle groups and rank columns below.</p>
+</div>
+<div class="controls">
+  <label class="ctrl-label">Year:
+    <select id="year-select" class="ctrl-select"></select>
+  </label>
+  <label class="ctrl-label">Filter:
+    <input type="text" id="team-filter" placeholder="Team or conf&#8230;">
+  </label>
+  <div class="ctrl-sep"></div>
+  <button id="btn-kp"   class="grp-btn"     style="color:#34d399;border-color:#166534;background:#0d2414" data-grp="kp">&#9679; KenPom</button>
+  <button id="btn-bt"   class="grp-btn off" style="color:#fbbf24;border-color:#78540a;background:#1a1500" data-grp="bt">&#9679; BartTorvik</button>
+  <button id="btn-bt2w" class="grp-btn off" style="color:#a78bfa;border-color:#4c1d95;background:#130b25" data-grp="bt2w">&#9679; 2-Week BT</button>
+  <button id="btn-hot"  class="grp-btn off" style="color:#f472b6;border-color:#831843;background:#1a0817" data-grp="hot">&#9679; Hotness</button>
+  <div class="ctrl-sep"></div>
+  <label class="rank-toggle"><input type="checkbox" id="chk-ranks"> Show rank columns</label>
+</div>
+<div class="stat-bar" id="stat-bar"></div>
+<div class="table-wrap">
+  <div id="table-container" class="loading">Loading&#8230;</div>
+</div>
+<script>
+var ALL_YEARS = __ALL_YEARS_JSON__;
+var THIS_YEAR = __THIS_YEAR__;
+
+// Year dropdown
+(function(){
+  var sel = document.getElementById('year-select');
+  var rev = ALL_YEARS.slice().reverse();
+  rev.forEach(function(y){ var o = document.createElement('option'); o.value=y; o.textContent=y; sel.appendChild(o); });
+  sel.value = (rev.indexOf(THIS_YEAR) >= 0) ? THIS_YEAR : rev[0];
+  sel.addEventListener('change', loadYear);
+})();
+
+// Group toggle state  {grpId -> bool}
+var grpOn = {kp:true, bt:false, bt2w:false, hot:false};
+document.querySelectorAll('.grp-btn').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var id = btn.dataset.grp;
+    grpOn[id] = !grpOn[id];
+    btn.classList.toggle('off', !grpOn[id]);
+    renderTable();
+  });
+});
+
+document.getElementById('team-filter').addEventListener('input', renderTable);
+document.getElementById('chk-ranks').addEventListener('change', renderTable);
+
+// ---- Column definitions ----
+var BT_SUFFIXES = ['AdjO','Rk_AdjO','AdjD','Rk_AdjD','AdjT','Rk_AdjT',
+  'Barthag','Rk_Barthag','EFG%','Rk_EFG%','EFGD%','Rk_EFGD%',
+  'TOR','Rk_TOR','TORD','Rk_TORD','ORB','Rk_ORB','DRB','Rk_DRB',
+  'FTR','Rk_FTR','FTRD','Rk_FTRD',
+  '2P%','Rk_2P%','2P%D','Rk_2P%D','3P%','Rk_3P%','3P%D','Rk_3P%D',
+  '3PR','Rk_3PR','3PRD','Rk_3PRD','WAB','Rk_WAB'];
+var BT_LABEL = {AdjO:'AdjO',Rk_AdjO:'Rk',AdjD:'AdjD',Rk_AdjD:'Rk',AdjT:'AdjT',Rk_AdjT:'Rk',
+  Barthag:'Barthag',Rk_Barthag:'Rk','EFG%':'EFG%','Rk_EFG%':'Rk',
+  'EFGD%':'EFGD%','Rk_EFGD%':'Rk',TOR:'TOR',Rk_TOR:'Rk',TORD:'TORD',Rk_TORD:'Rk',
+  ORB:'ORB',Rk_ORB:'Rk',DRB:'DRB',Rk_DRB:'Rk',FTR:'FTR',Rk_FTR:'Rk',
+  FTRD:'FTRD',Rk_FTRD:'Rk','2P%':'2P%','Rk_2P%':'Rk','2P%D':'2P%D','Rk_2P%D':'Rk',
+  '3P%':'3P%','Rk_3P%':'Rk','3P%D':'3P%D','Rk_3P%D':'Rk',
+  '3PR':'3PR',Rk_3PR:'Rk','3PRD':'3PRD',Rk_3PRD:'Rk',WAB:'WAB',Rk_WAB:'Rk'};
+
+function makeBTCols(){
+  var renamed = {AdjO:1,Rk_AdjO:1,AdjD:1,Rk_AdjD:1,AdjT:1,Rk_AdjT:1};
+  return BT_SUFFIXES.map(function(s){
+    return {key: renamed[s] ? 'BT_'+s : s, lbl: BT_LABEL[s]||s, isRk: s.indexOf('Rk_')===0};
+  });
+}
+function makePfxCols(pfx, extras){
+  var base = (extras||[]).map(function(e){ return {key:e[0],lbl:e[1],isRk:false}; });
+  var rest = BT_SUFFIXES.map(function(s){ return {key:pfx+'_'+s, lbl:BT_LABEL[s]||s, isRk:s.indexOf('Rk_')===0}; });
+  return base.concat(rest);
+}
+var GROUPS = [
+  {id:'kp', lbl:'KenPom', color:'#34d399', cols:[
+    {key:'AdjEM',         lbl:'AdjEM',  isRk:false, posNeg:true},
+    {key:'Rk_AdjEM',      lbl:'Rk',     isRk:true},
+    {key:'KP_AdjO',       lbl:'AdjO',   isRk:false},
+    {key:'KP_Rk_AdjO',    lbl:'Rk',     isRk:true},
+    {key:'KP_AdjD',       lbl:'AdjD',   isRk:false},
+    {key:'KP_Rk_AdjD',    lbl:'Rk',     isRk:true},
+    {key:'KP_AdjT',       lbl:'AdjT',   isRk:false},
+    {key:'KP_Rk_AdjT',    lbl:'Rk',     isRk:true},
+    {key:'Luck',          lbl:'Luck',   isRk:false, posNeg:true},
+    {key:'Rk_Luck',       lbl:'Rk',     isRk:true},
+    {key:'SOS_AdjEM',     lbl:'SOS',    isRk:false, posNeg:true},
+    {key:'Rk_SOS_AdjEM',  lbl:'Rk',     isRk:true},
+    {key:'SOS_AdjO',      lbl:'SOS_O',  isRk:false},
+    {key:'Rk_SOS_AdjO',   lbl:'Rk',     isRk:true},
+    {key:'SOS_AdjD',      lbl:'SOS_D',  isRk:false},
+    {key:'Rk_SOS_AdjD',   lbl:'Rk',     isRk:true},
+    {key:'NCSOS_AdjEM',   lbl:'NCSOS',  isRk:false, posNeg:true},
+    {key:'Rk_NCSOS_AdjEM',lbl:'Rk',     isRk:true}
+  ]},
+  {id:'bt',   lbl:'BartTorvik', color:'#fbbf24', cols: makeBTCols()},
+  {id:'bt2w', lbl:'2-Week BT',  color:'#a78bfa', cols: makePfxCols('2W',[['2W_WinPct','WinPct',false],['2W_Wins','Wins',false],['2W_Losses','Losses',false]])},
+  {id:'hot',  lbl:'Hotness',    color:'#f472b6', cols: makePfxCols('HOT',[['HOT_WinPct','WinPct',false],['HOT_Wins','Wins',false],['HOT_Losses','Losses',false]])}
+];
+
+// ---- State ----
+var gRows = [], gHasFinish = false, gSort = 'AdjEM', gDesc = true;
+
+var FINISH_CLS = {Champion:'fb-champion','Runner-Up':'fb-runnerup','Final Four':'fb-f4',
+  'Elite 8':'fb-e8','Sweet 16':'fb-s16',R32:'fb-r32',R64:'fb-r64'};
+
+function loadYear(){
+  var year = document.getElementById('year-select').value;
+  var c = document.getElementById('table-container');
+  c.className = 'loading'; c.innerHTML = 'Loading&#8230;';
+  document.getElementById('stat-bar').textContent = '';
+  document.getElementById('team-filter').value = '';
+  fetch('/api/feature_table_data/'+year)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.error) throw new Error(d.error);
+      gRows = d.rows; gHasFinish = d.has_finish;
+      gSort = 'AdjEM'; gDesc = true;
+      renderTable();
+    })
+    .catch(function(e){
+      var c = document.getElementById('table-container');
+      c.className = 'error-msg'; c.innerHTML = 'Error: '+esc(e.message);
+    });
+}
+
+// Sort click via event delegation on thead
+document.getElementById('table-container').addEventListener('click', function(e){
+  var th = e.target;
+  while(th && th.tagName !== 'TH') th = th.parentElement;
+  if(!th || !th.dataset.sort) return;
+  var key = th.dataset.sort;
+  if(gSort === key){ gDesc = !gDesc; }
+  else { gSort = key; gDesc = (key !== 'Team' && key !== 'Conf' && key !== 'WL'); }
+  renderTable();
+}, true);
+
+function renderTable(){
+  var fv = document.getElementById('team-filter').value.trim().toLowerCase();
+  var showRk = document.getElementById('chk-ranks').checked;
+
+  var rows = fv
+    ? gRows.filter(function(r){ return r.Team.toLowerCase().indexOf(fv)>=0||(r.Conf||'').toLowerCase().indexOf(fv)>=0; })
+    : gRows.slice();
+
+  var sk = gSort==='Finish' ? 'FinishOrder' : gSort;
+  var numSort = (sk!=='Team'&&sk!=='Conf'&&sk!=='WL');
+  rows.sort(function(a,b){
+    var av=a[sk], bv=b[sk];
+    if(numSort){ av=(av==null?-1e9:av); bv=(bv==null?-1e9:bv); return gDesc?bv-av:av-bv; }
+    av=String(av||''); bv=String(bv||'');
+    return gDesc?bv.localeCompare(av):av.localeCompare(bv);
+  });
+
+  // Visible feature columns
+  var featCols = [];
+  GROUPS.forEach(function(g){
+    if(!grpOn[g.id]) return;
+    g.cols.forEach(function(c){
+      if(!c.isRk || showRk) featCols.push({key:c.key, lbl:c.lbl, isRk:c.isRk, posNeg:c.posNeg||false,
+        gid:g.id, gcolor:g.color, glbl:g.lbl});
+    });
+  });
+
+  // Fixed columns
+  var fixCols = [
+    {key:'Team',   lbl:'Team',  cls:'th-team', tdc:'td-team'},
+    {key:'Seed',   lbl:'Seed',  cls:''},
+    {key:'Conf',   lbl:'Conf',  cls:'th-conf', tdc:'td-conf'},
+    {key:'WL',     lbl:'W-L',   cls:''},
+    {key:'WinPct', lbl:'Win%',  cls:''}
+  ];
+  if(gHasFinish) fixCols.splice(1, 0, {key:'Finish', lbl:'Finish', cls:''});
+  var allCols = fixCols.concat(featCols);
+
+  var h = '<table>';
+
+  // thead row 1: group spans
+  h += '<thead><tr>';
+  h += '<th colspan="'+fixCols.length+'" style="background:#0b1120"></th>';
+  var fi = 0;
+  while(fi < featCols.length){
+    var gid = featCols[fi].gid, gc = featCols[fi].gcolor, gl = featCols[fi].glbl, span=0;
+    while(fi+span < featCols.length && featCols[fi+span].gid === gid) span++;
+    h += '<th colspan="'+span+'" style="color:'+gc+';text-align:center;border-bottom:2px solid '+gc+';background:#0b1120;padding:3px 5px">'+esc(gl)+'</th>';
+    fi += span;
+  }
+  h += '</tr>';
+
+  // thead row 2: individual headers with data-sort
+  h += '<tr>';
+  allCols.forEach(function(c){
+    var cls = (c.cls||'') + (c.isRk ? ' th-rk' : '');
+    var sortKey = (c.key==='Finish') ? 'Finish' : c.key;
+    if(gSort===sortKey) cls += gDesc ? ' sort-desc' : ' sort-asc';
+    var bdr = c.gcolor ? 'border-top:2px solid '+c.gcolor+'55;' : '';
+    h += '<th class="'+cls.trim()+'" style="'+bdr+'background:#0b1120" data-sort="'+sortKey+'">'+esc(c.lbl)+'</th>';
+  });
+  h += '</tr></thead><tbody>';
+
+  rows.forEach(function(row){
+    h += '<tr>';
+    allCols.forEach(function(c){
+      var v = row[c.key];
+      if(c.key==='Team'){
+        h += '<td class="td-team">'+esc(v)+'</td>';
+      } else if(c.key==='Seed'){
+        h += '<td><span class="seed-badge">'+(v!=null?v:'?')+'</span></td>';
+      } else if(c.key==='Conf'){
+        h += '<td class="td-conf">'+esc(v||'')+'</td>';
+      } else if(c.key==='Finish'){
+        var fc = FINISH_CLS[v]||'fb-na';
+        h += '<td><span class="finish-badge '+fc+'">'+esc(v||'N/A')+'</span></td>';
+      } else if(c.key==='WinPct'){
+        h += '<td>'+(v!=null?(v*100).toFixed(1)+'%':'&#8212;')+'</td>';
+      } else if(c.isRk){
+        h += '<td class="td-rk">'+(v!=null?v:'&#8212;')+'</td>';
+      } else {
+        var nv = (v!=null) ? parseFloat(v) : null;
+        var pn = c.posNeg || c.key.indexOf('HOT_')===0 || c.key==='WAB' || c.key==='2W_WAB';
+        if(pn && nv!=null && !isNaN(nv)){
+          var cls2 = nv>0?'pos':nv<0?'neg':'';
+          var dec = (c.key==='Luck'||c.key.indexOf('Barthag')>=0)?4:2;
+          h += '<td class="'+cls2+'">'+(nv>=0&&cls2?'+':'')+nv.toFixed(dec)+'</td>';
+        } else {
+          var dec2 = (c.key==='Luck'||c.key.indexOf('Barthag')>=0)?4:(c.key==='AdjEM'?2:1);
+          h += '<td>'+(nv!=null&&!isNaN(nv)?nv.toFixed(dec2):'&#8212;')+'</td>';
+        }
+      }
+    });
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+
+  var cont = document.getElementById('table-container');
+  cont.className = ''; cont.innerHTML = h;
+  var yr = document.getElementById('year-select').value;
+  document.getElementById('stat-bar').textContent = rows.length+' team'+(rows.length!==1?'s':'')+
+    ' \u2022 '+yr+' tournament \u2022 '+allCols.length+' columns'+(fv?' \u2022 filtered':'');
+}
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+loadYear();
+</script>
+</body>
+</html>"""
+FEATURE_TABLE_HTML = FEATURE_TABLE_HTML.replace('__ALL_YEARS_JSON__', json.dumps(ALL_YEARS))
+FEATURE_TABLE_HTML = FEATURE_TABLE_HTML.replace('__THIS_YEAR__', str(THIS_YEAR))
 
 
 BRACKET_INPUT_HTML = r"""<!DOCTYPE html>
@@ -4390,6 +4866,7 @@ label.feat-chip[title] { cursor: help; }
 <a href="/fill_bracket" style="display:inline-flex;align-items:center;gap:6px;background:#1a1500;border:1px solid #78540a;border-radius:7px;padding:6px 14px;font-size:12px;color:#fbbf24;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#ca8a04'" onmouseout="this.style.borderColor='#78540a'">&#10003; Fill Out My Bracket</a>
 <a href="/my_brackets" style="display:inline-flex;align-items:center;gap:6px;background:#1e293b;border:1px solid #334155;border-radius:7px;padding:6px 14px;font-size:12px;color:#93c5fd;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#334155'">&#128196; My Brackets</a>
 <a href="/features" style="display:inline-flex;align-items:center;gap:6px;background:#0f1f12;border:1px solid #166534;border-radius:7px;padding:6px 14px;font-size:12px;color:#4ade80;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#22c55e'" onmouseout="this.style.borderColor='#166534'">&#128200; Feature Explorer</a>
+<a href="/feature_table" style="display:inline-flex;align-items:center;gap:6px;background:#0c1a2e;border:1px solid #1e3a5f;border-radius:7px;padding:6px 14px;font-size:12px;color:#7dd3fc;text-decoration:none;transition:border-color .15s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#1e3a5f'">&#128202; Feature Table</a>
 </div>
 
 <!-- ===== SAVED MODELS ===== -->
