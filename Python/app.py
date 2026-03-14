@@ -366,7 +366,12 @@ def scan_saved_models():
             try:
                 info = json.loads(info_file.read_text())
                 expert_tag = info.get('expert_tag', '')
-                train_acc, test_acc = info.get('trad_train_acc'), info.get('trad_test_acc')
+                train_acc = (info.get('loyo_avg_train_acc')
+                             if info.get('loyo_avg_train_acc') is not None
+                             else info.get('trad_train_acc'))
+                test_acc  = (info.get('loyo_avg_test_acc')
+                             if info.get('loyo_avg_test_acc') is not None
+                             else info.get('trad_test_acc'))
                 if train_acc is None:
                     train_acc, test_acc = _parse_trad_acc(d)
                 results.append({
@@ -460,7 +465,12 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
             try:
                 info = json.loads(info_file.read_text())
                 expert_tag = info.get('expert_tag', '')
-                train_acc, test_acc = info.get('trad_train_acc'), info.get('trad_test_acc')
+                train_acc = (info.get('loyo_avg_train_acc')
+                             if info.get('loyo_avg_train_acc') is not None
+                             else info.get('trad_train_acc'))
+                test_acc  = (info.get('loyo_avg_test_acc')
+                             if info.get('loyo_avg_test_acc') is not None
+                             else info.get('trad_test_acc'))
                 if train_acc is None:
                     train_acc, test_acc = _parse_trad_acc(PREDICTIONS_DIR / d.name)
                 results.append({
@@ -3799,8 +3809,8 @@ table.res-table tbody tr:hover td { background: #172554; }
         <th>SimData</th>
         <th class="sortable" data-sort="features" onclick="gaSortBy('features')">Features</th>
         <th class="sortable sort-desc" style="text-align:right" data-sort="score" onclick="gaSortBy('score')">Score</th>
-        <th class="sortable" style="text-align:right" data-sort="train_acc" onclick="gaSortBy('train_acc')">Train&nbsp;Acc</th>
-        <th class="sortable" style="text-align:right" data-sort="test_acc" onclick="gaSortBy('test_acc')">Test&nbsp;Acc</th>
+        <th class="sortable" style="text-align:right" data-sort="train_acc" onclick="gaSortBy('train_acc')">Avg&nbsp;Train</th>
+        <th class="sortable" style="text-align:right" data-sort="test_acc" onclick="gaSortBy('test_acc')">Avg&nbsp;Test</th>
         <th></th>
         <th></th>
       </tr></thead>
@@ -4897,8 +4907,8 @@ label.feat-chip[title] { cursor: help; }
         <th class="sortable" data-sort="features" onclick="savedSortBy('features')">Features</th>
         <th class="sortable" data-sort="params" onclick="savedSortBy('params')">Params</th>
         <th class="sortable sort-desc" style="width:70px;text-align:right" data-sort="score" onclick="savedSortBy('score')">Score</th>
-        <th class="sortable" style="width:72px;text-align:right" data-sort="train_acc" onclick="savedSortBy('train_acc')">Train&nbsp;Acc</th>
-        <th class="sortable" style="width:72px;text-align:right" data-sort="test_acc" onclick="savedSortBy('test_acc')">Test&nbsp;Acc</th>
+        <th class="sortable" style="width:72px;text-align:right" data-sort="train_acc" onclick="savedSortBy('train_acc')">Avg&nbsp;Train</th>
+        <th class="sortable" style="width:72px;text-align:right" data-sort="test_acc" onclick="savedSortBy('test_acc')">Avg&nbsp;Test</th>
       </tr></thead>
       <tbody id="saved-tbody"></tbody>
     </table>

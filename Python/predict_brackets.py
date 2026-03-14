@@ -1553,8 +1553,26 @@ def main():
     # -----------------------------------------------------------------------
     # Summary
     # -----------------------------------------------------------------------
+    # LOYO averages — exclude current year which has no test set.
+    loyo_stats = [s for s in year_model_stats if s['test_acc'] is not None]
+    loyo_avg_train_acc = (
+        sum(s['train_acc'] for s in loyo_stats) / len(loyo_stats)
+    ) if loyo_stats else None
+    loyo_avg_test_acc = (
+        sum(s['test_acc'] for s in loyo_stats) / len(loyo_stats)
+    ) if loyo_stats else None
+
     games_per_round = [32, 16, 8, 4, 2, 1]
     summary_lines = ['LEAVE-ONE-YEAR-OUT MODEL PERFORMANCE']
+    summary_lines.append('')
+    if loyo_avg_train_acc is not None:
+        summary_lines.append(
+            f'Avg LOYO train acc : {loyo_avg_train_acc:.4f}'
+        )
+    if loyo_avg_test_acc is not None:
+        summary_lines.append(
+            f'Avg LOYO test acc  : {loyo_avg_test_acc:.4f}  ({len(loyo_stats)} years)'
+        )
     summary_lines.append('')
     summary_lines.append('Per-year model accuracy:')
     for stat in year_model_stats:
@@ -1644,6 +1662,8 @@ def main():
         'feature_bases':  list(args.features),
         'trad_train_acc': round(trad_train_acc, 4),
         'trad_test_acc':  round(trad_test_acc, 4),
+        'loyo_avg_train_acc': round(loyo_avg_train_acc, 4) if loyo_avg_train_acc is not None else None,
+        'loyo_avg_test_acc':  round(loyo_avg_test_acc,  4) if loyo_avg_test_acc  is not None else None,
     }
     (final_output_root / 'model_info.json').write_text(json.dumps(model_info, indent=2))
     # -----------------------------------------------------------------------
