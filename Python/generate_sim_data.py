@@ -51,12 +51,6 @@ FEATURE-PERTURBATION (5 new — modify the team statistics themselves)
         λ ~ Beta(alpha, alpha).  Strong regularisation effect; the blended
         feature vectors occupy regions of space that no real team has occupied.
 
-  swap
-        Mirror every game row by swapping team-1 and team-2 (all __1 / __2
-        column pairs are exchanged, Win__1 is flipped).  Doubles the dataset
-        with zero information fabrication and eliminates slot-assignment bias.
-        Always produces exactly one swap per real row (ignores --n).
-
 Output:  Data/SimulatedData<identifier>/All.csv
 
 Usage examples
@@ -72,9 +66,6 @@ Usage examples
 
   # Mixup (alpha=2)
   python3 Python/generate_sim_data.py --method mixup --identifier Mixup2 --n 10
-
-  # Team-order swap (n is ignored)
-  python3 Python/generate_sim_data.py --method swap --identifier Swap --n 1
 
   # Original methods (unchanged)
   python3 Python/generate_sim_data.py --method margin --identifier Margin8 --std 8 --n 15
@@ -97,7 +88,6 @@ try:
         generate_correlated_noise,
         generate_smote,
         generate_mixup,
-        generate_swap,
         print_feature_diagnostics,
     )
     _SYN_METHODS_AVAILABLE = True
@@ -118,10 +108,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         '--method', default='noise',
         choices=['noise', 'margin', 'logistic',
-                 'feature_noise', 'correlated', 'smote', 'mixup', 'swap'],
+                 'feature_noise', 'correlated', 'smote', 'mixup'],
         help=(
             'Simulation method.  Score-perturbation: noise, margin, logistic.  '
-            'Feature-perturbation: feature_noise, correlated, smote, mixup, swap.'
+            'Feature-perturbation: feature_noise, correlated, smote, mixup.'
         ),
     )
     p.add_argument(
@@ -135,8 +125,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         '--n', type=int, required=True,
-        help='Number of simulated rows per real game row '
-             '(ignored for "swap", which always generates exactly 1 copy).',
+        help='Number of simulated rows per real game row.',
     )
     p.add_argument(
         '--score-std', type=float, default=6.0,
@@ -443,7 +432,7 @@ def main():
 
     # ---- method-specific validation ----
     score_methods   = {'noise', 'margin', 'logistic'}
-    feature_methods = {'feature_noise', 'correlated', 'smote', 'mixup', 'swap'}
+    feature_methods = {'feature_noise', 'correlated', 'smote', 'mixup'}
 
     if args.method in ('noise', 'margin') and args.std is None:
         parser.error(f'--std is required for --method {args.method}')
@@ -459,8 +448,6 @@ def main():
         )
     if args.n < 1:
         parser.error('--n must be at least 1.')
-    if args.method == 'swap' and args.n != 1:
-        print(f'Note: --n is ignored for "swap" (always generates 1 copy per row).')
 
     # ---- resolve paths ----
     script_dir = Path(__file__).resolve().parent
@@ -483,8 +470,7 @@ def main():
     print(f'Method         : {args.method}')
     print(f'Identifier     : SimulatedData{args.identifier}')
 
-    _is_swap = args.method == 'swap'
-    expected_rows = len(df) if _is_swap else len(df) * args.n
+    expected_rows = len(df) * args.n
 
     if args.method in ('noise', 'margin'):
         print(f'Noise sigma    : {args.std}')
@@ -497,8 +483,7 @@ def main():
         print(f'PCA components : {args.pca_components}')
     if args.method == 'mixup':
         print(f'Mixup alpha    : {args.mixup_alpha}')
-    if not _is_swap:
-        print(f'Copies/game    : {args.n}')
+    print(f'Copies/game    : {args.n}')
     print(f'Total sim rows : {expected_rows}')
     print(f'Random seed    : {args.seed}')
 
@@ -540,10 +525,6 @@ def main():
     elif args.method == 'mixup':
         sim_df = generate_mixup(df, args.n, rng,
                                 alpha=args.mixup_alpha)
-        print_feature_diagnostics(df, sim_df, args.method)
-
-    elif args.method == 'swap':
-        sim_df = generate_swap(df)
         print_feature_diagnostics(df, sim_df, args.method)
 
     else:

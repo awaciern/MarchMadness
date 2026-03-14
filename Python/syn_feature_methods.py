@@ -34,12 +34,6 @@ generate_mixup(df, n, rng, *, alpha)
     Categorical columns come from the row with the larger mixing weight;
     outcome is re-derived.
 
-generate_swap(df)
-    Creates one team-order-flipped mirror row for every real game.  No noise
-    is added.  Doubles the dataset and explicitly teaches any downstream model
-    that team-slot labelling is arbitrary.  Ignores ``n``; always produces
-    exactly 1 copy per row.
-
 Outcome re-derivation
 ---------------------
 After any feature perturbation the win label is re-derived probabilistically:
@@ -505,57 +499,6 @@ def generate_mixup(
 
 
 # ---------------------------------------------------------------------------
-# Method 8: Team-order swap
-# ---------------------------------------------------------------------------
-
-def _build_swap_map(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
-    """
-    Build lists of (col_1, col_2) pairs for swapping.
-    Only pairs where *both* columns exist in df are included.
-    """
-    cols_1 = [c for c in df.columns if c.endswith('__1')]
-    swap_1: List[str] = []
-    swap_2: List[str] = []
-    for c1 in cols_1:
-        c2 = c1[:-1] + '2'
-        if c2 in df.columns:
-            swap_1.append(c1)
-            swap_2.append(c2)
-    return swap_1, swap_2
-
-
-def generate_swap(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Mirror every game row by swapping team-1 and team-2.
-
-    Each column ``X__1`` is exchanged with ``X__2`` (team names, seeds,
-    stats, rank columns, …).  ``Win__1`` is flipped (1-Win__1); ``Score__1``
-    and ``Score__2`` are also swapped; ``Winning_Team`` remains correct.
-
-    Result size is always ``len(df)`` (one swap per real game, ignores ``n``).
-
-    This augmentation:
-    * Doubles the effective training set with zero information fabrication.
-    * Explicitly prevents models from learning a spurious team-slot bias
-      (real slot assignment in the bracket data is arbitrary).
-    """
-    swap_1, swap_2 = _build_swap_map(df)
-
-    sim_df = df.copy()
-
-    # Swap all __1 / __2 column pairs simultaneously
-    tmp = sim_df[swap_1].copy()
-    sim_df[swap_1] = sim_df[swap_2].values
-    sim_df[swap_2] = tmp.values
-
-    # Flip win label; Winning_Team is already correct after column swap
-    win1_num = pd.to_numeric(sim_df['Win__1'], errors='coerce')
-    sim_df['Win__1'] = (~win1_num.astype(bool)).astype(int)
-
-    return sim_df.reset_index(drop=True)
-
-
-# ---------------------------------------------------------------------------
 # Diagnostics
 # ---------------------------------------------------------------------------
 
@@ -591,7 +534,7 @@ def print_feature_diagnostics(
 
     # Feature-std drift: mean absolute % change in column std
     feat_cols = _perturbable_cols(df_real)
-    if feat_cols and method not in ('swap',):
+    if feat_cols:
         real_stds = df_real[feat_cols].apply(pd.to_numeric, errors='coerce').std()
         sim_stds  = df_sim[feat_cols].apply(pd.to_numeric, errors='coerce').std()
         valid = real_stds[real_stds > 0]
