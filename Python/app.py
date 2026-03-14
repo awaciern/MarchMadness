@@ -366,14 +366,8 @@ def scan_saved_models():
             try:
                 info = json.loads(info_file.read_text())
                 expert_tag = info.get('expert_tag', '')
-                train_acc = (info.get('loyo_avg_train_acc')
-                             if info.get('loyo_avg_train_acc') is not None
-                             else info.get('trad_train_acc'))
-                test_acc  = (info.get('loyo_avg_test_acc')
-                             if info.get('loyo_avg_test_acc') is not None
-                             else info.get('trad_test_acc'))
-                if train_acc is None:
-                    train_acc, test_acc = _parse_trad_acc(d)
+                train_acc = info.get('loyo_avg_train_acc')
+                test_acc  = info.get('loyo_avg_test_acc')
                 results.append({
                     'dir_name':   d.name,
                     'score':      info.get('score', 0),
@@ -465,14 +459,8 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
             try:
                 info = json.loads(info_file.read_text())
                 expert_tag = info.get('expert_tag', '')
-                train_acc = (info.get('loyo_avg_train_acc')
-                             if info.get('loyo_avg_train_acc') is not None
-                             else info.get('trad_train_acc'))
-                test_acc  = (info.get('loyo_avg_test_acc')
-                             if info.get('loyo_avg_test_acc') is not None
-                             else info.get('trad_test_acc'))
-                if train_acc is None:
-                    train_acc, test_acc = _parse_trad_acc(PREDICTIONS_DIR / d.name)
+                train_acc = info.get('loyo_avg_train_acc')
+                test_acc  = info.get('loyo_avg_test_acc')
                 results.append({
                     'dir_name':   d.name,
                     'model':      info.get('model_key', d.name),
