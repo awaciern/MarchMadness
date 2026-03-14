@@ -1200,6 +1200,13 @@ def main():
     )
     args = parser.parse_args()
 
+    # Canonically sort feature bases so the model is identical regardless of
+    # the order features are passed on the CLI / submitted from the UI.
+    # (For Random Forest, feature *index* affects which columns are selected at
+    # each split, so different input orderings with the same random_state would
+    # otherwise produce different trees and different predictions.)
+    args.features = sorted(set(args.features), key=str.lower)
+
     data_root = Path(args.data_root)
     model_params = parse_model_params(args.model_params)
     if model_params:
