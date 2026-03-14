@@ -2188,18 +2188,18 @@ function renderCorr() {
   if (!vizData || !vizData.win_correlation.length) { el.innerHTML = '<div class="empty-msg">No correlation data.</div>'; return; }
   const topN = parseInt(document.getElementById('topn-inp').value) || 30;
   const data = vizData.win_correlation.slice(0, topN);
-  const labels = data.map(function(d) { return d.label; }).reverse();
+  const labels = data.map(function(d, i) { return '#' + (i+1) + '  ' + d.label; }).reverse();
   const corrs  = data.map(function(d) { return d.corr; }).reverse();
   const colors = data.map(function(d) { return colorForGroup(d.group); }).reverse();
-  const texts  = data.map(function(d) {
-    return `Corr: ${d.corr.toFixed(3)}  |  Win rate when higher: ${(d.win_rate_higher*100).toFixed(1)}%  |  n=${d.n.toLocaleString()}`;
+  const texts  = data.map(function(d, i) {
+    return `#${i+1}  ${d.label}<br>Corr: ${d.corr.toFixed(3)}  |  Win rate when higher: ${(d.win_rate_higher*100).toFixed(1)}%  |  n=${d.n.toLocaleString()}`;
   }).reverse();
 
   const trace = {
     type: 'bar', orientation: 'h',
     x: corrs, y: labels,
     marker: {color: colors, opacity: 0.88},
-    hovertext: texts, hoverinfo: 'y+text',
+    hovertext: texts, hoverinfo: 'text',
     text: corrs.map(function(c) { return c.toFixed(3); }),
     textposition: 'outside',
     textfont: {size:9, color:'#64748b'},
@@ -2208,7 +2208,7 @@ function renderCorr() {
   const layout = Object.assign({}, PLOT_LAYOUT_BASE, {
     title: {text:'Win Correlation (point-biserial)', font:{color:'#cbd5e1',size:13}},
     height: h,
-    margin: {l:130,r:60,t:36,b:40},
+    margin: {l:165,r:60,t:36,b:40},
     xaxis: Object.assign({}, PLOT_LAYOUT_BASE.xaxis, {title:{text:'Correlation with Win',font:{size:11}}, range:[-0.55,0.55], zeroline:true}),
     yaxis: Object.assign({}, PLOT_LAYOUT_BASE.yaxis, {tickfont:{size:10}}),
     shapes: [{type:'line',x0:0,x1:0,y0:-0.5,y1:data.length-0.5,line:{color:'#334155',width:1,dash:'dot'}}],
@@ -2222,16 +2222,16 @@ function renderRF() {
   const el = document.getElementById('chart-rf');
   if (!vizData || !vizData.rf_importance.length) { el.innerHTML = '<div class="empty-msg">No RF importance data.</div>'; return; }
   const data = vizData.rf_importance;
-  const labels = data.map(function(d) { return d.label; }).reverse();
+  const labels = data.map(function(d, i) { return '#' + (i+1) + '  ' + d.label; }).reverse();
   const imps   = data.map(function(d) { return d.importance; }).reverse();
   const colors = data.map(function(d) { return colorForGroup(d.group); }).reverse();
-  const texts  = data.map(function(d) { return `Importance: ${(d.importance*100).toFixed(2)}%`; }).reverse();
+  const texts  = data.map(function(d, i) { return `#${i+1}  ${d.label}<br>Importance: ${(d.importance*100).toFixed(2)}%`; }).reverse();
 
   const trace = {
     type: 'bar', orientation: 'h',
     x: imps, y: labels,
     marker: {color: colors, opacity: 0.88},
-    hovertext: texts, hoverinfo: 'y+text',
+    hovertext: texts, hoverinfo: 'text',
     text: imps.map(function(v) { return (v*100).toFixed(2)+'%'; }),
     textposition: 'outside',
     textfont: {size:9, color:'#64748b'},
@@ -2240,7 +2240,7 @@ function renderRF() {
   const layout = Object.assign({}, PLOT_LAYOUT_BASE, {
     title: {text:'Random Forest Feature Importance (200 trees)', font:{color:'#cbd5e1',size:13}},
     height: h,
-    margin: {l:130,r:70,t:36,b:40},
+    margin: {l:165,r:70,t:36,b:40},
     xaxis: Object.assign({}, PLOT_LAYOUT_BASE.xaxis, {title:{text:'Importance',font:{size:11}}}),
     yaxis: Object.assign({}, PLOT_LAYOUT_BASE.yaxis, {tickfont:{size:10}}),
   });
@@ -2365,7 +2365,7 @@ select.ctrl-select{background:#1e293b;border:1px solid #334155;border-radius:6px
 .rank-toggle{display:flex;align-items:center;gap:5px;font-size:11px;color:#64748b;cursor:pointer;user-select:none}
 .rank-toggle input{cursor:pointer;accent-color:#fbbf24}
 .stat-bar{padding:5px 24px;font-size:11px;color:#475569;min-height:20px}
-.table-wrap{overflow-x:auto;padding:0 12px 40px}
+.table-wrap{overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 145px);padding:0 12px 0}
 table{border-collapse:collapse;font-size:11.5px;white-space:nowrap;min-width:100%}
 thead th{background:#0b1120;color:#94a3b8;font-weight:600;padding:6px 8px;text-align:right;cursor:pointer;user-select:none;position:sticky;z-index:2;transition:color .12s}
 thead tr:first-child th{top:0;z-index:3;border-bottom:1px solid #0f172a;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:4px 8px}
