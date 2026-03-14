@@ -1328,13 +1328,19 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
             _simulate_one, to_html, get_actual_results, ROUND_LABELS as _ROUND_LABELS,
         )
         from predict_brackets import (                 # pylint: disable=import-error
-            TemperatureScaledModel,  # noqa: F401 – must be imported before pickle.load
+            TemperatureScaledModel,
             load_bracket_round, load_kenpom,
             load_barttorvik, load_barttorvik_2week, load_barttorvik_hotness,
             attach_kenpom, attach_barttorvik,
             attach_barttorvik_2week, attach_barttorvik_hotness,
             apply_label_encoders, apply_year_norm_single,
             apply_delta_transform, parse_ff_pairings_arg,
+        )
+
+        # TemperatureScaledModel must live in __main__ so pickle can locate it
+        # when models were trained while predict_brackets.py ran as __main__.
+        sys.modules['__main__'].__dict__.setdefault(
+            'TemperatureScaledModel', TemperatureScaledModel
         )
 
         # ---- Load model pickle ----
