@@ -1467,31 +1467,88 @@ def main():
         out_path.write_text(html_str, encoding='utf-8')
 
     # -----------------------------------------------------------------------
-    # Traditional random train/test split model (for reference comparison).
+    # Reference model: behaviour depends on whether simulated data was used.
+    #
+    # No sim data  →  traditional 67/33 random train/test split on real data.
+    # Sim data     →  train on full sim+real dataset; test on real data only.
+    #                 This makes both numbers meaningful: train acc reflects
+    #                 what the model actually learned on the augmented set, and
+    #                 test acc is the accuracy on unperturbed real games (the
+    #                 ground truth), avoiding the misleading 100% that an
+    #                 unconstrained tree scores when evaluated on its own
+    #                 (identical-feature) training copies.
     # -----------------------------------------------------------------------
-    print(f'\n{"="*50}\nTRADITIONAL 67/33 TRAIN-TEST SPLIT MODEL\n{"="*50}')
-    df_trad = df_all_raw[df_all_raw['Year'].isin(ALL_YEARS) & ~df_all_raw['Year'].isin(exclude_years)].copy()
-    if cat_encoders:
-        df_trad = apply_label_encoders(df_trad, cat_encoders)
-    if norm_info is not None:
-        df_trad = apply_year_norm(df_trad, norm_info)
-    if delta_feats and numeric_bases:
-        df_trad = apply_delta_transform(df_trad, numeric_bases)
-    X_trad, y_trad = df_trad[model_feature_list], df_trad['Win__1']
-    X_tr_t, X_te_t, y_tr_t, y_te_t = train_test_split(X_trad, y_trad, test_size=0.33, random_state=42)
-    if delta_feats and numeric_bases:
-        # Mirror-augment only the training split (avoid leaking mirrored test rows into train).
-        df_tr_t = pd.concat([X_tr_t, y_tr_t], axis=1)
-        df_tr_t = mirror_augment(df_tr_t, model_feature_list)
-        X_tr_t, y_tr_t = df_tr_t[model_feature_list], df_tr_t['Win__1']
-    model_trad = build_and_train_model(
-        args.model, X_tr_t, y_tr_t, model_params,
-        calibrate=calibrate, calibrate_temperature=calibrate_temperature,
-        calibrate_mode=calibrate_mode, calibrate_target=calibrate_target,
-    )
-    trad_train_acc = model_trad.score(X_tr_t, y_tr_t)
-    trad_test_acc  = model_trad.score(X_te_t, y_te_t)
-    print(f'  Train acc: {trad_train_acc:.4f}  |  Test acc: {trad_test_acc:.4f}')
+    if df_sim_raw is not None:
+        print(f'\n{"="*50}\nSIM DATA REFERENCE MODEL (train=sim+real, test=real only)\n{"="*50}')
+
+        # Real data — full set, preprocessed the same way as during training.
+        df_real_ref = df_all_raw[
+            df_all_raw['Year'].isin(ALL_YEARS) & ~df_all_raw['Year'].isin(exclude_years)
+        ].copy()
+        if cat_encoders:
+            df_real_ref = apply_label_encoders(df_real_ref, cat_encoders)
+        if norm_info is not None:
+            df_real_ref = apply_year_norm(df_real_ref, norm_info)
+        if delta_feats and numeric_bases:
+            df_real_ref = apply_delta_transform(df_real_ref, numeric_bases)
+
+        # Sim data — apply the same preprocessing chain.
+        df_sim_ref = df_sim_raw[
+            ~df_sim_raw['Year'].isin(exclude_years)
+        ].copy() if exclude_years else df_sim_raw.copy()
+        if cat_encoders:
+            df_sim_ref = apply_label_encoders(df_sim_ref, cat_encoders)
+        if norm_info is not None:
+            df_sim_ref = apply_year_norm(df_sim_ref, norm_info)
+        if delta_feats and numeric_bases:
+            df_sim_ref = apply_delta_transform(df_sim_ref, numeric_bases)
+
+        # Training set = sim + real (all rows).
+        df_train_ref = pd.concat([df_real_ref, df_sim_ref], ignore_index=True)
+        if delta_feats and numeric_bases:
+            df_train_ref = mirror_augment(df_train_ref, model_feature_list)
+
+        X_tr_t = df_train_ref[model_feature_list]
+        y_tr_t = df_train_ref['Win__1']
+        # Test set = real data only.
+        X_te_t = df_real_ref[model_feature_list]
+        y_te_t = df_real_ref['Win__1']
+
+        model_trad = build_and_train_model(
+            args.model, X_tr_t, y_tr_t, model_params,
+            calibrate=calibrate, calibrate_temperature=calibrate_temperature,
+            calibrate_mode=calibrate_mode, calibrate_target=calibrate_target,
+        )
+        trad_train_acc = model_trad.score(X_tr_t, y_tr_t)
+        trad_test_acc  = model_trad.score(X_te_t, y_te_t)
+        trad_split_label = f'Sim+real train acc: {trad_train_acc:.4f}  |  Real-only test acc: {trad_test_acc:.4f}'
+        print(f'  {trad_split_label}')
+        print(f'  (Training rows: {len(X_tr_t)} sim+real — Test rows: {len(X_te_t)} real only)')
+    else:
+        print(f'\n{"="*50}\nTRADITIONAL 67/33 TRAIN-TEST SPLIT MODEL\n{"="*50}')
+        df_trad = df_all_raw[df_all_raw['Year'].isin(ALL_YEARS) & ~df_all_raw['Year'].isin(exclude_years)].copy()
+        if cat_encoders:
+            df_trad = apply_label_encoders(df_trad, cat_encoders)
+        if norm_info is not None:
+            df_trad = apply_year_norm(df_trad, norm_info)
+        if delta_feats and numeric_bases:
+            df_trad = apply_delta_transform(df_trad, numeric_bases)
+        X_trad, y_trad = df_trad[model_feature_list], df_trad['Win__1']
+        X_tr_t, X_te_t, y_tr_t, y_te_t = train_test_split(X_trad, y_trad, test_size=0.33, random_state=42)
+        if delta_feats and numeric_bases:
+            # Mirror-augment only the training split (avoid leaking mirrored test rows into train).
+            df_tr_t = pd.concat([X_tr_t, y_tr_t], axis=1)
+            df_tr_t = mirror_augment(df_tr_t, model_feature_list)
+            X_tr_t, y_tr_t = df_tr_t[model_feature_list], df_tr_t['Win__1']
+        model_trad = build_and_train_model(
+            args.model, X_tr_t, y_tr_t, model_params,
+            calibrate=calibrate, calibrate_temperature=calibrate_temperature,
+            calibrate_mode=calibrate_mode, calibrate_target=calibrate_target,
+        )
+        trad_train_acc = model_trad.score(X_tr_t, y_tr_t)
+        trad_test_acc  = model_trad.score(X_te_t, y_te_t)
+        trad_split_label = f'Train acc: {trad_train_acc:.4f}  |  Test acc: {trad_test_acc:.4f}'
+        print(f'  {trad_split_label}')
 
     # -----------------------------------------------------------------------
     # Summary
@@ -1531,8 +1588,11 @@ def main():
         summary_lines.append(f'  Avg bracket score: {total_score / num_eval_years:.1f}')
 
     summary_lines.append('')
-    summary_lines.append('TRADITIONAL 67/33 TRAIN-TEST SPLIT MODEL (for reference)')
-    summary_lines.append(f'  Train acc: {trad_train_acc:.4f}  |  Test acc: {trad_test_acc:.4f}')
+    if df_sim_raw is not None:
+        summary_lines.append('SIM DATA REFERENCE MODEL (train=sim+real, test=real only)')
+    else:
+        summary_lines.append('TRADITIONAL 67/33 TRAIN-TEST SPLIT MODEL (for reference)')
+    summary_lines.append(f'  {trad_split_label}')
 
     summary_str = '\n'.join(summary_lines)
     print(f'\n{summary_str}')
