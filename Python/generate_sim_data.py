@@ -3,56 +3,83 @@
 generate_sim_data.py
 --------------------
 Generate simulated training data from real tournament game rows.
-Three generation methods are supported:
+Eight generation methods are supported, grouped by what they perturb:
 
-  noise     (original)
-            Add independent Gaussian noise to Score__1 and Score__2 and
-            recompute the winner.  Simple, but perturbs total game scoring
-            (which is driven by tempo, a real feature) along with the
-            competitive margin.
+SCORE-PERTURBATION (original 3 — perturb game outcomes only, features unchanged)
+─────────────────────────────────────────────────────────────────────────────────
+  noise
+        Add independent Gaussian noise to Score__1 and Score__2 and
+        recompute the winner.  Simple, but conflates tempo-driven total
+        scoring with competitive uncertainty.
 
-  margin    (new)
-            Perturb only the point spread while keeping the total game score
-            fixed.  More physically meaningful: pace/tempo determines how
-            many total points are scored; the competitive uncertainty should
-            be a perturbation of the margin alone.
-              margin_sim = (s1 - s2) + N(0, sigma)
-              s1_sim = (s_total + margin_sim) / 2
-              s2_sim = (s_total - margin_sim) / 2
+  margin
+        Perturb only the point spread while keeping the total game score
+        fixed.  More physically grounded: pace/tempo determines how many
+        total points are scored; only the competitive margin is uncertain.
+          margin_sim = (s1 - s2) + N(0, sigma)
+          s1_sim = (s_total + margin_sim) / 2  ;  s2_sim = (s_total - margin_sim) / 2
 
-  logistic  (new)
-            Sample win/loss outcomes directly from a win probability that is
-            grounded in team-quality features -- no score corruption at all.
-            Uses the Bradley-Terry model applied to BartTorvik Barthag ratings:
-              p_win1 = odds1 / (odds1 + odds2),  odds_i = Barthag_i / (1-Barthag_i)
-            Then samples Win__1 ~ Bernoulli(p_win1) independently for each
-            simulated row.  Synthetic scores that are consistent with the
-            sampled outcome are generated from KenPom AdjO / AdjD / AdjT so
-            that score columns remain plausible (needed if downstream code reads
-            scores, though they are not model features):
-              tempo   = (AdjT1 + AdjT2) / 2
-              s1_exp  = AdjO1 * tempo / 100
-              s2_exp  = AdjO2 * tempo / 100
-            A correlated noise term (Bivariate Normal with rho=0.5) is added
-            to reflect the real positive correlation between the two teams'
-            scores.  If the noisy scores contradict the sampled outcome, the
-            margin sign is corrected without re-drawing.
+  logistic
+        Sample win/loss outcomes from a Bradley-Terry win probability derived
+        from BartTorvik Barthag ratings.  Scores are synthesised from KenPom
+        AdjO/AdjT with correlated Bivariate Normal noise (rho=0.5).
 
-Output is written to:
-    Data/SimulatedData<identifier>/All.csv
+FEATURE-PERTURBATION (5 new — modify the team statistics themselves)
+──────────────────────────────────────────────────────────────────────
+  feature_noise                                       (--feat-noise-frac)
+        Add independent Gaussian noise to every numeric feature column
+        (KenPom, BartTorvik, 2-week BT, hotness delta, win records, …).
+        Noise std = noise_frac × std(column).  Win outcome re-derived via
+        Bradley-Terry from the noisy Barthag values.
 
-Usage examples:
-    # margin method, std=8, 15 copies per game
-    python3 Python/generate_sim_data.py --method margin --identifier Margin8 --std 8 --n 15
+  correlated                                          (--feat-noise-frac)
+        Multivariate Gaussian noise using a Ledoit-Wolf regularised empirical
+        covariance matrix fitted on the team-1 feature set from the real data.
+        Related statistics (AdjO / Barthag / EFG%) move together rather than
+        independently, generating more realistic synthetic teams.  The same
+        covariance structure is applied independently to team-2 features.
 
-    # logistic method (Barthag-grounded), 20 copies per game
-    python3 Python/generate_sim_data.py --method logistic --identifier BT20 --n 20
+  smote                              (--k-neighbors, --pca-components)
+        K-NN SMOTE-style interpolation: for each real row, find its k nearest
+        neighbours in PCA-compressed feature space, pick one uniformly at
+        random, and linearly interpolate at λ ~ U(0,1) in the original space.
+        Creates genuinely new matchup scenarios that lie between real games.
 
-    # original Gaussian noise
-    python3 Python/generate_sim_data.py --method noise --identifier Noise5 --std 5 --n 15
+  mixup                                               (--mixup-alpha)
+        Random-pair convex combination (Zhang et al. 2018): two rows drawn
+        independently and blended as  x = λ·xᵢ + (1−λ)·xⱼ  with
+        λ ~ Beta(alpha, alpha).  Strong regularisation effect; the blended
+        feature vectors occupy regions of space that no real team has occupied.
 
-    # dry run
-    python3 Python/generate_sim_data.py --method logistic --identifier BT20 --n 20 --dry-run
+  swap
+        Mirror every game row by swapping team-1 and team-2 (all __1 / __2
+        column pairs are exchanged, Win__1 is flipped).  Doubles the dataset
+        with zero information fabrication and eliminates slot-assignment bias.
+        Always produces exactly one swap per real row (ignores --n).
+
+Output:  Data/SimulatedData<identifier>/All.csv
+
+Usage examples
+──────────────
+  # Feature noise (5% of each column's std)
+  python3 Python/generate_sim_data.py --method feature_noise --identifier FeatNoise --n 10
+
+  # Correlated MVN noise (8% of each column's std)
+  python3 Python/generate_sim_data.py --method correlated --identifier Corr8 --n 10 --feat-noise-frac 0.08
+
+  # SMOTE interpolation, 5 neighbours
+  python3 Python/generate_sim_data.py --method smote --identifier SMOTE5 --n 5
+
+  # Mixup (alpha=2)
+  python3 Python/generate_sim_data.py --method mixup --identifier Mixup2 --n 10
+
+  # Team-order swap (n is ignored)
+  python3 Python/generate_sim_data.py --method swap --identifier Swap --n 1
+
+  # Original methods (unchanged)
+  python3 Python/generate_sim_data.py --method margin --identifier Margin8 --std 8 --n 15
+  python3 Python/generate_sim_data.py --method logistic --identifier BT20 --n 20
+  python3 Python/generate_sim_data.py --method noise --identifier Noise5 --std 5 --n 15
 """
 
 import argparse
@@ -61,6 +88,21 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+# Feature-space methods live in a companion module to keep this file readable
+_SYN_METHODS_AVAILABLE = False
+try:
+    from syn_feature_methods import (
+        generate_feature_noise,
+        generate_correlated_noise,
+        generate_smote,
+        generate_mixup,
+        generate_swap,
+        print_feature_diagnostics,
+    )
+    _SYN_METHODS_AVAILABLE = True
+except ImportError:
+    pass  # will error at dispatch time if user tries to use these methods
 
 
 # ---------------------------------------------------------------------------
@@ -75,33 +117,58 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         '--method', default='noise',
-        choices=['noise', 'margin', 'logistic'],
+        choices=['noise', 'margin', 'logistic',
+                 'feature_noise', 'correlated', 'smote', 'mixup', 'swap'],
         help=(
-            'Simulation method: '
-            '"noise" = independent Gaussian score noise (original); '
-            '"margin" = margin-only perturbation, total score preserved; '
-            '"logistic" = feature-grounded Bernoulli outcome sampling via Barthag.'
+            'Simulation method.  Score-perturbation: noise, margin, logistic.  '
+            'Feature-perturbation: feature_noise, correlated, smote, mixup, swap.'
         ),
     )
     p.add_argument(
         '--identifier', required=True,
-        help='Unique name for this dataset (e.g. "Margin8"). '
+        help='Unique name for this dataset (e.g. "FeatNoise"). '
              'Output is written to Data/SimulatedData<identifier>/All.csv.',
     )
     p.add_argument(
         '--std', type=float, default=None,
-        help='Standard deviation of the perturbation noise.  Required for '
-             '"noise" and "margin" methods.  Not used for "logistic".',
+        help='Noise std-dev for "noise" and "margin" methods.',
     )
     p.add_argument(
         '--n', type=int, required=True,
-        help='Number of simulated rows to produce per real game row.',
+        help='Number of simulated rows per real game row '
+             '(ignored for "swap", which always generates exactly 1 copy).',
     )
     p.add_argument(
         '--score-std', type=float, default=6.0,
-        help='(logistic only) Std-dev of per-team score noise around the '
-             'KenPom-expected score.  Default: 6.0 points.',
+        help='(logistic only) Std-dev of score noise around KenPom expectation. '
+             'Default: 6.0.',
     )
+    # ---- feature-perturbation knobs ----
+    p.add_argument(
+        '--feat-noise-frac', type=float, default=0.05,
+        dest='feat_noise_frac',
+        help='(feature_noise / correlated) Noise level as a fraction of each '
+             'column\'s std dev.  Default: 0.05 (5%%).',
+    )
+    p.add_argument(
+        '--k-neighbors', type=int, default=5,
+        dest='k_neighbors',
+        help='(smote) Number of nearest neighbours to consider per row. '
+             'Default: 5.',
+    )
+    p.add_argument(
+        '--pca-components', type=int, default=20,
+        dest='pca_components',
+        help='(smote) Number of PCA components used for the kNN index. '
+             'Default: 20.',
+    )
+    p.add_argument(
+        '--mixup-alpha', type=float, default=2.0,
+        dest='mixup_alpha',
+        help='(mixup) Beta distribution concentration parameter. '
+             'Higher = more blending.  Default: 2.0.',
+    )
+    # ---- common options ----
     p.add_argument(
         '--source', default=None,
         help='Explicit path to source All.csv. '
@@ -109,8 +176,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         '--data-root', default=None,
-        help='Path to repo root (directory containing Data/). '
-             'Inferred from this script\'s location if omitted.',
+        help='Path to repo root.  Inferred from this script\'s location if omitted.',
     )
     p.add_argument(
         '--seed', type=int, default=42,
@@ -375,18 +441,28 @@ def main():
     parser = build_arg_parser()
     args   = parser.parse_args()
 
-    # Validate method-specific args
+    # ---- method-specific validation ----
+    score_methods   = {'noise', 'margin', 'logistic'}
+    feature_methods = {'feature_noise', 'correlated', 'smote', 'mixup', 'swap'}
+
     if args.method in ('noise', 'margin') and args.std is None:
         parser.error(f'--std is required for --method {args.method}')
     if args.method == 'logistic' and args.std is not None:
         print(f'Note: --std is ignored for --method logistic '
-              f'(using --score-std={args.score_std} for synthetic score generation)')
+              f'(using --score-std={args.score_std} for score generation)')
     if args.method in ('noise', 'margin') and args.std is not None and args.std <= 0:
         parser.error('--std must be positive.')
+    if args.method in feature_methods and not _SYN_METHODS_AVAILABLE:
+        parser.error(
+            f'Method "{args.method}" requires syn_feature_methods.py to be present '
+            'in the same directory as generate_sim_data.py.'
+        )
     if args.n < 1:
         parser.error('--n must be at least 1.')
+    if args.method == 'swap' and args.n != 1:
+        print(f'Note: --n is ignored for "swap" (always generates 1 copy per row).')
 
-    # Resolve paths
+    # ---- resolve paths ----
     script_dir = Path(__file__).resolve().parent
     data_root  = Path(args.data_root) if args.data_root else script_dir.parent
     source     = Path(args.source) if args.source else (
@@ -401,16 +477,29 @@ def main():
 
     df = pd.read_csv(source)
 
+    # ---- print run summary ----
     print(f'Source         : {source}')
     print(f'Real games     : {len(df)} rows  ({df["Year"].nunique()} years)')
     print(f'Method         : {args.method}')
     print(f'Identifier     : SimulatedData{args.identifier}')
+
+    _is_swap = args.method == 'swap'
+    expected_rows = len(df) if _is_swap else len(df) * args.n
+
     if args.method in ('noise', 'margin'):
         print(f'Noise sigma    : {args.std}')
     if args.method == 'logistic':
         print(f'Score noise    : {args.score_std}  (synthetic score generation only)')
-    print(f'Copies/game    : {args.n}')
-    print(f'Total sim rows : {len(df) * args.n}')
+    if args.method in ('feature_noise', 'correlated'):
+        print(f'Feat noise frac: {args.feat_noise_frac}  (×std per column)')
+    if args.method == 'smote':
+        print(f'K neighbours   : {args.k_neighbors}')
+        print(f'PCA components : {args.pca_components}')
+    if args.method == 'mixup':
+        print(f'Mixup alpha    : {args.mixup_alpha}')
+    if not _is_swap:
+        print(f'Copies/game    : {args.n}')
+    print(f'Total sim rows : {expected_rows}')
     print(f'Random seed    : {args.seed}')
 
     if args.dry_run:
@@ -419,16 +508,46 @@ def main():
 
     rng = np.random.default_rng(args.seed)
 
+    # ---- dispatch ----
     if args.method == 'noise':
         sim_df = generate_noise(df, args.std, args.n, rng)
+        print_diagnostics(df, sim_df, args.method)
+
     elif args.method == 'margin':
         sim_df = generate_margin(df, args.std, args.n, rng)
+        print_diagnostics(df, sim_df, args.method)
+
     elif args.method == 'logistic':
         sim_df = generate_logistic(df, args.n, args.score_std, rng)
+        print_diagnostics(df, sim_df, args.method)
+
+    elif args.method == 'feature_noise':
+        sim_df = generate_feature_noise(df, args.n, rng,
+                                        noise_frac=args.feat_noise_frac)
+        print_feature_diagnostics(df, sim_df, args.method)
+
+    elif args.method == 'correlated':
+        sim_df = generate_correlated_noise(df, args.n, rng,
+                                           noise_frac=args.feat_noise_frac)
+        print_feature_diagnostics(df, sim_df, args.method)
+
+    elif args.method == 'smote':
+        sim_df = generate_smote(df, args.n, rng,
+                                k_neighbors=args.k_neighbors,
+                                pca_components=args.pca_components)
+        print_feature_diagnostics(df, sim_df, args.method)
+
+    elif args.method == 'mixup':
+        sim_df = generate_mixup(df, args.n, rng,
+                                alpha=args.mixup_alpha)
+        print_feature_diagnostics(df, sim_df, args.method)
+
+    elif args.method == 'swap':
+        sim_df = generate_swap(df)
+        print_feature_diagnostics(df, sim_df, args.method)
+
     else:
         raise ValueError(f'Unknown method: {args.method}')
-
-    print_diagnostics(df, sim_df, args.method)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     sim_df.to_csv(out_path, index=False)
