@@ -99,7 +99,7 @@ BTHOT_BASES = [
 
 METADATA_BASES = ['Seed']
 
-DEFAULT_FEATURES = ['WinPct', 'KP_AdjO', 'KP_AdjD', 'AdjEM']
+DEFAULT_FEATURES = ['WinPct', 'KP_AdjO', 'KP_AdjD', 'SOS_AdjEM']
 
 # ---------------------------------------------------------------------------
 # Simplified UI feature lists (6 categories shown in the web form)
