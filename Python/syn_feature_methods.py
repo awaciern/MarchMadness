@@ -137,7 +137,13 @@ def _rederive_outcome(
             pd.to_numeric(sim_df['BT__Barthag__2'], errors='coerce').fillna(0.5).values,
             eps, 1 - eps,
         )
-        logit_diff = np.log(b1 / (1 - b1)) - np.log(b2 / (1 - b2))
+        # The raw Barthag values can produce very large logit differences
+        # when synthetic teams are more separated than real teams. To avoid
+        # producing an outcome distribution that is overly biased, apply a
+        # damping (temperature) factor to the logit difference. Higher
+        # `barthag_scale` moves probabilities toward 0.5.
+        barthag_scale = 3.0
+        logit_diff = (np.log(b1 / (1 - b1)) - np.log(b2 / (1 - b2))) / barthag_scale
         p_win1 = 1.0 / (1.0 + np.exp(-logit_diff))
 
     # --- Logistic fallback from KenPom AdjEM ---
@@ -589,32 +595,79 @@ def generate_bootstrap_pairs(
                       team2_block.rename(columns=dict(zip(t2_cols, pool_cols)))],
                      ignore_index=True)
 
+    # Fill missing and convert to numeric array
     pool = pool.fillna(0.0)
     pool_vals = pool.values.astype(float)
     pool_size = len(pool)
+
+    # Standardise pooled team vectors to z-scores, clip extremes, then
+    # inverse-transform when assembling new rows. This avoids creating
+    # synthetic teams with unrealistic variances that blow up features.
+    from sklearn.preprocessing import StandardScaler
+
+    scaler = StandardScaler()
+    scaler.fit(pool_vals)
+    pool_z = scaler.transform(pool_vals)
+
+    # clamp extreme z-scores to a reasonable range (±3 stddev)
+    z_clip = 3.0
+    pool_z_clipped = np.clip(pool_z, -z_clip, z_clip)
 
     sim_rows = []
     for i in range(total):
         base = df.iloc[i]
         for _ in range(n):
-            # sample two team vectors independently
             ia = int(rng.integers(0, pool_size))
             ib = int(rng.integers(0, pool_size))
-            a = pool_vals[ia]
-            b = pool_vals[ib]
 
-            # Start with base row to inherit categorical/identity fields
+            # Inverse-transform the clipped z-scores back to original scale
+            a = scaler.inverse_transform(pool_z_clipped[ia].reshape(1, -1))[0].astype(float)
+            b = scaler.inverse_transform(pool_z_clipped[ib].reshape(1, -1))[0].astype(float)
+
             new_row = base.copy()
-            # write team-A into team-1 cols and team-B into team-2 cols
             for j, col in enumerate(t1_cols):
-                new_row[col] = a[j]
+                # Guard against dimension mismatch
+                if j < a.shape[0]:
+                    new_row[col] = a[j]
             for j, col in enumerate(t2_cols):
-                # match by position: if t1_cols and t2_cols align this is fine
                 if j < b.shape[0]:
                     new_row[col] = b[j]
             sim_rows.append(new_row)
 
     sim_df = pd.DataFrame(sim_rows).reset_index(drop=True)
+
+    # --- Additional fixes: per-column std matching and tiny noise ---
+    # Align simulated feature means/stds to the real data to avoid
+    # large multiplicative std drift observed previously.
+    pert_cols = [c for c in (t1_cols + t2_cols) if c in sim_df.columns]
+    if pert_cols:
+        for col in pert_cols:
+            real_col = pd.to_numeric(df[col], errors='coerce').dropna()
+            sim_col = pd.to_numeric(sim_df[col], errors='coerce')
+            if real_col.empty:
+                continue
+            real_mean = float(real_col.mean())
+            real_std = float(real_col.std())
+            sim_mean = float(sim_col.mean())
+            sim_std = float(sim_col.std())
+            if sim_std > 1e-8 and real_std > 0:
+                # Affine rescale: preserve sim distribution shape but match
+                # the real data mean and std to prevent runaway variance.
+                sim_df[col] = ((sim_df[col] - sim_mean) * (real_std / sim_std)) + real_mean
+            else:
+                # If sim variance is zero or tiny, just set to real mean
+                sim_df[col] = real_mean
+
+        # Add a tiny amount of independent Gaussian noise (2% of real std)
+        # to break perfect duplication and give models mild variation.
+        for col in pert_cols:
+            real_col = pd.to_numeric(df[col], errors='coerce').dropna()
+            if real_col.empty:
+                continue
+            real_std = float(real_col.std())
+            noise_scale = max(1e-8, 0.02 * real_std)
+            sim_df[col] = sim_df[col] + rng.normal(0.0, noise_scale, size=len(sim_df))
+
     # Re-derive win outcomes probabilistically
     sim_df = _rederive_outcome(sim_df, rng)
     return sim_df
