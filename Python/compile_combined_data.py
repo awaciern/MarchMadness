@@ -24,7 +24,7 @@ import pandas as pd
 # Configuration
 # ---------------------------------------------------------------------------
 
-ALL_YEARS = [y for y in range(2012, 2026) if y != 2020]
+ALL_YEARS = [y for y in range(2012, 2027) if y != 2020]
 BRACKET_ROUNDS = range(1, 7)  # rounds 1–6
 
 
