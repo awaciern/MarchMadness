@@ -489,11 +489,15 @@ class TorchClassifier:
 
         for epoch in range(self.epochs):
             self.model_.train()
-            # In-memory shuffle + slice — no DataLoader overhead
+            # In-memory shuffle + slice — no DataLoader overhead.
+            # Skip a trailing batch of size 1: BatchNorm requires >1 sample.
             perm = torch.randperm(n_tr, device=self.device_)
             for start in range(0, n_tr, self.batch_size):
-                xb = X_tr_t[perm[start:start + self.batch_size]]
-                yb = y_tr_t[perm[start:start + self.batch_size]]
+                end = min(start + self.batch_size, n_tr)
+                if end - start == 1:
+                    continue  # drop lone-sample tail — safe, only ~1 row lost
+                xb = X_tr_t[perm[start:end]]
+                yb = y_tr_t[perm[start:end]]
                 optimizer.zero_grad(set_to_none=True)
                 if _amp_enabled:
                     with torch.autocast(device_type=_device_type, dtype=_amp_dtype):
