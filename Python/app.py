@@ -2071,9 +2071,10 @@ const selectedRounds = new Set([1,2,3,4,5,6]);
 /* --- Init year chips --- */
 (function() {
   const wrap = document.getElementById('year-chips');
+  const DEFAULT_EXCL = new Set([2012, 2013, 2014]);
   ALL_YEARS.forEach(function(y) {
     const chip = document.createElement('span');
-    chip.className = 'year-chip';
+    chip.className = DEFAULT_EXCL.has(y) ? 'year-chip excl' : 'year-chip';
     chip.textContent = y;
     chip.dataset.year = y;
     chip.addEventListener('click', function() {
@@ -5409,11 +5410,17 @@ function initExclYears() {
     cb.type = 'checkbox';
     cb.value = y;
     cb.style.cssText = 'accent-color:#f87171;cursor:pointer;width:11px;height:11px';
+    cb.checked = [2012, 2013, 2014].includes(y);
     cb.addEventListener('change', function() {
       lbl.style.background = cb.checked ? '#450a0a' : '#1e293b';
       lbl.style.borderColor = cb.checked ? '#f87171' : '#334155';
       lbl.style.color       = cb.checked ? '#fca5a5' : '#94a3b8';
     });
+    if (cb.checked) {
+      lbl.style.background = '#450a0a';
+      lbl.style.borderColor = '#f87171';
+      lbl.style.color = '#fca5a5';
+    }
     lbl.appendChild(cb);
     lbl.appendChild(document.createTextNode('\u00a0' + y));
     wrap.appendChild(lbl);
