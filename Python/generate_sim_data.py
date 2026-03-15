@@ -90,6 +90,12 @@ try:
         generate_mixup,
         print_feature_diagnostics,
     )
+    # new methods
+    try:
+        from syn_feature_methods import generate_bootstrap_pairs, generate_gmm_teams
+    except Exception:
+        # safe to ignore; dispatch will error if methods are missing
+        pass
     _SYN_METHODS_AVAILABLE = True
 except ImportError:
     pass  # will error at dispatch time if user tries to use these methods
@@ -108,7 +114,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         '--method', default='noise',
         choices=['noise', 'margin', 'logistic',
-                 'feature_noise', 'correlated', 'smote', 'mixup'],
+                 'feature_noise', 'correlated', 'smote', 'mixup',
+                 'bootstrap', 'gmm_teams'],
         help=(
             'Simulation method.  Score-perturbation: noise, margin, logistic.  '
             'Feature-perturbation: feature_noise, correlated, smote, mixup.'
@@ -525,6 +532,15 @@ def main():
     elif args.method == 'mixup':
         sim_df = generate_mixup(df, args.n, rng,
                                 alpha=args.mixup_alpha)
+        print_feature_diagnostics(df, sim_df, args.method)
+
+    elif args.method == 'bootstrap':
+        sim_df = generate_bootstrap_pairs(df, args.n, rng)
+        print_feature_diagnostics(df, sim_df, args.method)
+
+    elif args.method == 'gmm_teams':
+        # n_components chosen automatically inside method if needed
+        sim_df = generate_gmm_teams(df, args.n, rng)
         print_feature_diagnostics(df, sim_df, args.method)
 
     else:

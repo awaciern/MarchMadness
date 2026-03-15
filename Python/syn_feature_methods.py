@@ -542,3 +542,140 @@ def print_feature_diagnostics(
         print(f'  Feature std drift (mean |Δstd/std|): '
               f'{pct_change.mean():.4f}  max={pct_change.max():.4f}  '
               f'({method} method)')
+
+
+# ---------------------------------------------------------------------------
+# New Method: bootstrap pairs
+# ---------------------------------------------------------------------------
+def generate_bootstrap_pairs(
+    df: pd.DataFrame,
+    n: int,
+    rng: np.random.Generator,
+) -> pd.DataFrame:
+    """
+    Create synthetic games by pairing team-1 and team-2 blocks drawn from
+    the empirical distribution of real teams. This preserves realistic team
+    statistics while creating novel matchups that did not occur historically.
+
+    For each real row we draw `n` synthetic matchups by sampling two team
+    feature blocks (team-A and team-B) independently from the pool of
+    observed team feature vectors, then assemble a new game row. Outcome
+    is re-derived via Bradley-Terry from sampled Barthag/AdjEM when
+    available.
+    """
+    # Identify team feature blocks
+    t1_cols = [c for c in df.columns if c.endswith('__1') and pd.api.types.is_numeric_dtype(df[c])]
+    t2_cols = [c for c in df.columns if c.endswith('__2') and pd.api.types.is_numeric_dtype(df[c])]
+
+    if not t1_cols or not t2_cols:
+        raise ValueError('Not enough team feature columns for bootstrap pairing.')
+
+    total = len(df)
+    N = total * n
+
+    # Build pools of unique team feature vectors by splitting each row into
+    # team-1 and team-2 blocks and stacking them.
+    team1_block = df[t1_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+    team2_block = df[t2_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+
+    # Normalize column suffixes to a common team-level name set for sampling
+    t1_clean_cols = [c[:-3] for c in t1_cols]  # drop __1
+    t2_clean_cols = [c[:-3] for c in t2_cols]  # drop __2
+
+    # If the canonical names don't match, we'll sample by block directly.
+    # Build combined team pool (as DataFrame) using team1 and team2 blocks
+    pool_cols = [f.replace('__1','') for f in t1_cols]
+    pool = pd.concat([team1_block.rename(columns=dict(zip(t1_cols, pool_cols))),
+                      team2_block.rename(columns=dict(zip(t2_cols, pool_cols)))],
+                     ignore_index=True)
+
+    pool = pool.fillna(0.0)
+    pool_vals = pool.values.astype(float)
+    pool_size = len(pool)
+
+    sim_rows = []
+    for i in range(total):
+        base = df.iloc[i]
+        for _ in range(n):
+            # sample two team vectors independently
+            ia = int(rng.integers(0, pool_size))
+            ib = int(rng.integers(0, pool_size))
+            a = pool_vals[ia]
+            b = pool_vals[ib]
+
+            # Start with base row to inherit categorical/identity fields
+            new_row = base.copy()
+            # write team-A into team-1 cols and team-B into team-2 cols
+            for j, col in enumerate(t1_cols):
+                new_row[col] = a[j]
+            for j, col in enumerate(t2_cols):
+                # match by position: if t1_cols and t2_cols align this is fine
+                if j < b.shape[0]:
+                    new_row[col] = b[j]
+            sim_rows.append(new_row)
+
+    sim_df = pd.DataFrame(sim_rows).reset_index(drop=True)
+    # Re-derive win outcomes probabilistically
+    sim_df = _rederive_outcome(sim_df, rng)
+    return sim_df
+
+
+# ---------------------------------------------------------------------------
+# New Method: GMM-sampled teams paired into games
+# ---------------------------------------------------------------------------
+def generate_gmm_teams(
+    df: pd.DataFrame,
+    n: int,
+    rng: np.random.Generator,
+    *,
+    n_components: int = 8,
+) -> pd.DataFrame:
+    """
+    Fit a Gaussian Mixture Model (GMM) to the empirical team feature vectors
+    (both team-1 and team-2 pools combined). Sample new synthetic teams from
+    the GMM, then pair sampled teams to form games. This produces novel but
+    statistically plausible teams and matchups.
+    """
+    from sklearn.mixture import GaussianMixture
+
+    t1_cols = _team1_perturbable_cols(df)
+    t2_cols = _team2_perturbable_cols(df)
+    if not t1_cols:
+        raise ValueError('No perturbable team-1 cols for GMM sampling')
+
+    # Build pool as in bootstrap: canonicalize column names
+    pool_cols = [c[:-3] for c in t1_cols]
+    pool1 = df[t1_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+    pool1.columns = pool_cols
+    pool2 = df[t2_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+    pool2.columns = pool_cols
+    pool = pd.concat([pool1, pool2], ignore_index=True)
+
+    X = pool.values.astype(float)
+    # Fit GMM in the pooled team feature space
+    gm = GaussianMixture(n_components=min(n_components, max(1, len(X)//10)),
+                         covariance_type='full', random_state=0)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        gm.fit(X)
+
+    total = len(df)
+    sim_rows = []
+    for i in range(total):
+        base = df.iloc[i]
+        for _ in range(n):
+            # sample two synthetic teams from GMM
+            a = gm.sample(1)[0].reshape(-1)
+            b = gm.sample(1)[0].reshape(-1)
+            new_row = base.copy()
+            for j, col in enumerate(t1_cols):
+                new_row[col] = float(a[j])
+            for j, col in enumerate(t2_cols):
+                if j < b.shape[0]:
+                    new_row[col] = float(b[j])
+            sim_rows.append(new_row)
+
+    sim_df = pd.DataFrame(sim_rows).reset_index(drop=True)
+    sim_df = _rederive_outcome(sim_df, rng)
+    return sim_df
+
