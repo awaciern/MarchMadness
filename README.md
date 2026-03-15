@@ -131,6 +131,7 @@ python3 Python/predict_brackets.py \
 | `--calibrate-temperature T` | Override auto-fitted temperature with a fixed value |
 | `--exclude-years YEAR ...` | Remove years from both training data and evaluation |
 | `--sim-data IDENTIFIER` | Augment training with `Data/SimulatedData<IDENTIFIER>/All.csv` (test always uses real data only) |
+| `--pca-components N` | Reduce features to N principal components (PCA) before training; PCA is fit per LOYO fold after all other transforms; stored in `model.pkl` for use at inference time |
 
 > **Note:** Feature base names are sorted alphabetically before building the model to ensure reproducibility regardless of input order.
 
@@ -173,7 +174,7 @@ Default features: `WinPct AdjO AdjD SOS_AdjEM`
 
 ### `Python/generate_sim_data.py`
 
-Generates synthetic training data to augment `GameCombinedData/All.csv`. Seven methods in two groups:
+Generates synthetic training data to augment `GameCombinedData/All.csv`. Nine methods in two groups:
 
 **Score-perturbation** (perturb game outcomes; features unchanged)
 
@@ -183,7 +184,7 @@ Generates synthetic training data to augment `GameCombinedData/All.csv`. Seven m
 | `margin` | Perturb the point spread only (total score held fixed) | `--std` |
 | `logistic` | Sample win/loss from Bradley-Terry probabilities; synthesise scores from KenPom AdjO/AdjT | `--score-std` |
 
-**Feature-perturbation** (modify team statistics; win label inherited from source row)
+**Feature-perturbation** (modify team statistics; win label re-derived via Bradley-Terry when possible)
 
 | Method | Description | Key flags |
 |---|---|---|
@@ -191,6 +192,8 @@ Generates synthetic training data to augment `GameCombinedData/All.csv`. Seven m
 | `correlated` | Multivariate Gaussian noise using Ledoit-Wolf regularised empirical covariance (related stats move together) | `--feat-noise-frac` |
 | `smote` | k-NN SMOTE-style linear interpolation between nearest neighbours in PCA-compressed space | `--k-neighbors` `--pca-components` |
 | `mixup` | Convex combinations of random row pairs with Beta(α,α) mixing weights | `--mixup-alpha` |
+| `bootstrap` | Pair team feature blocks drawn independently from the empirical team pool; creates novel matchups not seen historically; z-score clips extreme values before re-assembling rows | — |
+| `gmm_teams` | Fit a Gaussian Mixture Model to the pooled team feature space, sample two synthetic teams per game, re-derive outcome via Bradley-Terry | `--gmm-components` (default 8) |
 
 Output: `Data/SimulatedData<identifier>/All.csv`
 
@@ -207,6 +210,12 @@ python3 Python/generate_sim_data.py --method smote --identifier SMOTE5 --n 5
 # Mixup alpha=2
 python3 Python/generate_sim_data.py --method mixup --identifier Mixup2 --n 10
 
+# Bootstrap pairing (novel matchups from empirical team pool)
+python3 Python/generate_sim_data.py --method bootstrap --identifier BootstrapPairs --n 10
+
+# GMM team sampling
+python3 Python/generate_sim_data.py --method gmm_teams --identifier GMMTeams --n 10
+
 # Score-perturbation (original methods)
 python3 Python/generate_sim_data.py --method margin --identifier Margin8 --std 8 --n 15
 python3 Python/generate_sim_data.py --method logistic --identifier BT20 --n 20
@@ -216,6 +225,37 @@ python3 Python/generate_sim_data.py --method noise --identifier Noise5 --std 5 -
 Common flags: `--seed INT` (default 42), `--dry-run` (print stats without writing), `--source PATH` (override input CSV), `--data-root PATH`.
 
 Use the generated dataset with `predict_brackets.py --sim-data <identifier>`.
+
+---
+
+### `Python/downsample_sim_per_year.py`
+
+Downsamples a simulated `All.csv` so each year's synthetic row count matches the real data count for that year (from `GameCombinedData/All.csv`). Creates a new `<orig>_downsampled/` folder alongside the source.
+
+Useful when a sim dataset has much more data per year than the real set, which can over-weight certain years during training.
+
+```bash
+# Downsample specific datasets
+python3 Python/downsample_sim_per_year.py Data/SimulatedDataCorr8 Data/SimulatedDataMixup2
+
+# Downsample all SimulatedData* folders (skips already-downsampled ones)
+python3 Python/downsample_sim_per_year.py --seed 42
+```
+
+Outputs to `Data/<orig>_downsampled/All.csv`. Pass the `_downsampled` identifier to `predict_brackets.py --sim-data <orig>_downsampled`.
+
+---
+
+### `Python/aggregate_sim_summaries.py`
+
+Aggregates `summary.txt` files from all `PredictionsSimTourney*/` folders at the repo root into a single CSV at `Predictions/aggregate_summary.csv`. Also copies each run folder into `Predictions/` so the web UI can display it.
+
+Intended for batch hyperparameter sweeps where multiple training runs are written to temporary output roots.
+
+```bash
+python3 Python/aggregate_sim_summaries.py
+# → Predictions/aggregate_summary.csv  (run, avg_loyo_train, avg_loyo_test, avg_bracket_score, …)
+```
 
 ---
 
@@ -269,6 +309,7 @@ The left-hand form exposes all `predict_brackets.py` options:
 - **Features** — click-to-toggle chip grid color-coded by source (blue = common/KP, purple = KP-only, pink = BT full-season, teal = BT 2-week, orange = hotness delta, green = metadata)
 - **Normalisation** — off / per-year Z-score / global Z-score
 - **Delta features** — combine `__1`/`__2` pairs into a single per-feature delta
+- **PCA components** — optionally reduce features to N principal components before training (stored in the pickle for inference)
 - **Probability calibration** — temperature scaling (stretch or NLL mode) with adjustable target
 - **Exclude years** — remove specific years from training and evaluation
 - **Simulated data** — select a pre-generated `SimulatedData<ID>` dataset to augment training
@@ -284,7 +325,7 @@ After a run (or clicking any saved model row):
 
 #### Model table
 
-Sortable table listing every folder in `Predictions/`. Columns: rank, avg bracket score, avg LOYO train acc, avg LOYO test acc, model type, normalization, features, params. Clicking a row loads its summary and brackets instantly.
+Sortable table listing every folder in `Predictions/`. Columns: rank, avg bracket score, avg LOYO train acc, avg LOYO test acc, model type, normalization flags (NY/NA/CAL/DF and a sky-blue PCA badge when `--pca-components` was used), features, params. Clicking a row loads its summary and brackets instantly.
 
 #### Simulations tab
 
