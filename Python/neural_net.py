@@ -56,7 +56,6 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, TensorDataset
 
 
 # ---------------------------------------------------------------------------
@@ -344,8 +343,12 @@ class TorchClassifier:
     epochs        : maximum training epochs             (default 400)
     batch_size    : mini-batch size                     (default 256)
     weight_decay  : Adam L2 regularisation              (default 1e-4)
-    patience      : early stopping patience in epochs   (default 40)
+    patience      : early stopping patience (validation events, not epochs)
+                    (default 40)
     val_frac      : fraction of training data held out  (default 0.15)
+    val_every     : run validation every N epochs; patience counts
+                    validation events so its semantics are unchanged
+                    (default 1 — every epoch)
     random_state  : RNG seed                            (default 42)
     verbose       : print per-epoch loss                (default False)
     """
@@ -366,6 +369,7 @@ class TorchClassifier:
         verbose: bool = False,
         use_amp: bool = True,
         compile_model: bool = False,
+        val_every: int = 1,
     ):
         self.arch = arch
         self.hidden_size = hidden_size
@@ -377,6 +381,7 @@ class TorchClassifier:
         self.weight_decay = weight_decay
         self.patience = patience
         self.val_frac = val_frac
+        self.val_every = val_every
         self.random_state = random_state
         self.verbose = verbose
         self.use_amp = use_amp
@@ -460,8 +465,6 @@ class TorchClassifier:
         # Mixed-precision (AMP) on MPS or CUDA — ~1.5-2× faster forward/backward.
         # Loss is always computed in float32 to avoid NaN with BCEWithLogitsLoss.
         # MPS uses bfloat16; CUDA uses float16.
-        # The transformer arch falls back to CPU on MPS (set above), so
-        # _device_type will be 'cpu' for it and AMP is automatically skipped.
         _device_type = self.device_.type  # 'mps', 'cuda', or 'cpu'
         _amp_enabled = (
             self.use_amp
@@ -470,23 +473,28 @@ class TorchClassifier:
         )
         _amp_dtype = torch.bfloat16 if _device_type == 'mps' else torch.float16
 
-        X_tr_t = self._to_tensor(X_tr_np)
-        y_tr_t = self._to_tensor(y_tr_np)
+        # Move all data to device once; batching via randperm slicing avoids
+        # the per-iteration Python overhead of DataLoader/TensorDataset.
+        X_tr_t  = self._to_tensor(X_tr_np)
+        y_tr_t  = self._to_tensor(y_tr_np)
         X_val_t = self._to_tensor(X_val_np)
         y_val_t = self._to_tensor(y_val_np)
-
-        ds = TensorDataset(X_tr_t, y_tr_t)
-        loader = DataLoader(ds, batch_size=self.batch_size, shuffle=True,
-                            pin_memory=False, num_workers=0)
+        n_tr    = X_tr_t.size(0)
 
         best_val_loss = float('inf')
         best_state    = None
         no_improve    = 0
+        val_every     = max(1, self.val_every)
+        last_val_loss = float('inf')  # for verbose when skipping val epochs
 
         for epoch in range(self.epochs):
             self.model_.train()
-            for xb, yb in loader:
-                optimizer.zero_grad()
+            # In-memory shuffle + slice — no DataLoader overhead
+            perm = torch.randperm(n_tr, device=self.device_)
+            for start in range(0, n_tr, self.batch_size):
+                xb = X_tr_t[perm[start:start + self.batch_size]]
+                yb = y_tr_t[perm[start:start + self.batch_size]]
+                optimizer.zero_grad(set_to_none=True)
                 if _amp_enabled:
                     with torch.autocast(device_type=_device_type, dtype=_amp_dtype):
                         logits = self.model_(xb)
@@ -497,33 +505,37 @@ class TorchClassifier:
                 optimizer.step()
             scheduler.step()
 
-            # Validation loss for early stopping
-            self.model_.eval()
-            with torch.no_grad():
-                if _amp_enabled:
-                    with torch.autocast(device_type=_device_type, dtype=_amp_dtype):
+            # Validation: run every val_every epochs.
+            # Patience counts validation *events*, so its meaning is unchanged
+            # regardless of val_every (patience=40 → 40 bad checks before stopping).
+            if (epoch + 1) % val_every == 0:
+                self.model_.eval()
+                with torch.no_grad():
+                    if _amp_enabled:
+                        with torch.autocast(device_type=_device_type, dtype=_amp_dtype):
+                            val_logits = self.model_(X_val_t)
+                        val_loss = loss_fn(val_logits.float(), y_val_t).item()
+                    else:
                         val_logits = self.model_(X_val_t)
-                    val_loss = loss_fn(val_logits.float(), y_val_t).item()
+                        val_loss   = loss_fn(val_logits, y_val_t).item()
+                last_val_loss = val_loss
+
+                if val_loss < best_val_loss - 1e-6:
+                    best_val_loss = val_loss
+                    best_state    = {k: v.cpu().clone()
+                                     for k, v in self.model_.state_dict().items()}
+                    no_improve = 0
                 else:
-                    val_logits = self.model_(X_val_t)
-                    val_loss   = loss_fn(val_logits, y_val_t).item()
+                    no_improve += 1
 
-            if val_loss < best_val_loss - 1e-6:
-                best_val_loss = val_loss
-                best_state    = {k: v.cpu().clone()
-                                 for k, v in self.model_.state_dict().items()}
-                no_improve = 0
-            else:
-                no_improve += 1
+                if self.verbose and (epoch + 1) % (val_every * 4) == 0:
+                    print(f'  Epoch {epoch+1:4d}/{self.epochs}  val_loss={last_val_loss:.4f}')
 
-            if self.verbose and (epoch + 1) % 20 == 0:
-                print(f'  Epoch {epoch+1:4d}/{self.epochs}  val_loss={val_loss:.4f}')
-
-            if no_improve >= self.patience:
-                if self.verbose:
-                    print(f'  Early stop at epoch {epoch+1} '
-                          f'(best val_loss={best_val_loss:.4f})')
-                break
+                if no_improve >= self.patience:
+                    if self.verbose:
+                        print(f'  Early stop at epoch {epoch+1} '
+                              f'(best val_loss={best_val_loss:.4f})')
+                    break
 
         # Restore best weights
         if best_state is not None:
@@ -608,4 +620,13 @@ def make_torch_classifier(model_key: str, **params) -> TorchClassifier:
         'torch_transformer': 'transformer',
     }
     arch = params.pop('arch', arch_defaults.get(model_key, 'resnet'))
+    # Per-arch val_every defaults: run validation less frequently to cut
+    # overhead on large datasets.  Patience is counted in validation events
+    # so early-stopping behaviour is equivalent to val_every=1.
+    _val_every_defaults = {
+        'torch_mlp':         5,
+        'torch_resnet':      5,
+        'torch_transformer': 3,  # small network, finer-grained detection
+    }
+    params.setdefault('val_every', _val_every_defaults.get(model_key, 5))
     return TorchClassifier(arch=arch, **params)
