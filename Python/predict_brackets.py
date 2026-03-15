@@ -39,12 +39,31 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.ensemble import (RandomForestClassifier, AdaBoostClassifier,
+                               GradientBoostingClassifier, ExtraTreesClassifier,
+                               HistGradientBoostingClassifier)
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.neural_network import MLPClassifier
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from scipy.optimize import minimize_scalar
 from bracket_html import format_bracket_html
+try:
+    from xgboost import XGBClassifier as _XGBClassifier
+    _HAS_XGB = True
+except Exception:
+    _HAS_XGB = False
+try:
+    from lightgbm import LGBMClassifier as _LGBMClassifier
+    _HAS_LGB = True
+except Exception:
+    _HAS_LGB = False
+try:
+    from neural_net import TorchClassifier, TORCH_MODEL_KEYS, make_torch_classifier
+    _HAS_TORCH = True
+except Exception:
+    _HAS_TORCH = False
+    TORCH_MODEL_KEYS = frozenset()
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -129,15 +148,23 @@ DEFAULT_FEATURE_BASES: List[str] = ['WinPct', 'KP_AdjO', 'KP_AdjD', 'SOS_AdjEM']
 CATEGORICAL_BASE_NAMES: frozenset = frozenset(['Conf', 'Seed'])
 
 MODEL_REGISTRY = {
-    'logistic_regression':    LogisticRegression,
-    'knn':                    KNeighborsClassifier,
-    'svc':                    SVC,
-    'decision_tree':          DecisionTreeClassifier,
-    'random_forest':          RandomForestClassifier,
-    'gradient_boosting':      GradientBoostingClassifier,
-    'adaboost':               AdaBoostClassifier,
-    'gpc':                    GaussianProcessClassifier,
-    'mlp':                    MLPClassifier,
+    'logistic_regression':     LogisticRegression,
+    'knn':                     KNeighborsClassifier,
+    'svc':                     SVC,
+    'decision_tree':           DecisionTreeClassifier,
+    'random_forest':           RandomForestClassifier,
+    'gradient_boosting':       GradientBoostingClassifier,
+    'adaboost':                AdaBoostClassifier,
+    'gpc':                     GaussianProcessClassifier,
+    'mlp':                     MLPClassifier,
+    'extra_trees':             ExtraTreesClassifier,
+    'hist_gradient_boosting':  HistGradientBoostingClassifier,
+    'lda':                     LinearDiscriminantAnalysis,
+    **({'xgboost':  _XGBClassifier}  if _HAS_XGB   else {}),
+    **({'lightgbm': _LGBMClassifier} if _HAS_LGB   else {}),
+    **({'torch_mlp':         TorchClassifier,
+        'torch_resnet':      TorchClassifier,
+        'torch_transformer': TorchClassifier} if _HAS_TORCH else {}),
 }
 
 # ---------------------------------------------------------------------------
@@ -808,7 +835,18 @@ def build_and_train_model(
     # the caller explicitly set probability=False.
     if model_key == 'svc' and 'probability' not in params:
         params['probability'] = True
-    estimator = MODEL_REGISTRY[model_key](**params)
+    # XGBoost: suppress label-encoder deprecation warning.
+    if model_key == 'xgboost':
+        params.setdefault('eval_metric', 'logloss')
+        params.setdefault('verbosity', 0)
+    # LightGBM: suppress noisy stdout.
+    if model_key == 'lightgbm':
+        params.setdefault('verbose', -1)
+    # Torch classifiers: use the factory so the arch default maps correctly.
+    if _HAS_TORCH and model_key in TORCH_MODEL_KEYS:
+        estimator = make_torch_classifier(model_key, **params)
+    else:
+        estimator = MODEL_REGISTRY[model_key](**params)
     estimator.fit(X_train, y_train)
     if calibrate:
         if calibrate_temperature is not None:
@@ -954,7 +992,7 @@ def simulate_bracket(
         X = df_round[model_feature_list]
         if pca_transformer is not None:
             X = pca_transformer.transform(X)
-        preds = model.predict(X)
+        preds = model.predict(X).astype(bool)
         # Win probability for the predicted winner (None if model lacks predict_proba).
         try:
             proba = model.predict_proba(X)

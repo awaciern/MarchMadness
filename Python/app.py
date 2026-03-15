@@ -146,15 +146,23 @@ UI_BTHOT_BASES = [
 ]
 
 MODELS = [
-    ('logistic_regression', 'Logistic Regression'),
-    ('knn',                 'k-Nearest Neighbors'),
-    ('svc',                 'Support Vector Machine (SVC)'),
-    ('decision_tree',       'Decision Tree'),
-    ('random_forest',       'Random Forest'),
-    ('gradient_boosting',   'Gradient Boosting'),
-    ('adaboost',            'AdaBoost'),
-    ('gpc',                 'Gaussian Process'),
-    ('mlp',                 'Neural Network (MLP)'),
+    ('logistic_regression',    'Logistic Regression'),
+    ('knn',                    'k-Nearest Neighbors'),
+    ('svc',                    'Support Vector Machine (SVC)'),
+    ('decision_tree',          'Decision Tree'),
+    ('random_forest',          'Random Forest'),
+    ('gradient_boosting',      'Gradient Boosting'),
+    ('adaboost',               'AdaBoost'),
+    ('gpc',                    'Gaussian Process'),
+    ('mlp',                    'Neural Network (MLP)'),
+    ('extra_trees',            'Extra Trees'),
+    ('hist_gradient_boosting', 'Hist Gradient Boosting'),
+    ('lda',                    'Linear Discriminant Analysis'),
+    ('xgboost',                'XGBoost'),
+    ('lightgbm',               'LightGBM'),
+    ('torch_mlp',              'Deep MLP (PyTorch)'),
+    ('torch_resnet',           'ResNet (PyTorch)'),
+    ('torch_transformer',      'Transformer (PyTorch)'),
 ]
 
 FEATURE_DESCRIPTIONS = {
