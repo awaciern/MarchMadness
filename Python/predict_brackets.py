@@ -33,6 +33,7 @@ from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
@@ -837,6 +838,7 @@ def simulate_bracket(
     delta_feats: bool = False,
     numeric_bases: list = None,
     model_feature_list: list = None,
+    pca_transformer=None,
 ) -> Tuple[list, list, list, list, list, int]:
     """
     Simulate filling out a bracket from Round 1 using the model.
@@ -950,6 +952,8 @@ def simulate_bracket(
         if delta_feats and numeric_bases:
             df_round = apply_delta_transform(df_round, numeric_bases)
         X = df_round[model_feature_list]
+        if pca_transformer is not None:
+            X = pca_transformer.transform(X)
         preds = model.predict(X)
         # Win probability for the predicted winner (None if model lacks predict_proba).
         try:
@@ -1190,6 +1194,18 @@ def main():
         ),
     )
     parser.add_argument(
+        '--pca-components',
+        type=int,
+        default=None,
+        metavar='N',
+        help=(
+            'Reduce features to N principal components (PCA) before training. '
+            'PCA is fit on each fold\'s training data after all other transforms '
+            '(encoding, normalisation, delta). The same fitted transformer is used '
+            'at inference time. Stored in the model pickle for use by simulate_bracket.py.'
+        ),
+    )
+    parser.add_argument(
         '--run-name',
         required=True,
         help=(
@@ -1206,6 +1222,8 @@ def main():
     # each split, so different input orderings with the same random_state would
     # otherwise produce different trees and different predictions.)
     args.features = sorted(set(args.features), key=str.lower)
+
+    pca_n_components = args.pca_components  # int or None
 
     data_root = Path(args.data_root)
     model_params = parse_model_params(args.model_params)
@@ -1395,6 +1413,12 @@ def main():
 
         X_tr = df_train[model_feature_list]
         y_tr = df_train['Win__1']
+        fold_pca = None
+        if pca_n_components:
+            _pc_cols = [f'PC{i}' for i in range(pca_n_components)]
+            fold_pca = PCA(n_components=pca_n_components, random_state=42)
+            X_tr = pd.DataFrame(fold_pca.fit_transform(X_tr), columns=_pc_cols)
+            y_tr = y_tr.reset_index(drop=True)
         model = build_and_train_model(
             args.model, X_tr, y_tr, model_params,
             calibrate=calibrate, calibrate_temperature=calibrate_temperature,
@@ -1405,7 +1429,12 @@ def main():
 
         train_acc = model.score(X_tr, y_tr)
         if not is_current:
-            X_te = df_test_year[model_feature_list]
+            X_te = (
+                pd.DataFrame(fold_pca.transform(df_test_year[model_feature_list]),
+                             columns=_pc_cols)
+                if fold_pca is not None
+                else df_test_year[model_feature_list]
+            )
             y_te = df_test_year['Win__1']
             test_acc = model.score(X_te, y_te)
             print(f'  Model trained on {len(df_train)} rows (excl. {year})')
@@ -1440,6 +1469,7 @@ def main():
             delta_feats=delta_feats,
             numeric_bases=numeric_bases,
             model_feature_list=model_feature_list,
+            pca_transformer=fold_pca,
         )
 
         if not is_current:
@@ -1520,7 +1550,13 @@ def main():
         # Test set = real data only.
         X_te_t = df_real_ref[model_feature_list]
         y_te_t = df_real_ref['Win__1']
-
+        if pca_n_components:
+            _pc_cols_t = [f'PC{i}' for i in range(pca_n_components)]
+            _ref_pca = PCA(n_components=pca_n_components, random_state=42)
+            X_tr_t = pd.DataFrame(_ref_pca.fit_transform(X_tr_t), columns=_pc_cols_t)
+            y_tr_t = y_tr_t.reset_index(drop=True)
+            X_te_t = pd.DataFrame(_ref_pca.transform(X_te_t), columns=_pc_cols_t)
+            y_te_t = y_te_t.reset_index(drop=True)
         model_trad = build_and_train_model(
             args.model, X_tr_t, y_tr_t, model_params,
             calibrate=calibrate, calibrate_temperature=calibrate_temperature,
@@ -1547,6 +1583,13 @@ def main():
             df_tr_t = pd.concat([X_tr_t, y_tr_t], axis=1)
             df_tr_t = mirror_augment(df_tr_t, model_feature_list)
             X_tr_t, y_tr_t = df_tr_t[model_feature_list], df_tr_t['Win__1']
+        if pca_n_components:
+            _pc_cols_t = [f'PC{i}' for i in range(pca_n_components)]
+            _ref_pca = PCA(n_components=pca_n_components, random_state=42)
+            X_tr_t = pd.DataFrame(_ref_pca.fit_transform(X_tr_t), columns=_pc_cols_t)
+            y_tr_t = y_tr_t.reset_index(drop=True)
+            X_te_t = pd.DataFrame(_ref_pca.transform(X_te_t), columns=_pc_cols_t)
+            y_te_t = y_te_t.reset_index(drop=True)
         model_trad = build_and_train_model(
             args.model, X_tr_t, y_tr_t, model_params,
             calibrate=calibrate, calibrate_temperature=calibrate_temperature,
@@ -1634,6 +1677,8 @@ def main():
         expert_tag += 'CAL'
     if delta_feats:
         expert_tag += 'DF'
+    if pca_n_components:
+        expert_tag += f'PCA{pca_n_components}'
     seen_bases: set = set()
     feat_parts: List[str] = []
     for b in args.features:
@@ -1665,6 +1710,7 @@ def main():
         'delta_feats':        delta_feats,
         'exclude_years':      sorted(exclude_years),
         'sim_data':           sim_data_id,
+        'pca_components':     pca_n_components,
         'model_params':   {str(k): str(v) for k, v in model_params.items()},
         'feature_bases':  list(args.features),
         'trad_train_acc': round(trad_train_acc, 4),
@@ -1681,6 +1727,7 @@ def main():
     if this_year is not None:
         # Reuse the last model trained (the current-year one, trained on all data).
         full_model = model
+        full_pca   = fold_pca
     else:
         df_full = df_all_raw.copy()
         if cat_encoders:
@@ -1689,8 +1736,16 @@ def main():
             df_full = apply_year_norm(df_full, norm_info)
         if delta_feats and numeric_bases:
             df_full = apply_delta_transform(df_full, numeric_bases)
+        X_full = df_full[model_feature_list]
+        y_full = df_full['Win__1']
+        full_pca = None
+        if pca_n_components:
+            _pc_cols_full = [f'PC{i}' for i in range(pca_n_components)]
+            full_pca = PCA(n_components=pca_n_components, random_state=42)
+            X_full = pd.DataFrame(full_pca.fit_transform(X_full), columns=_pc_cols_full)
+            y_full = y_full.reset_index(drop=True)
         full_model = build_and_train_model(
-            args.model, df_full[model_feature_list], df_full['Win__1'], model_params,
+            args.model, X_full, y_full, model_params,
             calibrate=calibrate, calibrate_temperature=calibrate_temperature,
             calibrate_mode=calibrate_mode, calibrate_target=calibrate_target,
         )
@@ -1705,6 +1760,7 @@ def main():
         'norm_info':          norm_info,
         'delta_feats':        delta_feats,
         'numeric_bases':      numeric_bases,
+        'pca_transformer':    full_pca,
     }
     pickle_path = final_output_root / 'model.pkl'
     with open(pickle_path, 'wb') as fh:

@@ -202,6 +202,7 @@ def _simulate_one(
     numeric_bases: list = None,
     model_feature_list: list = None,
     locked_results: dict = None,
+    pca_transformer=None,
 ) -> dict:
     """
     Run one complete bracket simulation.
@@ -251,7 +252,10 @@ def _simulate_one(
                 df_enc = apply_year_norm_single(df_enc, year, norm_info)
             if delta_feats and numeric_bases:
                 df_enc = apply_delta_transform(df_enc, numeric_bases)
-            proba  = model.predict_proba(df_enc[model_feature_list])
+            _X_rnd = df_enc[model_feature_list]
+            if pca_transformer is not None:
+                _X_rnd = pca_transformer.transform(_X_rnd)
+            proba  = model.predict_proba(_X_rnd)
             teams1 = df_rnd['Team__1'].tolist()
             teams2 = df_rnd['Team__2'].tolist()
             draws  = rng.random(len(teams1))
@@ -287,6 +291,7 @@ def run_simulations(
     model_feature_list: list = None,
     locked_results: Optional[dict] = None,
     actual_winners_by_rnd: Optional[dict] = None,
+    pca_transformer=None,
 ) -> tuple:
     """
     Run `num_iters` Monte Carlo bracket simulations for `year`.
@@ -347,7 +352,10 @@ def run_simulations(
         df_r1_enc = apply_year_norm_single(df_r1_enc, year, norm_info)
     if delta_feats and numeric_bases:
         df_r1_enc = apply_delta_transform(df_r1_enc, numeric_bases)
-    r1_proba  = model.predict_proba(df_r1_enc[model_feature_list])
+    _X_r1 = df_r1_enc[model_feature_list]
+    if pca_transformer is not None:
+        _X_r1 = pca_transformer.transform(_X_r1)
+    r1_proba  = model.predict_proba(_X_r1)
 
     # Aligned team lists for Round 1 (same row order as r1_proba)
     r1_teams1 = df_r1_kp['Team__1'].tolist()
@@ -393,6 +401,7 @@ def run_simulations(
             numeric_bases=numeric_bases,
             model_feature_list=model_feature_list,
             locked_results=locked_results,
+            pca_transformer=pca_transformer,
         )
         for rnd, winners in sim.items():
             for team in winners:
@@ -633,6 +642,7 @@ def main():
     delta_feats       = payload.get('delta_feats', False)
     numeric_bases     = payload.get('numeric_bases', [])
     model_feature_list = payload.get('model_feature_list', feature_list)
+    pca_transformer    = payload.get('pca_transformer')
 
     # --- Infer data root --------------------------------------------------
     # Expected layout: <repo_root>/Predictions/<model_dir>/model.pkl
@@ -687,6 +697,7 @@ def main():
         numeric_bases=numeric_bases,
         model_feature_list=model_feature_list,
         actual_winners_by_rnd=actual_winners_by_rnd or None,
+        pca_transformer=pca_transformer,
     )
 
     # --- Actual results (only for historical years with bracket data) ------

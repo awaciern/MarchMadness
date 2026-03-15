@@ -381,7 +381,8 @@ def scan_saved_models():
                     'calibrate_temperature': info.get('calibrate_temperature', None),
                     'delta_feats':info.get('delta_feats', False),
                     'exclude_years': info.get('exclude_years', []),
-                    'sim_data':   info.get('sim_data', None),
+                    'sim_data':      info.get('sim_data', None),
+                    'pca_components': info.get('pca_components'),
                     'features':   info.get('features', ''),
                     'feature_bases': info.get('feature_bases', []),
                     'model_params_str': ' '.join(f'{k}={v}' for k, v in info.get('model_params', {}).items()),
@@ -471,7 +472,8 @@ def scan_simulations(year: int = THIS_YEAR) -> list:
                     'calibrated': info.get('calibrate', False),
                     'delta_feats':info.get('delta_feats', False),
                     'exclude_years': info.get('exclude_years', []),
-                    'sim_data':   info.get('sim_data', None),
+                    'sim_data':      info.get('sim_data', None),
+                    'pca_components': info.get('pca_components'),
                     'features':   info.get('features', ''),
                     'params':     info.get('params', ''),
                     'train_acc':  train_acc,
@@ -641,6 +643,14 @@ def run_prediction():
     sim_data = (data.get('sim_data') or '').strip() or None
     if sim_data:
         cmd += ['--sim-data', sim_data]
+    pca_components = data.get('pca_components')
+    if pca_components is not None:
+        try:
+            n = int(pca_components)
+            if n > 0:
+                cmd += ['--pca-components', str(n)]
+        except (TypeError, ValueError):
+            pass
 
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = Job()
@@ -3931,7 +3941,7 @@ function gaRenderModels() {
   const fmtAcc = function(v) { return v == null ? '\u2014' : (v * 100).toFixed(1) + '%'; };
   sorted.forEach(function(m) {
     const sim   = GA_SIM_MAP[m.dir_name];
-    const flags = [m.norm_years ? 'NY' : '', m.norm_all ? 'NA' : '', m.calibrated ? 'CAL' : '', m.delta_feats ? 'DF' : ''].filter(Boolean).join('\u00a0') || '\u2014';
+    const flags = [m.norm_years ? 'NY' : '', m.norm_all ? 'NA' : '', m.calibrated ? 'CAL' : '', m.delta_feats ? 'DF' : '', m.pca_components ? ('PCA\u00a0' + m.pca_components) : ''].filter(Boolean).join('\u00a0') || '\u2014';
     const exclStr = (m.exclude_years && m.exclude_years.length) ? m.exclude_years.join(', ') : '\u2014';
     const simDataStr = m.sim_data ? m.sim_data : '\u2014';
     const feat  = m.features.length > 35 ? m.features.slice(0, 35) + '\u2026' : m.features;
@@ -5049,6 +5059,12 @@ label.feat-chip[title] { cursor: help; }
       <span style="font-size:13px;color:#e2e8f0">Delta features</span>
       <span style="font-size:10px;color:#475569">(collapse numeric __1 and __2 into a single team1 &minus; team2 difference)</span>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:13px;color:#e2e8f0">PCA components</span>
+      <input type="number" id="pca-components-inp" min="1" step="1" placeholder="None"
+        style="width:70px;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#e2e8f0;padding:4px 8px;font-size:12px;outline:none">
+      <span style="font-size:10px;color:#475569">(reduce features to N principal components before training; leave blank to skip)</span>
+    </div>
     <div style="margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
         <span style="font-size:13px;color:#e2e8f0">Exclude years from training</span>
@@ -5215,7 +5231,8 @@ function renderSavedModels() {
     const naTag  = m.norm_all    ? '<span class="tag tag-na">NA</span>'   : '';
     const calTag = m.calibrated  ? '<span class="tag tag-cal">CAL</span>' : '';
     const dfTag  = m.delta_feats ? '<span class="tag" style="background:#a855f7;color:#fff">DF</span>' : '';
-    const flagsTag = (nyTag + naTag + calTag + dfTag) || '\u2014';
+    const pcaTag = m.pca_components ? '<span class="tag" style="background:#0ea5e9;color:#fff">PCA\u00a0' + m.pca_components + '</span>' : '';
+    const flagsTag = (nyTag + naTag + calTag + dfTag + pcaTag) || '\u2014';
     const exclStr = (m.exclude_years && m.exclude_years.length) ? m.exclude_years.join(', ') : '\u2014';
     const simDataStr = m.sim_data ? m.sim_data : '\u2014';
     tr.innerHTML =
@@ -5314,6 +5331,10 @@ function populateFormFromModel(m) {
       if (simSel.options[i].value === target) { simSel.selectedIndex = i; break; }
     }
   }
+
+  // PCA components
+  const pcaInp = document.getElementById('pca-components-inp');
+  if (pcaInp) pcaInp.value = (m.pca_components != null) ? m.pca_components : '';
 
   // Run name — suggest a copy so user doesn't accidentally overwrite
   const runNameInput = document.getElementById('run-name-input');
@@ -5677,6 +5698,8 @@ function runPrediction() {
   const deltaFeats   = document.getElementById('delta-feats-check').checked;
   const excludeYears = Array.from(document.querySelectorAll('#excl-years-wrap input[type="checkbox"]:checked')).map(function(cb) { return parseInt(cb.value, 10); });
   const simData = document.getElementById('sim-data-sel').value || null;
+  const pcaRaw = document.getElementById('pca-components-inp').value.trim();
+  const pcaComponents = pcaRaw !== '' ? parseInt(pcaRaw, 10) : null;
 
   // Reset UI
   document.getElementById('log-box').innerHTML = '';
@@ -5697,6 +5720,7 @@ function runPrediction() {
       delta_feats: deltaFeats,
       exclude_years: excludeYears,
       sim_data: simData,
+      pca_components: pcaComponents,
     }),
   })
   .then(r => r.json())
