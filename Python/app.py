@@ -677,7 +677,7 @@ def stream(job_id):
         job = jobs[job_id]
         while True:
             try:
-                line = job.queue.get(timeout=300)
+                line = job.queue.get(timeout=1800)
             except queue.Empty:
                 yield 'data: {"type":"timeout"}\n\n'
                 break

@@ -203,14 +203,22 @@ class _FeatureAttentionBlock(nn.Module):
     """
     Single transformer-style block operating over features (treated as tokens).
 
-    Each feature is embedded to `d_model` dims; multi-head self-attention is
-    applied across the feature dimension; output is pooled back to a vector.
+    Uses a manual multi-head self-attention implementation (pure tensor ops:
+    matmul + softmax) instead of nn.MultiheadAttention.  This avoids the
+    nn.MultiheadAttention native BLAS kernel which segfaults on macOS ARM64
+    when LightGBM is also loaded in the same process (OpenMP conflict).
     """
 
     def __init__(self, d_model: int, n_heads: int, dropout: float):
         super().__init__()
-        self.attn = nn.MultiheadAttention(d_model, n_heads, dropout=dropout,
-                                          batch_first=True)
+        assert d_model % n_heads == 0
+        self.n_heads  = n_heads
+        self.d_head   = d_model // n_heads
+        self.scale    = self.d_head ** -0.5
+        # Fused QKV projection for efficiency
+        self.qkv_proj = nn.Linear(d_model, 3 * d_model, bias=False)
+        self.out_proj  = nn.Linear(d_model, d_model)
+        self.attn_drop = nn.Dropout(dropout)
         self.ff = nn.Sequential(
             nn.LayerNorm(d_model),
             nn.Linear(d_model, d_model * 2),
@@ -222,9 +230,27 @@ class _FeatureAttentionBlock(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (batch, n_feats, d_model)
-        attn_out, _ = self.attn(x, x, x, need_weights=False)
-        x = self.norm1(x + attn_out)
+        # x: (B, S, D)
+        B, S, D = x.shape
+        H, Dh = self.n_heads, self.d_head
+
+        # Compute Q, K, V via fused projection and split
+        qkv = self.qkv_proj(x)                               # (B, S, 3D)
+        q, k, v = qkv.chunk(3, dim=-1)                       # each (B, S, D)
+
+        # Reshape to multi-head: (B, H, S, Dh)
+        q = q.view(B, S, H, Dh).transpose(1, 2)
+        k = k.view(B, S, H, Dh).transpose(1, 2)
+        v = v.view(B, S, H, Dh).transpose(1, 2)
+
+        # Scaled dot-product attention (pure tensor ops, no BLAS dependency)
+        attn = torch.softmax(q @ k.transpose(-2, -1) * self.scale, dim=-1)
+        attn = self.attn_drop(attn)
+        out  = (attn @ v).transpose(1, 2).contiguous().view(B, S, D)
+        out  = self.out_proj(out)
+
+        # Pre-norm residual connections
+        x = self.norm1(x + out)
         x = self.norm2(x + self.ff(x))
         return x
 
@@ -338,6 +364,8 @@ class TorchClassifier:
         val_frac: float = 0.15,
         random_state: int = 42,
         verbose: bool = False,
+        use_amp: bool = True,
+        compile_model: bool = False,
     ):
         self.arch = arch
         self.hidden_size = hidden_size
@@ -351,6 +379,8 @@ class TorchClassifier:
         self.val_frac = val_frac
         self.random_state = random_state
         self.verbose = verbose
+        self.use_amp = use_amp
+        self.compile_model = compile_model
 
         self.model_: Optional[nn.Module] = None
         self.device_: Optional[torch.device] = None
@@ -404,7 +434,18 @@ class TorchClassifier:
         self.device_ = _get_device()
         self.n_features_in_ = X_np.shape[1]
 
-        self.model_ = self._make_net(self.n_features_in_).to(self.device_)
+        net = self._make_net(self.n_features_in_).to(self.device_)
+
+        # Optional torch.compile() — gives ~10-30% speedup after a one-time
+        # compilation pass.  Requires PyTorch 2.x; falls back silently if
+        # compilation fails (e.g. unsupported ops on MPS).
+        if self.compile_model and hasattr(torch, 'compile'):
+            try:
+                net = torch.compile(net, backend='aot_eager', fullgraph=False)
+            except Exception:
+                pass  # compile failed, use eager mode
+
+        self.model_ = net
 
         optimizer = torch.optim.Adam(
             self.model_.parameters(),
@@ -416,13 +457,27 @@ class TorchClassifier:
         )
         loss_fn = nn.BCEWithLogitsLoss()
 
+        # Mixed-precision (AMP) on MPS or CUDA — ~1.5-2× faster forward/backward.
+        # Loss is always computed in float32 to avoid NaN with BCEWithLogitsLoss.
+        # MPS uses bfloat16; CUDA uses float16.
+        # The transformer arch falls back to CPU on MPS (set above), so
+        # _device_type will be 'cpu' for it and AMP is automatically skipped.
+        _device_type = self.device_.type  # 'mps', 'cuda', or 'cpu'
+        _amp_enabled = (
+            self.use_amp
+            and _device_type in ('cuda', 'mps')
+            and hasattr(torch, 'autocast')
+        )
+        _amp_dtype = torch.bfloat16 if _device_type == 'mps' else torch.float16
+
         X_tr_t = self._to_tensor(X_tr_np)
         y_tr_t = self._to_tensor(y_tr_np)
         X_val_t = self._to_tensor(X_val_np)
         y_val_t = self._to_tensor(y_val_np)
 
         ds = TensorDataset(X_tr_t, y_tr_t)
-        loader = DataLoader(ds, batch_size=self.batch_size, shuffle=True)
+        loader = DataLoader(ds, batch_size=self.batch_size, shuffle=True,
+                            pin_memory=False, num_workers=0)
 
         best_val_loss = float('inf')
         best_state    = None
@@ -432,16 +487,26 @@ class TorchClassifier:
             self.model_.train()
             for xb, yb in loader:
                 optimizer.zero_grad()
-                logits = self.model_(xb)
-                loss_fn(logits, yb).backward()
+                if _amp_enabled:
+                    with torch.autocast(device_type=_device_type, dtype=_amp_dtype):
+                        logits = self.model_(xb)
+                    loss_fn(logits.float(), yb).backward()
+                else:
+                    logits = self.model_(xb)
+                    loss_fn(logits, yb).backward()
                 optimizer.step()
             scheduler.step()
 
             # Validation loss for early stopping
             self.model_.eval()
             with torch.no_grad():
-                val_logits = self.model_(X_val_t)
-                val_loss   = loss_fn(val_logits, y_val_t).item()
+                if _amp_enabled:
+                    with torch.autocast(device_type=_device_type, dtype=_amp_dtype):
+                        val_logits = self.model_(X_val_t)
+                    val_loss = loss_fn(val_logits.float(), y_val_t).item()
+                else:
+                    val_logits = self.model_(X_val_t)
+                    val_loss   = loss_fn(val_logits, y_val_t).item()
 
             if val_loss < best_val_loss - 1e-6:
                 best_val_loss = val_loss

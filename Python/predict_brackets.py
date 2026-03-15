@@ -23,6 +23,19 @@ Usage:
     python3 predict_brackets.py -m random_forest --final-four-pairings "0-2,1-3"
 """
 
+# ── Threading safety ────────────────────────────────────────────────────────
+# LightGBM loads libomp.dylib (LLVM OpenMP) which conflicts with PyTorch's
+# Accelerate/BLAS GEMM kernel on macOS ARM64, causing a segfault when both
+# are loaded in the same process.  Limiting all threading runtimes to 1
+# thread before any library is imported prevents the race condition.
+# These must be set *before* importing numpy, pytorch, lightgbm, etc.
+import os as _os_env
+for _omp_var in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS',
+                 'MKL_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS'):
+    _os_env.environ.setdefault(_omp_var, '1')
+del _os_env, _omp_var
+# ────────────────────────────────────────────────────────────────────────────
+
 import argparse
 import json
 import os
@@ -842,6 +855,17 @@ def build_and_train_model(
     # LightGBM: suppress noisy stdout.
     if model_key == 'lightgbm':
         params.setdefault('verbose', -1)
+        params.setdefault('n_jobs', -1)
+    # Parallelise models that support n_jobs — uses all CPU cores by default.
+    # Note: lda (LinearDiscriminantAnalysis) does NOT accept n_jobs.
+    _N_JOBS_MODELS = frozenset([
+        'logistic_regression', 'knn', 'random_forest', 'extra_trees', 'gpc',
+    ])
+    if model_key in _N_JOBS_MODELS:
+        params.setdefault('n_jobs', -1)
+    # XGBoost can also use all threads.
+    if model_key == 'xgboost':
+        params.setdefault('nthread', -1)
     # Torch classifiers: use the factory so the arch default maps correctly.
     if _HAS_TORCH and model_key in TORCH_MODEL_KEYS:
         estimator = make_torch_classifier(model_key, **params)
