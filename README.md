@@ -139,14 +139,16 @@ python3 Python/predict_brackets.py \
 
 | Group | Prefix | Feature names |
 |---|---|---|
-| Common (always `KP__`) | `KP__` | `WinPct` `Wins` `Losses` `AdjO` `Rk_AdjO` `AdjD` `Rk_AdjD` `AdjT` `Rk_AdjT` |
-| KenPom-only | `KP__` | `AdjEM` `Rk_AdjEM` `Luck` `Rk_Luck` `SOS_AdjEM` `Rk_SOS_AdjEM` `SOS_AdjO` `Rk_SOS_AdjO` `SOS_AdjD` `Rk_SOS_AdjD` `NCSOS_AdjEM` `Rk_NCSOS_AdjEM` |
-| BartTorvik-only | `BT__` | `Barthag` `Rk_Barthag` `EFG%` `EFGD%` `TOR` `TORD` `ORB` `DRB` `FTR` `FTRD` `2P%` `2P%D` `3P%` `3P%D` `3PR` `3PRD` `WAB` `Rk_WAB` `ConfWinPct` `ConfWins` `ConfLosses` |
+| Common (always `KP__`) | `KP__` | `WinPct` `Wins` `Losses` `Conf` |
+| KenPom-only | `KP__` | `KP_AdjO` `KP_Rk_AdjO` `KP_AdjD` `KP_Rk_AdjD` `KP_AdjT` `KP_Rk_AdjT` `AdjEM` `Rk_AdjEM` `Luck` `Rk_Luck` `SOS_AdjEM` `Rk_SOS_AdjEM` `SOS_AdjO` `Rk_SOS_AdjO` `SOS_AdjD` `Rk_SOS_AdjD` `NCSOS_AdjEM` `Rk_NCSOS_AdjEM` |
+| BartTorvik-only | `BT__` | `BT_AdjO` `BT_Rk_AdjO` `BT_AdjD` `BT_Rk_AdjD` `BT_AdjT` `BT_Rk_AdjT` `Barthag` `Rk_Barthag` `EFG%` `Rk_EFG%` `EFGD%` `Rk_EFGD%` `TOR` `Rk_TOR` `TORD` `Rk_TORD` `ORB` `Rk_ORB` `DRB` `Rk_DRB` `FTR` `Rk_FTR` `FTRD` `Rk_FTRD` `2P%` `Rk_2P%` `2P%D` `Rk_2P%D` `3P%` `Rk_3P%` `3P%D` `Rk_3P%D` `3PR` `Rk_3PR` `3PRD` `Rk_3PRD` `WAB` `Rk_WAB` |
 | 2-week BartTorvik | `BT2W__` | `2W_AdjO` `2W_AdjD` `2W_Barthag` (and others; base names start with `2W_`) |
 | Hotness delta | `BTHOT__` | `HOT_AdjO` `HOT_AdjD` `HOT_Barthag` (and others; base names start with `HOT_`) |
 | Categorical opt-ins | varies | `Conf` `Seed` |
 
-Default features: `WinPct AdjO AdjD SOS_AdjEM`
+> **Note:** `KP_AdjO`/`KP_AdjD` are the KenPom versions of adjusted efficiency; `BT_AdjO`/`BT_AdjD` are the BartTorvik equivalents. Avoid including both in the same model.
+
+Default features: `WinPct KP_AdjO KP_AdjD SOS_AdjEM`
 
 #### Supported models (`--model`)
 
@@ -157,9 +159,58 @@ Default features: `WinPct AdjO AdjD SOS_AdjEM`
 | `svc` | Support Vector Machine (RBF, linear, poly) |
 | `decision_tree` | Decision Tree |
 | `random_forest` | Random Forest |
+| `gradient_boosting` | Gradient Boosting |
+| `extra_trees` | Extra Trees |
+| `hist_gradient_boosting` | Histogram-based Gradient Boosting |
+| `lda` | Linear Discriminant Analysis |
 | `adaboost` | AdaBoost |
 | `gpc` | Gaussian Process Classifier |
-| `mlp` | Multi-Layer Perceptron |
+| `mlp` | Multi-Layer Perceptron (scikit-learn) |
+| `xgboost` *(optional)* | XGBoost (requires `xgboost` package) |
+| `lightgbm` *(optional)* | LightGBM (requires `lightgbm` package) |
+| `torch_mlp` *(optional)* | Deep MLP — PyTorch (requires `torch`) |
+| `torch_resnet` *(optional)* | TabResNet — PyTorch (requires `torch`) |
+| `torch_transformer` *(optional)* | Lightweight feature-attention Transformer — PyTorch (requires `torch`) |
+
+#### PyTorch model parameters (`torch_mlp`, `torch_resnet`, `torch_transformer`)
+
+All three PyTorch models share the same `TorchClassifier` wrapper and accept the following `--model-params` keys:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `hidden_size` | `128` | Hidden layer / embedding width |
+| `n_layers` | `4` | Number of hidden layers |
+| `dropout` | `0.3` | Dropout probability |
+| `lr` | `1e-3` | Initial Adam learning rate |
+| `epochs` | `400` | Maximum training epochs |
+| `batch_size` | `256` | Mini-batch size |
+| `weight_decay` | `1e-4` | Adam L2 regularisation |
+| `patience` | `40` | Early-stopping patience (counts validation events, not epochs) |
+| `val_frac` | `0.15` | Fraction of training data held out for validation |
+| `val_every` | `5` (MLP/ResNet), `3` (Transformer) | Run validation every N epochs |
+| `use_amp` | `True` | Use automatic mixed precision (speeds up MPS/CUDA) |
+| `compile_model` | `False` | Call `torch.compile()` on the model (PyTorch ≥ 2.0) |
+| `random_state` | `42` | RNG seed |
+| `verbose` | `False` | Print per-epoch loss during training |
+
+Training uses direct on-device tensor batching (no `DataLoader`) via `torch.randperm`. On Apple Silicon the MPS backend is used automatically when `torch` is installed.
+
+```bash
+# TabResNet with wider layers and lighter dropout
+python3 Python/predict_brackets.py \
+  --run-name ResNet_Wide \
+  --model torch_resnet \
+  --model-params hidden_size=256 n_layers=6 dropout=0.2 epochs=600 \
+  --features WinPct KP_AdjO KP_AdjD SOS_AdjEM \
+  --norm-all --delta-feats --this-year 2026
+
+# Transformer with more training budget
+python3 Python/predict_brackets.py \
+  --run-name Transformer_Big \
+  --model torch_transformer \
+  --model-params hidden_size=128 n_layers=4 epochs=800 patience=60 \
+  --norm-all --delta-feats --this-year 2026
+```
 
 **Output** (written to `Predictions/<run-name>/`):
 
