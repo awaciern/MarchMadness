@@ -254,9 +254,11 @@ def resolve_feature_col(base: str) -> str:
     """
     if base == 'Seed':
         return 'Seed'
-    if base.startswith('KP_Adj'):
+    if base.startswith('KP_'):
+        # e.g. KP_AdjO → KP__AdjO, KP_Rk_AdjO → KP__Rk_AdjO
         return f'KP__{base[3:]}'
-    if base.startswith('BT_Adj'):
+    if base.startswith('BT_'):
+        # e.g. BT_AdjO → BT__AdjO, BT_Rk_AdjO → BT__Rk_AdjO
         return f'BT__{base[3:]}'
     if base.startswith('2W_'):
         return f'BT2W__{base[3:]}'
