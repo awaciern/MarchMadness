@@ -1437,8 +1437,9 @@ def my_brackets_route():
 # Group bracket analysis routes
 # ---------------------------------------------------------------------------
 
-def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
-                       year: int, num_iters: int, rng_seed):
+def _run_group_scoring(job_id: str, model_path_str: str, group_key: str,
+                       year: int, num_iters: int, rng_seed,
+                       is_ensemble: bool = False):
     """
     Worker thread: run Monte Carlo simulations of the tournament and,
     for each iteration, score every user bracket in the group.
@@ -1458,7 +1459,8 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
         # Lazy import — keeps startup fast
         sys.path.insert(0, str(REPO_ROOT / 'Python'))
         from simulate_bracket import (                 # pylint: disable=import-error
-            _simulate_one, to_html, get_actual_results, ROUND_LABELS as _ROUND_LABELS,
+            _simulate_one, _simulate_one_ensemble, to_html, get_actual_results,
+            ROUND_LABELS as _ROUND_LABELS,
         )
         from predict_brackets import (                 # pylint: disable=import-error
             TemperatureScaledModel,
@@ -1476,26 +1478,56 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
             'TemperatureScaledModel', TemperatureScaledModel
         )
 
-        # ---- Load model pickle ----
-        with open(pkl_path_str, 'rb') as fh:
-            payload = _pickle.load(fh)
-
-        model              = payload['model']
-        model_key          = payload.get('model_key', _pl.Path(pkl_path_str).parent.name)
-        feature_list       = payload['feature_list']
-        cat_encoders       = payload.get('cat_encoders', {})
-        norm_info          = payload.get('norm_info')
-        delta_feats        = payload.get('delta_feats', False)
-        numeric_bases      = payload.get('numeric_bases', [])
-        model_feature_list = payload.get('model_feature_list', feature_list)
-
         ff_pairings_str = _load_ff_pairings_str(year)
         ff_pairings = parse_ff_pairings_arg(ff_pairings_str)
+        data_root = REPO_ROOT
 
-        data_root   = REPO_ROOT
-        needs_bt    = any(f.startswith('BT__')    for f in feature_list)
-        needs_bt2w  = any(f.startswith('BT2W__')  for f in feature_list)
-        needs_bthot = any(f.startswith('BTHOT__') for f in feature_list)
+        if is_ensemble:
+            # ---- Load ensemble model info and components ----
+            _model_dir = _pl.Path(model_path_str)
+            _info = json.loads((_model_dir / 'model_info.json').read_text())
+            model_key = _info.get('run_name') or _model_dir.name
+            calibrate_temperature = _info.get('ensemble_calibrate_temperature')
+            component_names = _info.get('feature_bases', [])
+            components = []
+            for _cname in component_names:
+                _candidates = sorted(data_root.glob(f'Predictions*/{_cname}/model.pkl'))
+                if not _candidates:
+                    raise FileNotFoundError(f'Cannot find model.pkl for component: {_cname}')
+                with open(_candidates[0], 'rb') as fh:
+                    _cp = _pickle.load(fh)
+                _cfl = _cp['feature_list']
+                components.append({
+                    'model':              _cp['model'],
+                    'feature_list':       _cfl,
+                    'model_feature_list': _cp.get('model_feature_list', _cfl),
+                    'cat_encoders':       _cp.get('cat_encoders', {}),
+                    'norm_info':          _cp.get('norm_info', None),
+                    'delta_feats':        _cp.get('delta_feats', False),
+                    'numeric_bases':      _cp.get('numeric_bases', []),
+                    'pca_transformer':    _cp.get('pca_transformer', None),
+                })
+            _all_feat_lists = [c['feature_list'] for c in components]
+            needs_bt    = any(f.startswith('BT__')    for fl in _all_feat_lists for f in fl)
+            needs_bt2w  = any(f.startswith('BT2W__')  for fl in _all_feat_lists for f in fl)
+            needs_bthot = any(f.startswith('BTHOT__') for fl in _all_feat_lists for f in fl)
+        else:
+            # ---- Load single model pickle ----
+            with open(model_path_str, 'rb') as fh:
+                payload = _pickle.load(fh)
+
+            model              = payload['model']
+            model_key          = payload.get('model_key', _pl.Path(model_path_str).parent.name)
+            feature_list       = payload['feature_list']
+            cat_encoders       = payload.get('cat_encoders', {})
+            norm_info          = payload.get('norm_info')
+            delta_feats        = payload.get('delta_feats', False)
+            numeric_bases      = payload.get('numeric_bases', [])
+            model_feature_list = payload.get('model_feature_list', feature_list)
+
+            needs_bt    = any(f.startswith('BT__')    for f in feature_list)
+            needs_bt2w  = any(f.startswith('BT2W__')  for f in feature_list)
+            needs_bthot = any(f.startswith('BTHOT__') for f in feature_list)
 
         # ---- Load Round 1 fixture ----
         r1_df_raw = load_bracket_round(data_root, year, 1)
@@ -1521,12 +1553,34 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
         df_r1_kp['Seed__1'] = df_r1_kp['Team__1'].map(team_seed_map)
         df_r1_kp['Seed__2'] = df_r1_kp['Team__2'].map(team_seed_map)
 
-        df_r1_enc = apply_label_encoders(df_r1_kp, cat_encoders) if cat_encoders else df_r1_kp.copy()
-        if norm_info is not None:
-            df_r1_enc = apply_year_norm_single(df_r1_enc, year, norm_info)
-        if delta_feats and numeric_bases:
-            df_r1_enc = apply_delta_transform(df_r1_enc, numeric_bases)
-        r1_proba  = model.predict_proba(df_r1_enc[model_feature_list])
+        if is_ensemble:
+            from simulate_bracket import _apply_temp_scale as _ats  # pylint: disable=import-error
+            _all_r1_p1 = []
+            for comp in components:
+                _df_c = df_r1_kp.copy()
+                if comp.get('cat_encoders'):
+                    _df_c = apply_label_encoders(_df_c, comp['cat_encoders'])
+                if comp.get('norm_info') is not None:
+                    _df_c = apply_year_norm_single(_df_c, year, comp['norm_info'])
+                if comp.get('delta_feats') and comp.get('numeric_bases'):
+                    _df_c = apply_delta_transform(_df_c, comp['numeric_bases'])
+                _X = _df_c[comp['model_feature_list']]
+                if comp.get('pca_transformer') is not None:
+                    _X = comp['pca_transformer'].transform(_X)
+                _proba_c = comp['model'].predict_proba(_X)
+                _all_r1_p1.append(_proba_c[:, 1])
+            _avg_r1_p1 = _np.mean(_np.array(_all_r1_p1, dtype=float), axis=0)
+            if calibrate_temperature is not None and calibrate_temperature != 1.0:
+                _avg_r1_p1 = _ats(_avg_r1_p1, calibrate_temperature)
+            r1_proba = _np.column_stack([1.0 - _avg_r1_p1, _avg_r1_p1])
+        else:
+            df_r1_enc = apply_label_encoders(df_r1_kp, cat_encoders) if cat_encoders else df_r1_kp.copy()
+            if norm_info is not None:
+                df_r1_enc = apply_year_norm_single(df_r1_enc, year, norm_info)
+            if delta_feats and numeric_bases:
+                df_r1_enc = apply_delta_transform(df_r1_enc, numeric_bases)
+            r1_proba = model.predict_proba(df_r1_enc[model_feature_list])
+
         r1_teams1 = df_r1_kp['Team__1'].tolist()
         r1_teams2 = df_r1_kp['Team__2'].tolist()
 
@@ -1582,20 +1636,32 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
         # ---- Monte Carlo loop ----
         for it in range(num_iters):
             draws_r1 = rng.random(len(r1_teams1))
-            sim = _simulate_one(
-                model, r1_teams1, r1_teams2, r1_proba,
-                df_kp, df_bt, df_bt2w, df_hot,
-                feature_list, cat_encoders,
-                team_seed_map, ff_pairings,
-                needs_bt, needs_bt2w, needs_bthot,
-                draws_r1, rng,
-                norm_info=norm_info,
-                year=year,
-                delta_feats=delta_feats,
-                numeric_bases=numeric_bases,
-                model_feature_list=model_feature_list,
-                locked_results=_locked_results,
-            )
+            if is_ensemble:
+                sim = _simulate_one_ensemble(
+                    components, r1_teams1, r1_teams2, r1_proba,
+                    df_kp, df_bt, df_bt2w, df_hot,
+                    team_seed_map, ff_pairings,
+                    needs_bt, needs_bt2w, needs_bthot,
+                    draws_r1, rng,
+                    year=year,
+                    locked_results=_locked_results,
+                    calibrate_temperature=calibrate_temperature,
+                )
+            else:
+                sim = _simulate_one(
+                    model, r1_teams1, r1_teams2, r1_proba,
+                    df_kp, df_bt, df_bt2w, df_hot,
+                    feature_list, cat_encoders,
+                    team_seed_map, ff_pairings,
+                    needs_bt, needs_bt2w, needs_bthot,
+                    draws_r1, rng,
+                    norm_info=norm_info,
+                    year=year,
+                    delta_feats=delta_feats,
+                    numeric_bases=numeric_bases,
+                    model_feature_list=model_feature_list,
+                    locked_results=_locked_results,
+                )
 
             for b in brackets:
                 picks = b['picks']
@@ -1663,7 +1729,8 @@ def _run_group_scoring(job_id: str, pkl_path_str: str, group_key: str,
         except Exception:
             pass
 
-        _dir_name = _pl.Path(pkl_path_str).parent.name
+        _model_path = _pl.Path(model_path_str)
+        _dir_name = _model_path.name if is_ensemble else _model_path.parent.name
         _sim_out_dir = SIMULATIONS_DIR / _dir_name
         _sim_out_dir.mkdir(parents=True, exist_ok=True)
         _stem = f'{year}_{num_iters}iters'
@@ -1747,9 +1814,23 @@ def run_group_analysis():
     if not dir_name:
         return jsonify({'error': 'Model required.'}), 400
 
-    pkl_path = PREDICTIONS_DIR / dir_name / 'model.pkl'
+    model_dir = PREDICTIONS_DIR / dir_name
+    pkl_path  = model_dir / 'model.pkl'
+
+    # Detect ensemble models (no pkl — directory with model_info.json)
+    is_ensemble = False
     if not pkl_path.exists():
-        return jsonify({'error': f'model.pkl not found in {dir_name}.'}), 400
+        info_file = model_dir / 'model_info.json'
+        if info_file.exists():
+            try:
+                _info = json.loads(info_file.read_text())
+                is_ensemble = _info.get('model_key') == 'ensemble'
+            except Exception:
+                pass
+        if not is_ensemble:
+            return jsonify({'error': f'model.pkl not found in {dir_name}.'}), 400
+
+    model_path_str = str(model_dir) if is_ensemble else str(pkl_path)
 
     job_id = str(uuid.uuid4())[:8]
     j = Job()
@@ -1759,8 +1840,9 @@ def run_group_analysis():
     t = threading.Thread(
         target=_run_group_scoring,
         args=(
-            job_id, str(pkl_path), group_key, year, num_iters,
+            job_id, model_path_str, group_key, year, num_iters,
             int(rng_seed) if rng_seed is not None and str(rng_seed).strip() != '' else None,
+            is_ensemble,
         ),
         daemon=True,
     )
