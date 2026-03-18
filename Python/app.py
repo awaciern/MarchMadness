@@ -30,12 +30,31 @@ from flask import Flask, Response, jsonify, render_template_string, request, sen
 REPO_ROOT        = Path(__file__).resolve().parents[1]
 PYTHON_EXE       = str(REPO_ROOT / 'env' / 'bin' / 'python3')
 PREDICT_SCRIPT   = str(Path(__file__).resolve().parent / 'predict_brackets.py')
+PREDICT_YEAR_SCRIPT = str(Path(__file__).resolve().parent / 'predict_year.py')
 SIMULATE_SCRIPT  = str(Path(__file__).resolve().parent / 'simulate_bracket.py')
 FEATURE_VIZ_SCRIPT = str(Path(__file__).resolve().parent / 'feature_viz.py')
 PREDICTIONS_DIR  = REPO_ROOT / 'Predictions'
 SIMULATIONS_DIR  = REPO_ROOT / 'Simulations'
 BRACKETS_DIR     = REPO_ROOT / 'Brackets'
 THIS_YEAR        = 2026
+
+
+def _resolve_dir(dir_name: str) -> 'Path':
+    """Resolve a *dir_name* to an absolute Path.
+
+    Single-segment names (no '/') are resolved under PREDICTIONS_DIR for
+    backward compatibility with existing stored data.
+    Multi-segment names (e.g. 'PredictionsModelTourney8/ens5_...') are
+    resolved relative to REPO_ROOT; a path-traversal check is applied.
+    """
+    if '/' in str(dir_name):
+        p = (REPO_ROOT / dir_name).resolve()
+    else:
+        p = (PREDICTIONS_DIR / dir_name).resolve()
+    repo = REPO_ROOT.resolve()
+    if not str(p).startswith(str(repo) + '/') and str(p) != str(repo):
+        raise ValueError(f'Unsafe dir_name: {dir_name}')
+    return p
 
 # ---------------------------------------------------------------------------
 # Feature / model metadata (mirrored from predict_brackets.py)
@@ -750,17 +769,36 @@ def saved_models_route():
 
 @app.route('/saved_results/<path:dir_name>')
 def saved_results(dir_name):
-    d = PREDICTIONS_DIR / dir_name
+    try:
+        d = _resolve_dir(dir_name)
+    except ValueError:
+        abort(400)
     if not d.is_dir():
         abort(404)
     summary = (d / 'summary.txt').read_text() if (d / 'summary.txt').exists() else ''
     years = [y for y in ALL_YEARS if (d / f'{y}.html').exists()]
-    return jsonify({'summary': summary, 'years': years, 'dir_name': dir_name})
+    # Detect ensemble models that can have brackets generated on-demand.
+    is_ensemble = False
+    info_file = d / 'model_info.json'
+    if info_file.exists():
+        try:
+            info = json.loads(info_file.read_text())
+            is_ensemble = info.get('model_key') == 'ensemble'
+        except Exception:
+            pass
+    gen_years = [THIS_YEAR] if is_ensemble and THIS_YEAR not in years else []
+    return jsonify({
+        'summary': summary, 'years': years, 'dir_name': dir_name,
+        'is_ensemble': is_ensemble, 'gen_years': gen_years,
+    })
 
 
 @app.route('/saved_bracket/<path:dir_name>/<int:year>')
 def saved_bracket(dir_name, year):
-    html_file = PREDICTIONS_DIR / dir_name / f'{year}.html'
+    try:
+        html_file = _resolve_dir(dir_name) / f'{year}.html'
+    except ValueError:
+        abort(400)
     if not html_file.exists():
         abort(404)
     return send_file(str(html_file), mimetype='text/html')
@@ -787,9 +825,12 @@ def save_model_bracket():
     if not group:
         return jsonify({'error': 'Group name is required.'}), 400
 
-    html_file = PREDICTIONS_DIR / dir_name / f'{year}.html'
+    try:
+        html_file = _resolve_dir(dir_name) / f'{year}.html'
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     if not html_file.exists():
-        return jsonify({'error': f'{year}.html not found in Predictions/{dir_name}.'}), 400
+        return jsonify({'error': f'{year}.html not found in {dir_name}.'}), 400
 
     html_text = html_file.read_text(encoding='utf-8')
 
@@ -847,6 +888,58 @@ def save_model_bracket():
         json.dump(bracket_payload, f, indent=2)
 
     return jsonify({'saved': True, 'path': str(out_path.relative_to(REPO_ROOT))})
+
+
+@app.route('/gen_bracket', methods=['POST'])
+def gen_bracket():
+    """Generate a bracket HTML for a model (single or ensemble) on demand.
+
+    Calls predict_year.py as a subprocess.  Returns immediately with the
+    output once the subprocess finishes (typically 5-30 s).
+    """
+    data     = request.get_json(force=True)
+    dir_name = (data.get('dir_name') or '').strip()
+    year     = int(data.get('year') or THIS_YEAR)
+
+    if not dir_name:
+        return jsonify({'error': 'dir_name is required.'}), 400
+
+    try:
+        pred_dir = _resolve_dir(dir_name)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    if not pred_dir.is_dir():
+        return jsonify({'error': f'Predictions directory not found: {dir_name}'}), 404
+
+    ff_str = _load_ff_pairings_str(year)
+    cmd = [
+        PYTHON_EXE, PREDICT_YEAR_SCRIPT,
+        '--model',                str(pred_dir),
+        '--year',                 str(year),
+        '--final-four-pairings',  ff_str,
+        '--data-root',            str(REPO_ROOT),
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            cwd=str(REPO_ROOT),
+        )
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or 'Unknown error').strip()
+            return jsonify({'error': err}), 500
+        return jsonify({
+            'success': True,
+            'output':  result.stdout.strip(),
+            'url':     f'/saved_bracket/{dir_name}/{year}',
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Bracket generation timed out (180 s).'}), 500
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -4793,6 +4886,18 @@ select:focus, input[type="text"]:focus { border-color: #3b82f6; }
 }
 .year-btn:hover { border-color: #fbbf24; color: #fbbf24; }
 .year-btn.current { border-color: #f59e0b; color: #fde68a; font-weight: 600; }
+.gen-bracket-btn {
+  background: #0f172a;
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: #fde68a;
+  cursor: pointer;
+  transition: background .15s;
+}
+.gen-bracket-btn:hover:not(:disabled) { background: #1e293b; }
+.gen-bracket-btn:disabled { opacity: .6; cursor: not-allowed; }
 
 /* ---- idle state ---- */
 #results-section { display: none; }
@@ -5382,7 +5487,7 @@ function loadSavedResults(dirName) {
   document.getElementById('results-section').style.display = 'none';
   document.getElementById('log-box').innerHTML = '';
   setStatus('Loading\u2026', 'status-running');
-  fetch('/saved_results/' + dirName)
+  fetch('/saved_results/' + encodeURIComponent(dirName))
     .then(r => r.json())
     .then(function(data) {
       setStatus('Done', 'status-done');
@@ -5391,14 +5496,47 @@ function loadSavedResults(dirName) {
       grid.innerHTML = '';
       (data.years || []).forEach(function(y) {
         const a = document.createElement('a');
-        a.href = '/saved_bracket/' + dirName + '/' + y;
+        a.href = '/saved_bracket/' + encodeURIComponent(dirName) + '/' + y;
         a.target = '_blank';
         a.textContent = y === 2026 ? y + ' \u2605' : String(y);
         a.className = 'year-btn' + (y === 2026 ? ' current' : '');
         grid.appendChild(a);
       });
+      // For ensemble models, show a "Generate" button for unbuilt brackets.
+      (data.gen_years || []).forEach(function(y) {
+        const btn = document.createElement('button');
+        btn.className = 'gen-bracket-btn';
+        btn.textContent = '\u26a1 Generate ' + y + (y === 2026 ? ' \u2605' : '');
+        btn.onclick = function() { genBracket(dirName, y, btn); };
+        grid.appendChild(btn);
+      });
       document.getElementById('results-section').style.display = 'block';
       loadSimCard(dirName);
+    });
+}
+
+function genBracket(dirName, year, btnEl) {
+  btnEl.disabled = true;
+  btnEl.textContent = 'Generating\u2026';
+  fetch('/gen_bracket', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dir_name: dirName, year: year }),
+  })
+    .then(r => r.json())
+    .then(function(data) {
+      if (data.success) {
+        btnEl.textContent = '\u2713 Done \u2014 reloading\u2026';
+        // Reload results to replace the generate button with a real year link.
+        setTimeout(function() { loadSavedResults(dirName); }, 400);
+      } else {
+        btnEl.textContent = '\u2717 Error: ' + (data.error || 'unknown').slice(0, 80);
+        btnEl.disabled = false;
+      }
+    })
+    .catch(function(err) {
+      btnEl.textContent = '\u2717 ' + String(err).slice(0, 60);
+      btnEl.disabled = false;
     });
 }
 
