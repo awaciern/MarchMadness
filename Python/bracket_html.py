@@ -41,10 +41,22 @@ def _get_c(correct_by_round, rnd, idx, is_current):
     return lst[idx] if idx < len(lst) else None
 
 
-def _card(team, seed, prob=None, correct=None, is_winner=True, extra_cls='') -> str:
-    """Return an HTML div for one team card."""
+def _card(team, seed, prob=None, correct=None, is_winner=True, extra_cls='', vote_info=None) -> str:
+    """Return an HTML div for one team card.
+
+    vote_info: optional (winner_votes, n_components) tuple; when provided the
+               card shows the avg win probability AND the vote count, e.g. 72% (3/5).
+    """
     s = _fmt_seed(seed)
-    p_html = f'<span class="p"> {prob:.0%}</span>' if (prob is not None and prob == prob) else ''
+    if prob is not None and prob == prob:
+        if vote_info is not None:
+            v, nc = vote_info
+            p_html = (f'<span class="p"> {prob:.0%}'
+                      f'<span class="v"> ({v}/{nc})</span></span>')
+        else:
+            p_html = f'<span class="p"> {prob:.0%}</span>'
+    else:
+        p_html = ''
     mark = ''
     if is_winner:
         if correct is None:
@@ -88,6 +100,8 @@ def format_bracket_html(
     model_key: str,
     feat_bases: List[str],
     ff_pairings: List[Tuple[int, int]],
+    votes_by_round: 'list | None' = None,
+    n_components: 'int | None' = None,
 ) -> str:
     """
     Generate a self-contained HTML file showing the full 64-team bracket.
@@ -155,14 +169,17 @@ def format_bracket_html(
             is_w1  = (g['t1'] == pred_w)
             is_w2  = (g['t2'] == pred_w)
             lose_prob = (1 - prob) if (prob is not None and prob == prob) else None
+            vw  = votes_by_round[0][r1_off + lg] if (votes_by_round and votes_by_round[0] is not None) else None
+            vi1 = ((vw, n_components) if is_w1 else (n_components - vw, n_components)) if vw is not None else None
+            vi2 = ((vw, n_components) if is_w2 else (n_components - vw, n_components)) if vw is not None else None
             r1_items.append(_place(t1_top, _card(
                 g['t1'], g['s1'],
                 prob if is_w1 else lose_prob,
-                corr if is_w1 else None, is_w1)))
+                corr if is_w1 else None, is_w1, vote_info=vi1)))
             r1_items.append(_place(t2_top, _card(
                 g['t2'], g['s2'],
                 prob if is_w2 else lose_prob,
-                corr if is_w2 else None, is_w2)))
+                corr if is_w2 else None, is_w2, vote_info=vi2)))
 
         # R2 – show 16 R1 winners per half (8 per region) entering Round 2.
         #      Pairs: games (2j, 2j+1) produce R2 winner at r2_off + ri*4 + j.
@@ -179,12 +196,14 @@ def format_bracket_html(
                     win_p = pred_probs_by_round[1][r2_idx]
                     prob  = win_p if adv else ((1 - win_p) if (win_p is not None and win_p == win_p) else None)
                     corr  = gc(1, r2_idx) if adv else None
+                    vw    = votes_by_round[1][r2_idx] if (votes_by_round and votes_by_round[1] is not None) else None
+                    vi    = ((vw, n_components) if adv else (n_components - vw, n_components)) if vw is not None else None
                 else:
-                    adv = prob = corr = None
+                    adv = prob = corr = vi = None
                 top = half_top(0, ri, k)
                 r2_items.append(_place(top, _card(
                     pred_teams_by_round[0][t_idx], pred_seeds_by_round[0][t_idx],
-                    prob, corr, bool(adv) if adv is not None else False)))
+                    prob, corr, bool(adv) if adv is not None else False, vote_info=vi)))
 
         # R3 – show 8 R2 winners per half (4 per region) entering Sweet 16.
         #      Pairs: (2j, 2j+1) produce R3 winner at r3_off + ri*2 + j.
@@ -200,12 +219,14 @@ def format_bracket_html(
                     win_p = pred_probs_by_round[2][r3_idx]
                     prob  = win_p if adv else ((1 - win_p) if (win_p is not None and win_p == win_p) else None)
                     corr  = gc(2, r3_idx) if adv else None
+                    vw    = votes_by_round[2][r3_idx] if (votes_by_round and votes_by_round[2] is not None) else None
+                    vi    = ((vw, n_components) if adv else (n_components - vw, n_components)) if vw is not None else None
                 else:
-                    adv = prob = corr = None
+                    adv = prob = corr = vi = None
                 top = half_top(1, ri, k)
                 r3_items.append(_place(top, _card(
                     pred_teams_by_round[1][t_idx], pred_seeds_by_round[1][t_idx],
-                    prob, corr, bool(adv) if adv is not None else False)))
+                    prob, corr, bool(adv) if adv is not None else False, vote_info=vi)))
 
         # R4 – show 4 R3 winners per half (2 per region) entering Elite Eight.
         #      Each region pair (k=0,1) produces 1 R4 winner at r4_off + ri.
@@ -221,12 +242,14 @@ def format_bracket_html(
                     win_p = pred_probs_by_round[3][r4_idx]
                     prob  = win_p if adv else ((1 - win_p) if (win_p is not None and win_p == win_p) else None)
                     corr  = gc(3, r4_idx) if adv else None
+                    vw    = votes_by_round[3][r4_idx] if (votes_by_round and votes_by_round[3] is not None) else None
+                    vi    = ((vw, n_components) if adv else (n_components - vw, n_components)) if vw is not None else None
                 else:
-                    adv = prob = corr = None
+                    adv = prob = corr = vi = None
                 top = half_top(2, ri, k)
                 r4_items.append(_place(top, _card(
                     pred_teams_by_round[2][t_idx], pred_seeds_by_round[2][t_idx],
-                    prob, corr, bool(adv) if adv is not None else False)))
+                    prob, corr, bool(adv) if adv is not None else False, vote_info=vi)))
 
         cols = [
             _col(r1_items, 'First Round',   200, HALF_H),
@@ -254,7 +277,9 @@ def format_bracket_html(
         win_p = pred_probs_by_round[4][ff_win_rnd_idx]
         prob  = win_p if adv else ((1 - win_p) if (win_p is not None and win_p == win_p) else None)
         corr  = gc(4, ff_win_rnd_idx) if adv else None
-        return _card(team, seed, prob, corr, adv)
+        vw    = votes_by_round[4][ff_win_rnd_idx] if (votes_by_round and votes_by_round[4] is not None) else None
+        vi    = ((vw, n_components) if adv else (n_components - vw, n_components)) if vw is not None else None
+        return _card(team, seed, prob, corr, adv, vote_info=vi)
 
     ff0_i, ff0_j = ff_pairings[0]
     ff1_i, ff1_j = ff_pairings[1]
@@ -282,8 +307,10 @@ def format_bracket_html(
         win_p = pred_probs_by_round[5][0]
         prob  = win_p if adv else ((1 - win_p) if (win_p is not None and win_p == win_p) else None)
         corr  = gc(5, 0) if adv else None
+        vw    = votes_by_round[5][0] if (votes_by_round and votes_by_round[5] is not None) else None
+        vi    = ((vw, n_components) if adv else (n_components - vw, n_components)) if vw is not None else None
         champ_col.append(_place(slot_top, _card(
-            team, seed, prob, corr, adv, extra_cls='champ' if adv else '')))
+            team, seed, prob, corr, adv, extra_cls='champ' if adv else '', vote_info=vi)))
 
     center_cols = [
         _col(ff_left,   'Final Four',    160, HALF_H),
@@ -333,6 +360,7 @@ h1{{font-size:17px;color:#fbbf24;margin-bottom:3px}}
 .ng.champ{{background:#450a0a;color:#fca5a5;border:2px solid #ef4444;font-weight:700}}
 .s{{color:#6b7280;font-size:10px;margin-right:2px}}
 .p{{color:#f59e0b;font-size:9px}}
+.v{{color:#9ca3af;font-size:9px}}
 </style></head>
 <body>
 <h1>{year} NCAA Tournament \u2014 {model_key}</h1>

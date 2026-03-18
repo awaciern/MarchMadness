@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bracket_html import format_bracket_html
 from predict_brackets import (
+    ALL_YEARS,
     simulate_bracket,
     parse_ff_pairings_arg,
     derive_ff_pairings_from_data,
@@ -83,6 +84,79 @@ def find_component_pkl(repo_root: Path, name: str) -> 'Path | None':
     return candidates[0] if candidates else None
 
 
+def _apply_temp_scale(avg_p1: np.ndarray, T: float) -> np.ndarray:
+    """Apply temperature scaling to a combined-probability array.
+
+    T < 1 stretches probabilities away from 0.5 (more confident).
+    T > 1 compresses them toward 0.5 (less confident).
+    The predicted winner (p > 0.5) is never changed.
+    """
+    p = np.clip(avg_p1, 1e-9, 1.0 - 1e-9)
+    logit = np.log(p) - np.log(1.0 - p)
+    return 1.0 / (1.0 + np.exp(-logit / T))
+
+
+def fit_ensemble_calibration_T(
+    components: list,
+    data_root: Path,
+    strategy: str,
+    weights: 'list | None',
+    exclude_years: 'list | None' = None,
+    p_target: float = 0.97,
+    percentile: float = 98.0,
+) -> float:
+    """Fit a stretch calibration temperature T for a post-combination ensemble.
+
+    Collects combined ensemble probabilities for all available historical
+    bracket rounds, then returns T = percentile(|logit(avg_p1)|, percentile)
+    / logit(p_target).  Mirrors fit_temperature_stretch() from predict_brackets
+    but works on the averaged probability after all components are combined.
+    """
+    years = [y for y in ALL_YEARS if y not in (exclude_years or [])]
+    all_logits: list = []
+    for year in years:
+        for rnd in range(1, 7):
+            try:
+                df = load_bracket_round(data_root, year, rnd)
+                all_p1: list = []
+                for comp in components:
+                    df_c = df.copy()
+                    if comp['cat_encoders']:
+                        df_c = apply_label_encoders(df_c, comp['cat_encoders'])
+                    if comp['norm_info'] is not None:
+                        df_c = apply_year_norm_single(df_c, year, comp['norm_info'])
+                    if comp['delta_feats'] and comp['numeric_bases']:
+                        df_c = apply_delta_transform(df_c, comp['numeric_bases'])
+                    X = df_c[comp['model_feature_list']]
+                    if comp['pca_transformer'] is not None:
+                        X = comp['pca_transformer'].transform(X)
+                    proba = comp['model'].predict_proba(X)
+                    all_p1.append(proba[:, 1])
+                if not all_p1:
+                    continue
+                if strategy == 'soft':
+                    w = np.array(weights, dtype=float) if weights else np.ones(len(components))
+                    w = w / w.sum()
+                    avg_p1 = np.average(np.array(all_p1, dtype=float), axis=0, weights=w)
+                else:
+                    avg_p1 = np.mean(np.array(all_p1, dtype=float), axis=0)
+                p = np.clip(avg_p1, 1e-9, 1.0 - 1e-9)
+                logits = np.log(p) - np.log(1.0 - p)
+                all_logits.extend(logits.tolist())
+            except Exception:
+                continue
+    if len(all_logits) < 5:
+        return 1.0
+    logits_arr = np.array(all_logits)
+    L_observed = float(np.percentile(np.abs(logits_arr), percentile))
+    if L_observed < 1e-6:
+        return 1.0
+    L_target = float(np.log(p_target / (1.0 - p_target)))
+    T = L_observed / L_target
+    print(f'  Calibration fit: L_{percentile:.0f}th={L_observed:.4f}  L_target={L_target:.4f}  T={T:.4f}')
+    return float(np.clip(T, 0.05, 20.0))
+
+
 def simulate_bracket_ensemble(
     components: list,
     strategy: str,
@@ -91,6 +165,7 @@ def simulate_bracket_ensemble(
     year: int,
     this_year: int = None,
     ff_pairings: 'List[Tuple[int,int]] | None' = None,
+    calibrate_temperature: 'float | None' = None,
 ) -> tuple:
     """Simulate a bracket using an ensemble of component models.
 
@@ -119,6 +194,7 @@ def simulate_bracket_ensemble(
     pred_probs_by_round:  list = []
     correct_by_round:     list = []
     num_correct_by_round: list = []
+    winner_votes_by_round: list = []
     total_score = 0
 
     prev_pred_teams: list = []
@@ -204,7 +280,10 @@ def simulate_bracket_ensemble(
             w = w / w.sum()
             avg_p1 = np.average(np.array(all_p1, dtype=float), axis=0, weights=w)
             final_preds = avg_p1 >= 0.5
+            if calibrate_temperature is not None and calibrate_temperature != 1.0:
+                avg_p1 = _apply_temp_scale(avg_p1, calibrate_temperature)
             win_probs = [float(max(p, 1 - p)) for p in avg_p1]
+            winner_votes_by_round.append(None)  # no vote counts for soft strategy
         else:
             votes = hard_arr.sum(axis=0)
             if n_comp % 2 == 0:
@@ -216,10 +295,25 @@ def simulate_bracket_ensemble(
             else:
                 final_preds = votes > (n_comp / 2)
             final_preds = np.array(final_preds, dtype=bool)
-            win_probs = [
-                float(v / n_comp) if p else float(1 - v / n_comp)
-                for v, p in zip(votes, final_preds)
-            ]
+            # Track winner vote counts for HTML display
+            winner_votes_by_round.append([
+                int(votes[k]) if bool(final_preds[k]) else int(n_comp - votes[k])
+                for k in range(len(final_preds))
+            ])
+            # Use average component probability when available; else fall back to vote fraction
+            if has_proba and all_p1:
+                avg_p1 = np.mean(np.array(all_p1, dtype=float), axis=0)
+                if calibrate_temperature is not None and calibrate_temperature != 1.0:
+                    avg_p1 = _apply_temp_scale(avg_p1, calibrate_temperature)
+                win_probs = [
+                    float(avg_p1[k]) if bool(final_preds[k]) else float(1 - avg_p1[k])
+                    for k in range(len(final_preds))
+                ]
+            else:
+                win_probs = [
+                    float(votes[k] / n_comp) if bool(final_preds[k]) else float(1 - votes[k] / n_comp)
+                    for k in range(len(final_preds))
+                ]
 
         # Build output series ----------------------------------------------
         df_r = df_round_base.copy()
@@ -260,7 +354,8 @@ def simulate_bracket_ensemble(
             print(f'  Round {rnd}: {picks_str}')
 
     return (pred_teams_by_round, pred_seeds_by_round, pred_probs_by_round,
-            correct_by_round, num_correct_by_round, total_score)
+            correct_by_round, num_correct_by_round, total_score,
+            winner_votes_by_round)
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +417,8 @@ def _resolve_args(args):
 
 
 def _write_html(pred_dir, data_root, year, ff_pairings, model_key, feat_bases,
-                pred_teams, pred_seeds, pred_probs, correct, n_correct, score):
+                pred_teams, pred_seeds, pred_probs, correct, n_correct, score,
+                votes_by_round=None, n_components=None):
     out_path = pred_dir / f'{year}.html'
     html_str = format_bracket_html(
         data_root=data_root,
@@ -337,6 +433,8 @@ def _write_html(pred_dir, data_root, year, ff_pairings, model_key, feat_bases,
         model_key=model_key,
         feat_bases=feat_bases,
         ff_pairings=ff_pairings,
+        votes_by_round=votes_by_round,
+        n_components=n_components,
     )
     out_path.write_text(html_str, encoding='utf-8')
     print(f'Bracket written to: {out_path}')
@@ -443,8 +541,11 @@ def _run_ensemble(pred_dir, model_info, data_root, year, ff_pairings):
 
     feat_bases = component_names
 
+    calibrate_T = model_info.get('ensemble_calibrate_temperature')
     print(f'Predicting bracket for {year} (ensemble/{strategy}) ...')
-    pred_teams, pred_seeds, pred_probs, correct, n_correct, score = simulate_bracket_ensemble(
+    if calibrate_T is not None:
+        print(f'  Calibration: T={calibrate_T:.4f}  (post-combination temperature scaling)')
+    pred_teams, pred_seeds, pred_probs, correct, n_correct, score, winner_votes = simulate_bracket_ensemble(
         components=components,
         strategy=strategy,
         weights=weights,
@@ -452,9 +553,11 @@ def _run_ensemble(pred_dir, model_info, data_root, year, ff_pairings):
         year=year,
         this_year=year,
         ff_pairings=ff_pairings,
+        calibrate_temperature=calibrate_T,
     )
     _write_html(pred_dir, data_root, year, ff_pairings, 'ensemble', feat_bases,
-                pred_teams, pred_seeds, pred_probs, correct, n_correct, score)
+                pred_teams, pred_seeds, pred_probs, correct, n_correct, score,
+                votes_by_round=winner_votes, n_components=len(components))
 
 
 if __name__ == '__main__':

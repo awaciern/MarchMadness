@@ -988,19 +988,41 @@ def simulate():
     num_iters = int(data.get('num_iters', 1000))
     seed      = data.get('seed')
 
-    pkl_path = PREDICTIONS_DIR / dir_name / 'model.pkl'
-    if not pkl_path.exists():
-        return jsonify({
-            'error': f'model.pkl not found in {dir_name}.\nRe-run the prediction to generate it.'
-        }), 400
+    model_dir = PREDICTIONS_DIR / dir_name
+    pkl_path  = model_dir / 'model.pkl'
 
-    cmd = [
-        PYTHON_EXE, SIMULATE_SCRIPT,
-        '--model', str(pkl_path),
-        '--year',  str(year),
-        '--num-iters', str(num_iters),
-        '--final-four-pairings', _load_ff_pairings_str(year),
-    ]
+    # Detect ensemble models (no pkl — directory with model_info.json)
+    is_ensemble = False
+    if not pkl_path.exists():
+        info_file = model_dir / 'model_info.json'
+        if info_file.exists():
+            try:
+                _info = json.loads(info_file.read_text())
+                is_ensemble = _info.get('model_key') == 'ensemble'
+            except Exception:
+                pass
+        if not is_ensemble:
+            return jsonify({
+                'error': f'model.pkl not found in {dir_name}.\nRe-run the prediction to generate it.'
+            }), 400
+
+    if is_ensemble:
+        cmd = [
+            PYTHON_EXE, SIMULATE_SCRIPT,
+            '--model', str(model_dir),
+            '--year',  str(year),
+            '--num-iters', str(num_iters),
+            '--final-four-pairings', _load_ff_pairings_str(year),
+            '--data-root', str(REPO_ROOT),
+        ]
+    else:
+        cmd = [
+            PYTHON_EXE, SIMULATE_SCRIPT,
+            '--model', str(pkl_path),
+            '--year',  str(year),
+            '--num-iters', str(num_iters),
+            '--final-four-pairings', _load_ff_pairings_str(year),
+        ]
     if seed is not None:
         cmd += ['--seed', str(seed)]
 

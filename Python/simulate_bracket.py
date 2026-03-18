@@ -28,6 +28,7 @@ Usage
 """
 
 import argparse
+import json
 import pickle
 import sys
 from collections import defaultdict
@@ -274,6 +275,262 @@ def _simulate_one(
         prev_winners = winners
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Ensemble helpers
+# ---------------------------------------------------------------------------
+
+def _apply_temp_scale(avg_p1: np.ndarray, T: float) -> np.ndarray:
+    """Apply temperature scaling to a combined-probability array.
+
+    T < 1 stretches probabilities away from 0.5.
+    T > 1 compresses them toward 0.5.
+    The predicted winner (p > 0.5) is never changed.
+    """
+    p = np.clip(avg_p1, 1e-9, 1.0 - 1e-9)
+    logit = np.log(p) - np.log(1.0 - p)
+    return 1.0 / (1.0 + np.exp(-logit / T))
+
+
+def _simulate_one_ensemble(
+    components: list,
+    r1_teams1: list,
+    r1_teams2: list,
+    r1_proba_avg: np.ndarray,
+    df_kp: pd.DataFrame,
+    df_bt,
+    df_bt2w,
+    df_hot,
+    team_seed_map: dict,
+    ff_pairings: list,
+    needs_bt: bool,
+    needs_bt2w: bool,
+    needs_bthot: bool,
+    draws_r1: np.ndarray,
+    rng: np.random.Generator,
+    year: int = None,
+    locked_results: dict = None,
+    calibrate_temperature: float = None,
+) -> dict:
+    """One Monte Carlo iteration for an ensemble of component models.
+
+    For each game the averaged predict_proba across all components is used as
+    the random-sampling probability, so the simulation is fully probabilistic.
+    """
+    results = {}
+    prev_winners: list = []
+
+    for rnd in range(1, 7):
+        if rnd == 1:
+            teams1     = r1_teams1
+            teams2     = r1_teams2
+            proba_avg  = r1_proba_avg
+            draws      = draws_r1
+        else:
+            if rnd == 5:
+                matchup_teams = [
+                    (prev_winners[ff_pairings[0][0]], prev_winners[ff_pairings[0][1]]),
+                    (prev_winners[ff_pairings[1][0]], prev_winners[ff_pairings[1][1]]),
+                ]
+            else:
+                matchup_teams = [
+                    (prev_winners[i], prev_winners[i + 1])
+                    for i in range(0, len(prev_winners), 2)
+                ]
+
+            df_match = pd.DataFrame(matchup_teams, columns=['Team__1', 'Team__2'])
+            df_rnd = attach_kenpom(df_match, df_kp)
+            if needs_bt and df_bt is not None:
+                df_rnd = attach_barttorvik(df_rnd, df_bt)
+            if needs_bt2w and df_bt2w is not None:
+                df_rnd = attach_barttorvik_2week(df_rnd, df_bt2w)
+            if needs_bthot and df_hot is not None:
+                df_rnd = attach_barttorvik_hotness(df_rnd, df_hot)
+            df_rnd['Seed__1'] = df_rnd['Team__1'].map(team_seed_map)
+            df_rnd['Seed__2'] = df_rnd['Team__2'].map(team_seed_map)
+
+            # Compute averaged probability across all component models
+            all_p1 = []
+            for comp in components:
+                df_c = df_rnd.copy()
+                if comp.get('cat_encoders'):
+                    df_c = apply_label_encoders(df_c, comp['cat_encoders'])
+                if comp.get('norm_info') is not None:
+                    df_c = apply_year_norm_single(df_c, year, comp['norm_info'])
+                if comp.get('delta_feats') and comp.get('numeric_bases'):
+                    df_c = apply_delta_transform(df_c, comp['numeric_bases'])
+                X = df_c[comp['model_feature_list']]
+                if comp.get('pca_transformer') is not None:
+                    X = comp['pca_transformer'].transform(X)
+                proba = comp['model'].predict_proba(X)
+                all_p1.append(proba[:, 1])
+
+            avg_p1 = np.mean(np.array(all_p1, dtype=float), axis=0)
+            if calibrate_temperature is not None and calibrate_temperature != 1.0:
+                avg_p1 = _apply_temp_scale(avg_p1, calibrate_temperature)
+            proba_avg = np.column_stack([1.0 - avg_p1, avg_p1])
+            teams1    = df_rnd['Team__1'].tolist()
+            teams2    = df_rnd['Team__2'].tolist()
+            draws     = rng.random(len(teams1))
+
+        _locked_rnd = (locked_results or {}).get(rnd, [])
+        winners = []
+        for k in range(len(teams1)):
+            _forced = _locked_rnd[k] if k < len(_locked_rnd) else None
+            if _forced:
+                winners.append(_forced)
+            elif draws[k] < proba_avg[k, 1]:
+                winners.append(teams1[k])
+            else:
+                winners.append(teams2[k])
+        results[rnd] = winners
+        prev_winners = winners
+
+    return results
+
+
+def run_simulations_ensemble(
+    components: list,
+    data_root: Path,
+    year: int,
+    ff_pairings: list,
+    num_iters: int,
+    seed: int = None,
+    locked_results: Optional[dict] = None,
+    actual_winners_by_rnd: Optional[dict] = None,
+    calibrate_temperature: float = None,
+) -> tuple:
+    """Monte Carlo simulation for an ensemble of component models.
+
+    Each element of *components* is a dict with keys:
+        model, feature_list, model_feature_list, cat_encoders, norm_info,
+        delta_feats, numeric_bases, pca_transformer
+
+    Returns the same (df, best_bracket_info) tuple as run_simulations.
+    """
+    all_feat_lists = [c['feature_list'] for c in components]
+    needs_bt    = any(f.startswith('BT__')    for fl in all_feat_lists for f in fl)
+    needs_bt2w  = any(f.startswith('BT2W__')  for fl in all_feat_lists for f in fl)
+    needs_bthot = any(f.startswith('BTHOT__') for fl in all_feat_lists for f in fl)
+
+    r1_df_raw = load_bracket_round(data_root, year, 1)
+    team_seed_map: dict = {}
+    for _, row in r1_df_raw.iterrows():
+        team_seed_map[row['Team__1']] = row['Seed__1']
+        team_seed_map[row['Team__2']] = row['Seed__2']
+
+    all_teams: list = []
+    for _, row in r1_df_raw.iterrows():
+        for t in (row['Team__1'], row['Team__2']):
+            if t not in all_teams:
+                all_teams.append(t)
+
+    df_kp   = load_kenpom(data_root, year)
+    df_bt   = load_barttorvik(data_root, year)         if needs_bt    else None
+    df_bt2w = load_barttorvik_2week(data_root, year)   if needs_bt2w  else None
+    df_hot  = load_barttorvik_hotness(data_root, year) if needs_bthot else None
+
+    # Pre-compute round 1 features and averaged probabilities
+    df_r1_kp = attach_kenpom(r1_df_raw[['Team__1', 'Team__2']].copy(), df_kp)
+    if needs_bt and df_bt is not None:
+        df_r1_kp = attach_barttorvik(df_r1_kp, df_bt)
+    if needs_bt2w and df_bt2w is not None:
+        df_r1_kp = attach_barttorvik_2week(df_r1_kp, df_bt2w)
+    if needs_bthot and df_hot is not None:
+        df_r1_kp = attach_barttorvik_hotness(df_r1_kp, df_hot)
+    df_r1_kp['Seed__1'] = df_r1_kp['Team__1'].map(team_seed_map)
+    df_r1_kp['Seed__2'] = df_r1_kp['Team__2'].map(team_seed_map)
+
+    r1_p1_list = []
+    for comp in components:
+        df_c = df_r1_kp.copy()
+        if comp.get('cat_encoders'):
+            df_c = apply_label_encoders(df_c, comp['cat_encoders'])
+        if comp.get('norm_info') is not None:
+            df_c = apply_year_norm_single(df_c, year, comp['norm_info'])
+        if comp.get('delta_feats') and comp.get('numeric_bases'):
+            df_c = apply_delta_transform(df_c, comp['numeric_bases'])
+        X = df_c[comp['model_feature_list']]
+        if comp.get('pca_transformer') is not None:
+            X = comp['pca_transformer'].transform(X)
+        proba = comp['model'].predict_proba(X)
+        r1_p1_list.append(proba[:, 1])
+
+    avg_r1_p1 = np.mean(np.array(r1_p1_list, dtype=float), axis=0)
+    if calibrate_temperature is not None and calibrate_temperature != 1.0:
+        avg_r1_p1 = _apply_temp_scale(avg_r1_p1, calibrate_temperature)
+    r1_proba_avg = np.column_stack([1.0 - avg_r1_p1, avg_r1_p1])
+    r1_teams1    = df_r1_kp['Team__1'].tolist()
+    r1_teams2    = df_r1_kp['Team__2'].tolist()
+
+    rng = np.random.default_rng(seed)
+    round_wins: dict = defaultdict(lambda: defaultdict(int))
+    best_score: int  = -1
+    best_sim:   dict = None
+    best_iter:  int  = -1
+
+    _prog_interval = max(1, num_iters // 100)
+    print(f'Running {num_iters:,} ensemble simulations for {year}...', flush=True)
+    for i in range(num_iters):
+        if (i + 1) % _prog_interval == 0 or i + 1 == num_iters:
+            print(f'PROGRESS:{i+1}/{num_iters}', end='\r', flush=True)
+
+        draws_r1 = rng.random(len(r1_teams1))
+        sim = _simulate_one_ensemble(
+            components,
+            r1_teams1, r1_teams2, r1_proba_avg,
+            df_kp, df_bt, df_bt2w, df_hot,
+            team_seed_map, ff_pairings,
+            needs_bt, needs_bt2w, needs_bthot,
+            draws_r1, rng,
+            year=year,
+            locked_results=locked_results,
+            calibrate_temperature=calibrate_temperature,
+        )
+
+        for rnd, winners in sim.items():
+            for team in winners:
+                round_wins[team][rnd] += 1
+
+        if actual_winners_by_rnd:
+            sc, _, _ = score_sim_bracket(sim, actual_winners_by_rnd)
+            if sc > best_score:
+                best_score = sc
+                best_sim   = sim
+                best_iter  = i + 1
+
+    # Build result dataframe
+    sim_rows = []
+    for team in all_teams:
+        row = {'Team': team, 'Seed': team_seed_map.get(team, '?')}
+        for rnd, lbl in enumerate(ROUND_LABELS, start=1):
+            row[lbl] = round_wins[team][rnd] / num_iters
+        sim_rows.append(row)
+    df = pd.DataFrame(sim_rows)
+    df = df.sort_values(list(reversed(ROUND_LABELS)), ascending=False).reset_index(drop=True)
+
+    best_bracket_info = None
+    if actual_winners_by_rnd and best_sim is not None:
+        b_total, b_correct, b_num_correct = score_sim_bracket(best_sim, actual_winners_by_rnd)
+        best_bracket_info = {
+            'total_score':          b_total,
+            'correct_by_round':     b_correct,
+            'num_correct_by_round': b_num_correct,
+            'pred_teams_by_round':  [best_sim[rnd] for rnd in range(1, 7)],
+            'pred_seeds_by_round':  [
+                [team_seed_map.get(t, '?') for t in best_sim[rnd]]
+                for rnd in range(1, 7)
+            ],
+            'pred_probs_by_round':  [
+                [float('nan')] * len(best_sim[rnd])
+                for rnd in range(1, 7)
+            ],
+            'iter_idx':      best_iter,
+            'team_seed_map': team_seed_map,
+        }
+
+    return df, best_bracket_info
 
 
 def run_simulations(
@@ -625,80 +882,197 @@ def main():
     )
     args = parser.parse_args()
 
-    # --- Load pickle ------------------------------------------------------
-    pkl_path = Path(args.model).resolve()
-    if not pkl_path.exists():
-        print(f'ERROR: pickle not found: {pkl_path}', file=sys.stderr)
-        sys.exit(1)
+    model_path = Path(args.model).resolve()
+    is_ensemble = model_path.is_dir()
 
-    with open(pkl_path, 'rb') as fh:
-        payload = pickle.load(fh)
-
-    model        = payload['model']
-    model_key    = payload['model_key']
-    feature_list = payload['feature_list']
-    cat_encoders = payload.get('cat_encoders', {})
-    norm_info    = payload.get('norm_info')
-    delta_feats       = payload.get('delta_feats', False)
-    numeric_bases     = payload.get('numeric_bases', [])
-    model_feature_list = payload.get('model_feature_list', feature_list)
-    pca_transformer    = payload.get('pca_transformer')
-
-    # --- Infer data root --------------------------------------------------
-    # Expected layout: <repo_root>/Predictions/<model_dir>/model.pkl
-    if args.data_root:
-        data_root = Path(args.data_root).resolve()
-    else:
-        data_root = pkl_path.parent.parent.parent
-        if not (data_root / 'Data').is_dir():
-            print(
-                'ERROR: could not infer repo root from pickle path. '
-                'Use --data-root.',
-                file=sys.stderr,
-            )
+    # -----------------------------------------------------------------------
+    # ENSEMBLE branch: --model points to a Predictions/<ens_dir>/ directory
+    # -----------------------------------------------------------------------
+    if is_ensemble:
+        model_dir = model_path
+        info_file = model_dir / 'model_info.json'
+        if not info_file.exists():
+            print(f'ERROR: directory has no model_info.json: {model_dir}', file=sys.stderr)
+            sys.exit(1)
+        try:
+            info = json.loads(info_file.read_text())
+        except Exception as exc:
+            print(f'ERROR: could not parse model_info.json: {exc}', file=sys.stderr)
+            sys.exit(1)
+        if info.get('model_key') != 'ensemble':
+            print(f'ERROR: directory is not an ensemble model: {model_dir}', file=sys.stderr)
             sys.exit(1)
 
-    # --- FF pairings ------------------------------------------------------
-    if args.final_four_pairings:
-        ff_pairings = parse_ff_pairings_arg(args.final_four_pairings)
-    elif args.year in ALL_YEARS:
-        try:
-            ff_pairings = derive_ff_pairings_from_data(data_root, args.year)
-        except Exception as e:
-            print(f'WARNING: could not derive FF pairings ({e}), using 0-1,2-3')
+        component_names = info.get('feature_bases', [])
+        if not component_names:
+            print('ERROR: ensemble model_info.json has no feature_bases (component list).', file=sys.stderr)
+            sys.exit(1)
+
+        # Infer data root from directory structure
+        if args.data_root:
+            data_root = Path(args.data_root).resolve()
+        else:
+            # Expected: <repo_root>/Predictions/<ens_dir>/
+            data_root = model_dir.parent.parent
+            if not (data_root / 'Data').is_dir():
+                print(
+                    'ERROR: could not infer repo root from model directory. Use --data-root.',
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+        # Load each component model pickle
+        print(f'Ensemble: {len(component_names)} components')
+        components = []
+        for name in component_names:
+            candidates = sorted(data_root.glob(f'Predictions*/{name}/model.pkl'))
+            if not candidates:
+                print(f'ERROR: cannot find model.pkl for component: {name}', file=sys.stderr)
+                sys.exit(1)
+            pkl_p = candidates[0]
+            print(f'  Loading component: {name}  ({pkl_p})')
+            with open(pkl_p, 'rb') as fh:
+                payload = pickle.load(fh)
+            fl = payload['feature_list']
+            components.append({
+                'model':              payload['model'],
+                'feature_list':       fl,
+                'model_feature_list': payload.get('model_feature_list', fl),
+                'cat_encoders':       payload.get('cat_encoders', {}),
+                'norm_info':          payload.get('norm_info', None),
+                'delta_feats':        payload.get('delta_feats', False),
+                'numeric_bases':      payload.get('numeric_bases', []),
+                'pca_transformer':    payload.get('pca_transformer', None),
+            })
+
+        model_key = info.get('run_name') or model_dir.name
+        feat_bases = component_names
+        output_dir_name = model_dir.name
+
+        # --- FF pairings --------------------------------------------------
+        if args.final_four_pairings:
+            ff_pairings = parse_ff_pairings_arg(args.final_four_pairings)
+        elif args.year in ALL_YEARS:
+            try:
+                ff_pairings = derive_ff_pairings_from_data(data_root, args.year)
+            except Exception as e:
+                print(f'WARNING: could not derive FF pairings ({e}), using 0-1,2-3')
+                ff_pairings = [(0, 1), (2, 3)]
+        else:
             ff_pairings = [(0, 1), (2, 3)]
+
+        print(f'Model:        {model_key}  (ensemble)')
+        print(f'Year:         {args.year}')
+        print(f'Iterations:   {args.num_iters:,}')
+        print(f'FF pairings:  {ff_pairings}')
+        if args.seed is not None:
+            print(f'RNG seed:     {args.seed}')
+        print()
+
+        actual_winners_by_rnd: dict = {}
+        if args.year in ALL_YEARS:
+            actual_winners_by_rnd = get_actual_winners_by_round(data_root, args.year)
+
+        calibrate_T = info.get('ensemble_calibrate_temperature')
+        if calibrate_T is not None:
+            print(f'Calibration:  T={calibrate_T:.4f}  (post-combination temperature scaling)')
+
+        df_results, best_bracket_info = run_simulations_ensemble(
+            components=components,
+            data_root=data_root,
+            year=args.year,
+            ff_pairings=ff_pairings,
+            num_iters=args.num_iters,
+            seed=args.seed,
+            actual_winners_by_rnd=actual_winners_by_rnd or None,
+            calibrate_temperature=calibrate_T,
+        )
+
+    # -----------------------------------------------------------------------
+    # SINGLE-MODEL branch: --model points to a model.pkl file
+    # -----------------------------------------------------------------------
     else:
-        ff_pairings = [(0, 1), (2, 3)]
+        pkl_path = model_path
+        if not pkl_path.exists():
+            print(f'ERROR: pickle not found: {pkl_path}', file=sys.stderr)
+            sys.exit(1)
 
-    print(f'Model:        {model_key}')
-    print(f'Year:         {args.year}')
-    print(f'Iterations:   {args.num_iters:,}')
-    print(f'FF pairings:  {ff_pairings}')
-    if args.seed is not None:
-        print(f'RNG seed:     {args.seed}')
-    print()
+        with open(pkl_path, 'rb') as fh:
+            payload = pickle.load(fh)
 
-    # --- Run simulations --------------------------------------------------
-    actual_winners_by_rnd: dict = {}
-    if args.year in ALL_YEARS:
-        actual_winners_by_rnd = get_actual_winners_by_round(data_root, args.year)
+        model        = payload['model']
+        model_key    = payload['model_key']
+        feature_list = payload['feature_list']
+        cat_encoders = payload.get('cat_encoders', {})
+        norm_info    = payload.get('norm_info')
+        delta_feats        = payload.get('delta_feats', False)
+        numeric_bases      = payload.get('numeric_bases', [])
+        model_feature_list = payload.get('model_feature_list', feature_list)
+        pca_transformer    = payload.get('pca_transformer')
+        feat_bases         = payload.get('feature_bases', feature_list)
+        output_dir_name    = pkl_path.parent.name
 
-    df_results, best_bracket_info = run_simulations(
-        model=model,
-        data_root=data_root,
-        year=args.year,
-        ff_pairings=ff_pairings,
-        feature_list=feature_list,
-        cat_encoders=cat_encoders,
-        num_iters=args.num_iters,
-        seed=args.seed,
-        norm_info=norm_info,
-        delta_feats=delta_feats,
-        numeric_bases=numeric_bases,
-        model_feature_list=model_feature_list,
-        actual_winners_by_rnd=actual_winners_by_rnd or None,
-        pca_transformer=pca_transformer,
-    )
+        # --- Infer data root ----------------------------------------------
+        if args.data_root:
+            data_root = Path(args.data_root).resolve()
+        else:
+            data_root = pkl_path.parent.parent.parent
+            if not (data_root / 'Data').is_dir():
+                print(
+                    'ERROR: could not infer repo root from pickle path. '
+                    'Use --data-root.',
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+        # --- FF pairings --------------------------------------------------
+        if args.final_four_pairings:
+            ff_pairings = parse_ff_pairings_arg(args.final_four_pairings)
+        elif args.year in ALL_YEARS:
+            try:
+                ff_pairings = derive_ff_pairings_from_data(data_root, args.year)
+            except Exception as e:
+                print(f'WARNING: could not derive FF pairings ({e}), using 0-1,2-3')
+                ff_pairings = [(0, 1), (2, 3)]
+        else:
+            ff_pairings = [(0, 1), (2, 3)]
+
+        print(f'Model:        {model_key}')
+        print(f'Year:         {args.year}')
+        print(f'Iterations:   {args.num_iters:,}')
+        print(f'FF pairings:  {ff_pairings}')
+        if args.seed is not None:
+            print(f'RNG seed:     {args.seed}')
+        print()
+
+        actual_winners_by_rnd: dict = {}
+        if args.year in ALL_YEARS:
+            actual_winners_by_rnd = get_actual_winners_by_round(data_root, args.year)
+
+        df_results, best_bracket_info = run_simulations(
+            model=model,
+            data_root=data_root,
+            year=args.year,
+            ff_pairings=ff_pairings,
+            feature_list=feature_list,
+            cat_encoders=cat_encoders,
+            num_iters=args.num_iters,
+            seed=args.seed,
+            norm_info=norm_info,
+            delta_feats=delta_feats,
+            numeric_bases=numeric_bases,
+            model_feature_list=model_feature_list,
+            actual_winners_by_rnd=actual_winners_by_rnd or None,
+            pca_transformer=pca_transformer,
+        )
+
+    # =======================================================================
+    # Shared output (same for both single-model and ensemble)
+    # =======================================================================
+
+    # =======================================================================
+    # Shared output (same for both single-model and ensemble)
+    # =======================================================================
 
     # --- Actual results (only for historical years with bracket data) ------
     actual: dict = {}
@@ -717,7 +1091,7 @@ def main():
     if args.output_dir:
         out_dir = Path(args.output_dir)
     else:
-        out_dir = data_root / 'Simulations' / pkl_path.parent.name
+        out_dir = data_root / 'Simulations' / output_dir_name
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -749,9 +1123,6 @@ def main():
             print(f'  {lbl:<18}: {n_cor:>2}/{sz} correct  ({rnd_pts} pts)')
         n_total = sum(b_num)
         print(f'  {"Total":18}: {n_total:>2}/63 correct')
-
-        # Load feat_bases from pickle (list of base names used in training)
-        feat_bases = payload.get('feature_bases', feature_list)
 
         try:
             best_html = format_bracket_html(
