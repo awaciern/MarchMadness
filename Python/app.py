@@ -158,6 +158,8 @@ MODELS = [
     ('extra_trees',            'Extra Trees'),
     ('hist_gradient_boosting', 'Hist Gradient Boosting'),
     ('lda',                    'Linear Discriminant Analysis'),
+    ('qda',                    'Quadratic Discriminant Analysis'),
+    ('gnb',                    'Gaussian Naive Bayes'),
     ('xgboost',                'XGBoost'),
     ('lightgbm',               'LightGBM'),
     ('torch_mlp',              'Deep MLP (PyTorch)'),
@@ -4903,6 +4905,7 @@ label.feat-chip[title] { cursor: help; }
   </div>
   <div id="saved-models-body" style="display:none">
     <div id="saved-empty" style="color:#475569;font-size:12px;display:none">No saved models found in Predictions/.</div>
+    <div style="overflow-x:auto">
     <table class="saved-table" id="saved-table" style="display:none">
       <thead><tr>
         <th style="width:30px">#</th>
@@ -4919,6 +4922,7 @@ label.feat-chip[title] { cursor: help; }
       </tr></thead>
       <tbody id="saved-tbody"></tbody>
     </table>
+    </div>
   </div>
 </div>
 
