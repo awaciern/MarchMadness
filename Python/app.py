@@ -1886,6 +1886,45 @@ def group_analysis_stream(job_id):
     )
 
 
+@app.route('/api/group_analyses/<string:group_key>')
+def api_group_analyses(group_key):
+    """List all saved group analysis results for a group, newest first."""
+    if any(c in group_key for c in ('/', '\\', '..')):
+        abort(400)
+    group_dir = BRACKETS_DIR / group_key
+    if not group_dir.is_dir():
+        return jsonify([])
+    analyses = []
+    for f in sorted(group_dir.glob('group_results_*.json'), reverse=True):
+        try:
+            data = json.loads(f.read_text())
+            analyses.append({
+                'filename':  f.name,
+                'computed':  data.get('computed', ''),
+                'dir_name':  data.get('dir_name', ''),
+                'year':      data.get('year', ''),
+                'num_iters': data.get('num_iters', 0),
+                'results':   data.get('results', []),
+            })
+        except Exception:
+            pass
+    return jsonify(analyses)
+
+
+@app.route('/api/group_analyses/<string:group_key>/<string:filename>', methods=['DELETE'])
+def api_delete_group_analysis(group_key, filename):
+    """Delete a single saved group analysis file."""
+    if any(c in group_key for c in ('/', '\\', '..')):
+        abort(400)
+    if any(c in filename for c in ('/', '\\', '..')) or not filename.startswith('group_results_'):
+        abort(400)
+    fpath = BRACKETS_DIR / group_key / filename
+    if not fpath.exists():
+        abort(404)
+    fpath.unlink()
+    return jsonify({'ok': True})
+
+
 @app.route('/api/locked_results')
 def api_get_locked_results():
     """Return locked game results for the current year as {round_str: [winner_or_null, ...]}."""
@@ -3972,6 +4011,46 @@ table.res-table th.sort-desc::after { content: ' \25bc'; font-size: 9px; color: 
 .prob-bar-fill { height: 100%; border-radius: 4px; transition: width .3s ease; }
 .prob-pct { font-size: 12px; font-weight: 700; font-family: monospace; min-width: 46px; text-align: right; }
 .minmax-cell { font-size: 11px; color: #64748b; text-align: right; white-space: nowrap; }
+
+/* Past Analyses */
+.past-card {
+  background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+  padding: 14px 20px; max-width: 820px; margin-bottom: 18px;
+}
+.past-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px;
+  color: #94a3b8; cursor: pointer; user-select: none;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.past-title:hover { color: #e2e8f0; }
+#past-toggle-icon { font-size: 10px; color: #64748b; }
+.past-empty { font-size: 12px; color: #475569; padding: 8px 0; }
+table.past-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+table.past-table th {
+  text-align: left; padding: 4px 8px; color: #64748b; font-size: 10px;
+  text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid #334155;
+  white-space: nowrap;
+}
+table.past-table td {
+  padding: 7px 8px; border-bottom: 1px solid #1a2744; color: #cbd5e1; vertical-align: middle;
+}
+table.past-table tr:last-child td { border-bottom: none; }
+table.past-table tbody tr:hover td { background: #172554; }
+.past-load-btn {
+  background: #14432a; color: #86efac; border: 1px solid #166534; border-radius: 5px;
+  padding: 3px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+  transition: background .12s; white-space: nowrap;
+}
+.past-load-btn:hover { background: #15803d; }
+.past-del-btn {
+  background: transparent; color: #64748b; border: 1px solid #334155; border-radius: 5px;
+  padding: 3px 8px; font-size: 11px; cursor: pointer; transition: color .12s;
+}
+.past-del-btn:hover { color: #f87171; border-color: #ef4444; }
+table.past-table th.sortable { cursor: pointer; user-select: none; }
+table.past-table th.sortable:hover { color: #e2e8f0; }
+table.past-table th.sort-asc::after  { content: ' ▲'; font-size: 9px; }
+table.past-table th.sort-desc::after { content: ' ▼'; font-size: 9px; }
 </style>
 </head>
 <body>
@@ -4034,6 +4113,27 @@ table.res-table th.sort-desc::after { content: ' \25bc'; font-size: 9px; color: 
   </div>
 </div>
 {% endif %}
+
+<!-- Past Analyses -->
+<div class="past-card" id="past-card" style="display:none">
+  <div class="past-title" onclick="togglePastAnalyses()">
+    <span>&#128190; Past Analyses</span>
+    <span id="past-toggle-icon">&#9660;</span>
+  </div>
+  <div id="past-body">
+    <div class="past-empty" id="past-empty" style="display:none">No saved analyses for this group.</div>
+    <table class="past-table" id="past-table" style="display:none">
+      <thead><tr>
+        <th class="sortable sort-desc" id="past-th-computed" onclick="pastSortBy('computed')">Date &amp; Time</th>
+        <th class="sortable" id="past-th-dir_name" onclick="pastSortBy('dir_name')">Model</th>
+        <th class="sortable" id="past-th-num_iters" onclick="pastSortBy('num_iters')">Iterations</th>
+        <th></th>
+        <th></th>
+      </tr></thead>
+      <tbody id="past-tbody"></tbody>
+    </table>
+  </div>
+</div>
 
 <!-- Config -->
 <div class="config-card">
@@ -4789,6 +4889,165 @@ function startStream(jobId, iters, dirName) {
     }
   }
 })();
+
+// ---- Past Analyses ----
+let pastAnalyses = [];
+let pastExpanded = true;
+let pastSort = { key: 'computed', dir: -1 };
+
+function fmtTimestamp(ts) {
+  // ts format: YYYYMMDD_HHMMSS
+  if (!ts || ts.length < 15) return ts || '';
+  const yr = ts.slice(0, 4), mo = ts.slice(4, 6), dy = ts.slice(6, 8);
+  const hr = ts.slice(9, 11), mn = ts.slice(11, 13), sc = ts.slice(13, 15);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const mLabel = months[parseInt(mo, 10) - 1] || mo;
+  const h12 = parseInt(hr, 10);
+  const ampm = h12 >= 12 ? 'PM' : 'AM';
+  const h = h12 % 12 || 12;
+  return `${mLabel} ${parseInt(dy)} ${yr}, ${h}:${mn}:${sc} ${ampm}`;
+}
+
+function togglePastAnalyses() {
+  const body = document.getElementById('past-body');
+  const icon = document.getElementById('past-toggle-icon');
+  pastExpanded = !pastExpanded;
+  body.style.display = pastExpanded ? '' : 'none';
+  icon.innerHTML = pastExpanded ? '&#9650;' : '&#9660;';
+}
+
+function pastSortBy(key) {
+  if (pastSort.key === key) {
+    pastSort.dir = -pastSort.dir;
+  } else {
+    pastSort.key = key;
+    pastSort.dir = -1;
+  }
+  renderPastAnalyses(null);
+}
+
+function renderPastAnalyses(analyses) {
+  const card  = document.getElementById('past-card');
+  const empty = document.getElementById('past-empty');
+  const table = document.getElementById('past-table');
+  const tbody = document.getElementById('past-tbody');
+  if (analyses !== null) pastAnalyses = analyses || [];
+  card.style.display = '';
+  // Update sort indicators
+  ['computed', 'dir_name', 'num_iters'].forEach(function(k) {
+    const th = document.getElementById('past-th-' + k);
+    if (!th) return;
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (pastSort.key === k) th.classList.add(pastSort.dir === 1 ? 'sort-asc' : 'sort-desc');
+  });
+  if (!pastAnalyses.length) {
+    empty.style.display = '';
+    table.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  table.style.display = '';
+  tbody.innerHTML = '';
+  const sorted = pastAnalyses.slice().sort(function(a, b) {
+    const k = pastSort.key;
+    if (k === 'num_iters') return ((a[k] || 0) - (b[k] || 0)) * pastSort.dir;
+    const va = a[k] || '', vb = b[k] || '';
+    if (va < vb) return -pastSort.dir;
+    if (va > vb) return pastSort.dir;
+    return 0;
+  });
+  sorted.forEach(function(a) {
+    const tr = document.createElement('tr');
+
+    const tdDate = document.createElement('td');
+    tdDate.style.cssText = 'white-space:nowrap;color:#93c5fd';
+    tdDate.textContent = fmtTimestamp(a.computed);
+    tr.appendChild(tdDate);
+
+    const tdModel = document.createElement('td');
+    tdModel.style.cssText = 'font-weight:600;color:#e2e8f0';
+    tdModel.textContent = a.dir_name;
+    tr.appendChild(tdModel);
+
+    const tdIters = document.createElement('td');
+    tdIters.style.cssText = 'color:#fbbf24';
+    tdIters.textContent = (a.num_iters || 0).toLocaleString();
+    tr.appendChild(tdIters);
+
+    const tdLoad = document.createElement('td');
+    const loadBtn = document.createElement('button');
+    loadBtn.className = 'past-load-btn';
+    loadBtn.innerHTML = '&#8627; Load';
+    loadBtn.addEventListener('click', (function(analysis) {
+      return function() { loadSavedAnalysis(analysis); };
+    })(a));
+    tdLoad.appendChild(loadBtn);
+    tr.appendChild(tdLoad);
+
+    const tdDel = document.createElement('td');
+    const delBtn = document.createElement('button');
+    delBtn.className = 'past-del-btn';
+    delBtn.title = 'Delete';
+    delBtn.innerHTML = '&#10005;';
+    delBtn.addEventListener('click', (function(filename, btn) {
+      return function() { deleteSavedAnalysis(filename, btn); };
+    })(a.filename, delBtn));
+    tdDel.appendChild(delBtn);
+    tr.appendChild(tdDel);
+
+    tbody.appendChild(tr);
+  });
+}
+
+function loadPastAnalyses() {
+  const group = document.getElementById('grp-sel').value;
+  if (!group) return;
+  fetch('/api/group_analyses/' + encodeURIComponent(group))
+    .then(r => r.json())
+    .then(renderPastAnalyses)
+    .catch(function() {});
+}
+
+function loadSavedAnalysis(a) {
+  // Set model selector to match
+  const sel = document.getElementById('model-sel');
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === a.dir_name) { sel.selectedIndex = i; break; }
+  }
+  document.getElementById('iters-inp').value = a.num_iters || 1000;
+  // Reset run UI
+  document.getElementById('error-box').style.display = 'none';
+  document.getElementById('prog-wrap').style.display = 'none';
+  document.getElementById('sim-view-link').style.display = 'none';
+  // Render results
+  const meta = `${(a.num_iters || 0).toLocaleString()} iterations \u00b7 model: ${a.dir_name} \u00b7 ${fmtTimestamp(a.computed)}`;
+  resSort = { key: 'win_prob', dir: -1 };
+  renderResults(a.results || [], meta);
+  setStatus('Loaded', 'status-done');
+  // Scroll to results
+  document.getElementById('results-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function deleteSavedAnalysis(filename, btnEl) {
+  if (!confirm('Delete this saved analysis?')) return;
+  const group = document.getElementById('grp-sel').value;
+  if (btnEl) btnEl.disabled = true;
+  fetch('/api/group_analyses/' + encodeURIComponent(group) + '/' + encodeURIComponent(filename), {
+    method: 'DELETE',
+  })
+  .then(r => r.json())
+  .then(function(data) {
+    if (data.ok) loadPastAnalyses();
+    else { if (btnEl) btnEl.disabled = false; alert('Delete failed.'); }
+  })
+  .catch(function() { if (btnEl) btnEl.disabled = false; });
+}
+
+// Wire group-change to reload past analyses
+document.getElementById('grp-sel').addEventListener('change', loadPastAnalyses);
+
+// Load on page init
+loadPastAnalyses();
 </script>
 </body>
 </html>
