@@ -1524,6 +1524,7 @@ def _run_group_scoring(job_id: str, model_path_str: str, group_key: str,
             delta_feats        = payload.get('delta_feats', False)
             numeric_bases      = payload.get('numeric_bases', [])
             model_feature_list = payload.get('model_feature_list', feature_list)
+            pca_transformer    = payload.get('pca_transformer', None)
 
             needs_bt    = any(f.startswith('BT__')    for f in feature_list)
             needs_bt2w  = any(f.startswith('BT2W__')  for f in feature_list)
@@ -1579,7 +1580,10 @@ def _run_group_scoring(job_id: str, model_path_str: str, group_key: str,
                 df_r1_enc = apply_year_norm_single(df_r1_enc, year, norm_info)
             if delta_feats and numeric_bases:
                 df_r1_enc = apply_delta_transform(df_r1_enc, numeric_bases)
-            r1_proba = model.predict_proba(df_r1_enc[model_feature_list])
+            _X_r1 = df_r1_enc[model_feature_list]
+            if pca_transformer is not None:
+                _X_r1 = pca_transformer.transform(_X_r1)
+            r1_proba = model.predict_proba(_X_r1)
 
         r1_teams1 = df_r1_kp['Team__1'].tolist()
         r1_teams2 = df_r1_kp['Team__2'].tolist()
@@ -1661,6 +1665,7 @@ def _run_group_scoring(job_id: str, model_path_str: str, group_key: str,
                     numeric_bases=numeric_bases,
                     model_feature_list=model_feature_list,
                     locked_results=_locked_results,
+                    pca_transformer=pca_transformer,
                 )
 
             for b in brackets:
@@ -3947,6 +3952,10 @@ table.res-table td {
 }
 table.res-table tr:last-child td { border-bottom: none; }
 table.res-table tbody tr:hover td { background: #172554; }
+table.res-table th.sortable { cursor: pointer; user-select: none; }
+table.res-table th.sortable:hover { color: #93c5fd; }
+table.res-table th.sort-asc::after  { content: ' \25b2'; font-size: 9px; color: #fbbf24; }
+table.res-table th.sort-desc::after { content: ' \25bc'; font-size: 9px; color: #fbbf24; }
 
 .rank-cell { color: #475569; font-size: 11px; text-align: right; width: 28px; }
 .name-cell { font-weight: 600; color: #e2e8f0; }
@@ -4077,14 +4086,14 @@ table.res-table tbody tr:hover td { background: #172554; }
     <span class="results-title">Results</span>
     <span class="results-meta" id="results-meta"></span>
   </div>
-  <table class="res-table">
+  <table class="res-table" id="results-table">
     <thead>
       <tr>
         <th style="width:28px">#</th>
-        <th>Bracket</th>
-        <th style="text-align:right">Avg Score</th>
-        <th style="text-align:right">Win Probability</th>
-        <th style="text-align:right">Max&nbsp;/&nbsp;Min</th>
+        <th class="sortable" data-res-sort="name" onclick="resSortBy('name')">Bracket</th>
+        <th class="sortable" style="text-align:right" data-res-sort="avg_score" onclick="resSortBy('avg_score')">Avg Score</th>
+        <th class="sortable sort-desc" style="text-align:right" data-res-sort="win_prob" onclick="resSortBy('win_prob')">Win Probability</th>
+        <th class="sortable" style="text-align:right" data-res-sort="max_score" onclick="resSortBy('max_score')">Max&nbsp;/&nbsp;Min</th>
       </tr>
     </thead>
     <tbody id="results-tbody"></tbody>
@@ -4107,7 +4116,15 @@ const GA_SIM_MAP  = {{ sim_map | tojson }};
 const BRACKET_R1          = {{ r1_matchups | tojson }};
 const LOCKED_RESULTS_INIT = {{ locked_results | tojson }};
 
-let gaSort = { key: 'score', dir: -1 };
+let gaSort   = { key: 'score', dir: -1 };
+let resSort  = { key: 'win_prob', dir: -1 };
+let resData  = [];
+
+function resSortBy(key) {
+  if (resSort.key === key) { resSort.dir *= -1; }
+  else { resSort.key = key; resSort.dir = (key === 'name') ? 1 : -1; }
+  renderResults();
+}
 
 function gaSortVal(m, key) {
   if (key === 'name')      return (m.dir_name  || '').toLowerCase();
@@ -4592,17 +4609,34 @@ function fmtPct(p) {
 }
 
 function renderResults(results, meta) {
+  // Store full dataset so re-sorts don't need a new fetch.
+  if (results !== undefined) resData = results.slice();
+
   const tbody = document.getElementById('results-tbody');
   const section = document.getElementById('results-section');
   const metaEl  = document.getElementById('results-meta');
+  if (meta !== undefined) metaEl.textContent = meta || '';
+
+  // Sort a copy of resData
+  const sorted = resData.slice().sort(function(a, b) {
+    const av = resSort.key === 'name' ? (a.name || '').toLowerCase() : (a[resSort.key] ?? -Infinity);
+    const bv = resSort.key === 'name' ? (b.name || '').toLowerCase() : (b[resSort.key] ?? -Infinity);
+    if (av < bv) return -resSort.dir; if (av > bv) return resSort.dir; return 0;
+  });
+
+  // Update sort indicators on headers
+  document.querySelectorAll('#results-table th[data-res-sort]').forEach(function(th) {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.resSort === resSort.key) th.classList.add(resSort.dir === 1 ? 'sort-asc' : 'sort-desc');
+  });
+
   tbody.innerHTML = '';
-  metaEl.textContent = meta || '';
 
   // Find max avg for bar scaling
-  const maxAvg = Math.max(...results.map(r => r.avg_score), 1);
+  const maxAvg = Math.max(...resData.map(r => r.avg_score), 1);
   const groupKey = document.getElementById('grp-sel').value;
 
-  results.forEach((r, i) => {
+  sorted.forEach((r, i) => {
     const pct = fmtPct(r.win_prob);
     const barW = Math.round(r.win_prob * 100);
     const color = probColor(r.win_prob);

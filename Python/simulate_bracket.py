@@ -733,39 +733,33 @@ def to_html(
     actual: Optional[dict] = None,
 ) -> str:
     has_actual = bool(actual)
-    extra_th   = '<th class="act-hdr">Actual</th>' if has_actual else ''
-    header_cells = ''.join(
-        f'<th>{h}</th>' for h in ['#', 'Seed', 'Team']
-    ) + extra_th + ''.join(
-        f'<th>{h}</th>' for h in ROUND_FULL
-    )
-    rows_html = ''
-    for rank, (_, row) in enumerate(df.iterrows(), start=1):
+
+    # Build JSON row data for JS-driven sort/render
+    rows_data: list = []
+    for _, row in df.iterrows():
         try:
-            seed = int(float(row['Seed']))
+            seed_val = int(float(row['Seed']))
         except (ValueError, TypeError):
-            seed = '?'
-        cells = (
-            f'<td class="rank">{rank}</td>'
-            f'<td class="seed">[{seed}]</td>'
-            f'<td class="team">{row["Team"]}</td>'
-        )
+            seed_val = None
+        rd: dict = {'seed': seed_val, 'team': str(row['Team'])}
         if has_actual:
-            act_lbl = actual.get(row['Team'], '')
-            act_cls = _ACTUAL_CSS.get(act_lbl, 'act-r1') if act_lbl else ''
-            cells += f'<td class="actual {act_cls}">{act_lbl}</td>'
+            rd['actual'] = actual.get(str(row['Team']), '')
         for lbl in ROUND_LABELS:
-            v = row[lbl]
-            if v >= 0.50:
-                cls = 'p-high'
-            elif v >= 0.15:
-                cls = 'p-med'
-            elif v > 0:
-                cls = 'p-low'
-            else:
-                cls = 'p-zero'
-            cells += f'<td class="{cls}">{_fmt_pct(v)}</td>'
-        rows_html += f'<tr>{cells}</tr>\n'
+            rd[lbl] = float(row[lbl])
+        rows_data.append(rd)
+    rows_json = json.dumps(rows_data)
+
+    actual_css_map = json.dumps(_ACTUAL_CSS)
+
+    has_actual_js  = 'true' if has_actual else 'false'
+    round_labels_js = json.dumps(ROUND_LABELS)
+    round_full_js   = json.dumps(ROUND_FULL)
+
+    # Static header cells (rank / seed / team / optional actual)
+    static_ths = '<th>#</th><th class="sortable" data-key="seed" onclick="sortBy(\'seed\')">Seed</th><th class="sortable" data-key="team" onclick="sortBy(\'team\')">Team</th>'
+    if has_actual:
+        static_ths += '<th class="act-hdr">Actual</th>'
+    # Round headers are injected by JS so they can carry sort indicators
 
     return f'''<!DOCTYPE html>
 <html lang="en"><head>
@@ -783,6 +777,10 @@ th {{ background: #1e293b; color: #64748b; font-size: 10px; text-transform: uppe
       text-align: right; white-space: nowrap; }}
 th:nth-child(2), th:nth-child(3), th:nth-child(4) {{ text-align: left; }}
 .act-hdr {{ color: #a78bfa !important; }}
+th.sortable {{ cursor: pointer; user-select: none; }}
+th.sortable:hover {{ color: #e2e8f0; }}
+th.sort-desc::after {{ content: " \u25bc"; color: #fbbf24; font-size: 9px; }}
+th.sort-asc::after  {{ content: " \u25b2"; color: #fbbf24; font-size: 9px; }}
 td {{ padding: 5px 12px; border-bottom: 1px solid #1e293b; text-align: right;
       font-variant-numeric: tabular-nums; white-space: nowrap; }}
 tr:hover td {{ background: #1e293b; }}
@@ -809,10 +807,97 @@ tr:hover td {{ background: #1e293b; }}
   &nbsp;|&nbsp; Iterations: <strong style="color:#e2e8f0">{num_iters:,}</strong>
   &nbsp;|&nbsp; Values show probability of advancing to each round
 </div>
-<table>
-  <thead><tr>{header_cells}</tr></thead>
-  <tbody>{rows_html}</tbody>
+<table id="sim-table">
+  <thead><tr id="sim-thead">{static_ths}</tr></thead>
+  <tbody id="sim-tbody"></tbody>
 </table>
+<script>
+const HAS_ACTUAL   = {has_actual_js};
+const ROUND_KEYS   = {round_labels_js};
+const ROUND_FULL   = {round_full_js};
+const ACTUAL_CSS   = {actual_css_map};
+const ALL_ROWS     = {rows_json};
+let sortState = {{ key: 'Champ', dir: -1 }};
+
+function fmtPct(v) {{
+  if (v === 0) return '\u2014';
+  if (v >= 0.995) return '100%';
+  return (v * 100).toFixed(1) + '%';
+}}
+
+function pClass(v) {{
+  if (v >= 0.50) return 'p-high';
+  if (v >= 0.15) return 'p-med';
+  if (v >  0)    return 'p-low';
+  return 'p-zero';
+}}
+
+function buildRoundHeaders() {{
+  const row = document.getElementById('sim-thead');
+  ROUND_KEYS.forEach((key, i) => {{
+    const th = document.createElement('th');
+    th.className = 'sortable';
+    th.dataset.key = key;
+    th.textContent = ROUND_FULL[i];
+    th.onclick = () => sortBy(key);
+    row.appendChild(th);
+  }});
+}}
+
+function updateHeaders() {{
+  document.querySelectorAll('#sim-thead th.sortable').forEach(th => {{
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.key === sortState.key) {{
+      th.classList.add(sortState.dir === 1 ? 'sort-asc' : 'sort-desc');
+    }}
+  }});
+}}
+
+function renderTable() {{
+  const sorted = [...ALL_ROWS].sort((a, b) => {{
+    let av = a[sortState.key], bv = b[sortState.key];
+    if (av === null || av === undefined) av = sortState.dir === 1 ? '\uffff' : '';
+    if (bv === null || bv === undefined) bv = sortState.dir === 1 ? '\uffff' : '';
+    if (av < bv) return -sortState.dir;
+    if (av > bv) return  sortState.dir;
+    return 0;
+  }});
+
+  const tbody = document.getElementById('sim-tbody');
+  const frags = [];
+  sorted.forEach((row, idx) => {{
+    const seedDisp = row.seed !== null ? '[' + row.seed + ']' : '[?]';
+    let cells = `<td class="rank">${{idx + 1}}</td>`
+              + `<td class="seed">${{seedDisp}}</td>`
+              + `<td class="team">${{row.team}}</td>`;
+    if (HAS_ACTUAL) {{
+      const al = row.actual || '';
+      const ac = al ? (ACTUAL_CSS[al] || 'act-r1') : '';
+      cells += `<td class="actual ${{ac}}">${{al}}</td>`;
+    }}
+    ROUND_KEYS.forEach(k => {{
+      const v = row[k];
+      cells += `<td class="${{pClass(v)}}">${{fmtPct(v)}}</td>`;
+    }});
+    frags.push(`<tr>${{cells}}</tr>`);
+  }});
+  tbody.innerHTML = frags.join('\\n');
+  updateHeaders();
+}}
+
+function sortBy(key) {{
+  if (sortState.key === key) {{
+    sortState.dir *= -1;
+  }} else {{
+    sortState.key = key;
+    sortState.dir = (key === 'team' || key === 'seed') ? 1 : -1;
+  }}
+  renderTable();
+}}
+
+buildRoundHeaders();
+renderTable();
+</script>
 </body></html>'''
 
 
