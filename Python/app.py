@@ -1405,6 +1405,38 @@ def api_bracket(group, filename):
     return jsonify(json.loads(fpath.read_text()))
 
 
+@app.route('/api/txt_brackets')
+def api_txt_brackets():
+    txt_dir = BRACKETS_DIR / 'Text'
+    files = sorted(f.name for f in txt_dir.glob('*.txt')) if txt_dir.is_dir() else []
+    return jsonify({'files': files})
+
+
+@app.route('/api/import_txt_bracket', methods=['POST'])
+def api_import_txt_bracket():
+    import sys as _sys
+    _sys.path.insert(0, str(REPO_ROOT / 'Python'))
+    from parse_bracket_txt import txt_to_bracket_json, load_round1_csv  # noqa: PLC0415
+    data = request.get_json(force=True)
+    filename = (data.get('filename') or '').strip()
+    if not filename or any(c in filename for c in ('/', '\\', '..')):
+        return jsonify({'error': 'Invalid filename'}), 400
+    txt_path = BRACKETS_DIR / 'Text' / filename
+    if not txt_path.exists():
+        return jsonify({'error': 'File not found'}), 404
+    csv_path = REPO_ROOT / 'Data' / 'BracketData' / str(THIS_YEAR) / f'Round1_{THIS_YEAR}.csv'
+    csv_matchups = load_round1_csv(csv_path)
+    ff_pairings = _load_ff_pairings_str(THIS_YEAR)
+    payload = txt_to_bracket_json(
+        txt_path=txt_path, name='', group='', year=THIS_YEAR,
+        ff_pairings=ff_pairings, csv_matchups=csv_matchups,
+    )
+    return jsonify({
+        'picks': payload['picks'],
+        'suggested_name': txt_path.stem.replace('_', ' '),
+    })
+
+
 @app.route('/my_brackets')
 def my_brackets_route():
     groups = {}
@@ -3288,6 +3320,16 @@ a.back-link:hover { color: #93c5fd; }
   <span id="save-msg"></span>
 </div>
 
+<!-- Import from TXT -->
+<div id="txt-import-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+  <label style="white-space:nowrap;font-weight:600">Import TXT:</label>
+  <select id="txt-file-sel" style="flex:1;min-width:180px;padding:4px 6px;border-radius:4px;border:1px solid #ccc;">
+    <option value="">&#8212; select a .txt bracket file &#8212;</option>
+  </select>
+  <button onclick="importFromTxt()" style="padding:4px 12px;border-radius:4px;cursor:pointer;">&#8627; Load</button>
+  <span id="txt-import-msg" style="font-size:12px;color:green;"></span>
+</div>
+
 <!-- Progress -->
 <div class="progress-bar">
   <span id="prog-text">0 / 63 picks</span>
@@ -3645,7 +3687,43 @@ function loadPicks(picks, ffPairings) {
 
   updateProgress();
   updateFFLabels();
+
+  // Populate TXT import dropdown
+  fetch('/api/txt_brackets').then(r => r.json()).then(data => {
+    const sel = document.getElementById('txt-file-sel');
+    (data.files || []).forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f; opt.textContent = f;
+      sel.appendChild(opt);
+    });
+    if (!(data.files || []).length) {
+      document.getElementById('txt-import-bar').style.display = 'none';
+    }
+  }).catch(() => {
+    document.getElementById('txt-import-bar').style.display = 'none';
+  });
 })();
+
+function importFromTxt() {
+  const filename = document.getElementById('txt-file-sel').value;
+  if (!filename) return;
+  const msg = document.getElementById('txt-import-msg');
+  msg.style.color = 'green';
+  msg.textContent = 'Loading\u2026';
+  fetch('/api/import_txt_bracket', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({filename: filename})
+  }).then(r => r.json()).then(data => {
+    if (data.error) { msg.style.color = 'red'; msg.textContent = 'Error: ' + data.error; return; }
+    loadPicks(data.picks);
+    renderAll();
+    const nameInput = document.getElementById('bracket-name');
+    if (nameInput && !nameInput.value) nameInput.value = data.suggested_name || '';
+    msg.style.color = 'green';
+    msg.textContent = '\u2713 Loaded';
+  }).catch(e => { msg.style.color = 'red'; msg.textContent = 'Error: ' + e; });
+}
 </script>
 </body>
 </html>
