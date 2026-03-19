@@ -1391,6 +1391,9 @@ def save_my_bracket():
         'ff_pairings': ff_pairings,
         'picks':      picks,
     }
+    espn_url = (data.get('espn_url') or '').strip()
+    if espn_url:
+        payload['espn_url'] = espn_url
     with open(out_path, 'w', encoding='utf-8') as f:
         json.dump(payload, f, indent=2)
 
@@ -1405,35 +1408,26 @@ def api_bracket(group, filename):
     return jsonify(json.loads(fpath.read_text()))
 
 
-@app.route('/api/txt_brackets')
-def api_txt_brackets():
-    txt_dir = BRACKETS_DIR / 'Text'
-    files = sorted(f.name for f in txt_dir.glob('*.txt')) if txt_dir.is_dir() else []
-    return jsonify({'files': files})
-
-
-@app.route('/api/import_txt_bracket', methods=['POST'])
-def api_import_txt_bracket():
+@app.route('/api/import_espn_bracket', methods=['POST'])
+def api_import_espn_bracket():
     import sys as _sys
     _sys.path.insert(0, str(REPO_ROOT / 'Python'))
-    from parse_bracket_txt import txt_to_bracket_json, load_round1_csv  # noqa: PLC0415
+    from espn_bracket_scrape import espn_url_to_bracket_json  # noqa: PLC0415
     data = request.get_json(force=True)
-    filename = (data.get('filename') or '').strip()
-    if not filename or any(c in filename for c in ('/', '\\', '..')):
-        return jsonify({'error': 'Invalid filename'}), 400
-    txt_path = BRACKETS_DIR / 'Text' / filename
-    if not txt_path.exists():
-        return jsonify({'error': 'File not found'}), 404
+    url = (data.get('url') or '').strip()
+    if not url or 'fantasy.espn.com' not in url or 'id=' not in url:
+        return jsonify({'error': 'Please provide a valid ESPN TC bracket URL'}), 400
     csv_path = REPO_ROOT / 'Data' / 'BracketData' / str(THIS_YEAR) / f'Round1_{THIS_YEAR}.csv'
-    csv_matchups = load_round1_csv(csv_path)
-    ff_pairings = _load_ff_pairings_str(THIS_YEAR)
-    payload = txt_to_bracket_json(
-        txt_path=txt_path, name='', group='', year=THIS_YEAR,
-        ff_pairings=ff_pairings, csv_matchups=csv_matchups,
-    )
+    try:
+        payload = espn_url_to_bracket_json(
+            url=url, year=THIS_YEAR, csv_path=csv_path
+        )
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 400
     return jsonify({
         'picks': payload['picks'],
-        'suggested_name': txt_path.stem.replace('_', ' '),
+        'ff_pairings': payload.get('ff_pairings', '0-1,2-3'),
+        'suggested_name': payload.get('name', ''),
     })
 
 
@@ -3320,14 +3314,14 @@ a.back-link:hover { color: #93c5fd; }
   <span id="save-msg"></span>
 </div>
 
-<!-- Import from TXT -->
-<div id="txt-import-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-  <label style="white-space:nowrap;font-weight:600">Import TXT:</label>
-  <select id="txt-file-sel" style="flex:1;min-width:180px;padding:4px 6px;border-radius:4px;border:1px solid #ccc;">
-    <option value="">&#8212; select a .txt bracket file &#8212;</option>
-  </select>
-  <button onclick="importFromTxt()" style="padding:4px 12px;border-radius:4px;cursor:pointer;">&#8627; Load</button>
-  <span id="txt-import-msg" style="font-size:12px;color:green;"></span>
+<!-- Import from ESPN -->
+<div id="espn-import-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+  <label style="white-space:nowrap;font-weight:600">Import ESPN:</label>
+  <input id="espn-url-input" type="text"
+    placeholder="https://fantasy.espn.com/games/tournament-challenge-bracket-2026/bracket?id=..."
+    style="flex:1;min-width:260px;padding:4px 8px;border-radius:4px;border:1px solid #ccc;font-size:13px;">
+  <button onclick="importFromEspn()" style="padding:4px 14px;border-radius:4px;cursor:pointer;white-space:nowrap;">&#8627; Load</button>
+  <span id="espn-import-msg" style="font-size:12px;"></span>
 </div>
 
 <!-- Progress -->
@@ -3441,6 +3435,7 @@ const state = {
   semi: new Array(2).fill(null),
   champ: null,
 };
+let importedEspnUrl = '';
 
 // ---- seed lookup ----
 const seedOf = {};
@@ -3617,6 +3612,7 @@ function saveBracket() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name, group,
+      espn_url: importedEspnUrl || undefined,
       picks: {
         r1:       [...state.r1],
         r2:       [...state.r2],
@@ -3687,39 +3683,25 @@ function loadPicks(picks, ffPairings) {
 
   updateProgress();
   updateFFLabels();
-
-  // Populate TXT import dropdown
-  fetch('/api/txt_brackets').then(r => r.json()).then(data => {
-    const sel = document.getElementById('txt-file-sel');
-    (data.files || []).forEach(f => {
-      const opt = document.createElement('option');
-      opt.value = f; opt.textContent = f;
-      sel.appendChild(opt);
-    });
-    if (!(data.files || []).length) {
-      document.getElementById('txt-import-bar').style.display = 'none';
-    }
-  }).catch(() => {
-    document.getElementById('txt-import-bar').style.display = 'none';
-  });
 })();
 
-function importFromTxt() {
-  const filename = document.getElementById('txt-file-sel').value;
-  if (!filename) return;
-  const msg = document.getElementById('txt-import-msg');
-  msg.style.color = 'green';
+function importFromEspn() {
+  const url = document.getElementById('espn-url-input').value.trim();
+  if (!url) return;
+  const msg = document.getElementById('espn-import-msg');
+  msg.style.color = '#aaa';
   msg.textContent = 'Loading\u2026';
-  fetch('/api/import_txt_bracket', {
+  fetch('/api/import_espn_bracket', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({filename: filename})
+    body: JSON.stringify({url: url})
   }).then(r => r.json()).then(data => {
     if (data.error) { msg.style.color = 'red'; msg.textContent = 'Error: ' + data.error; return; }
-    loadPicks(data.picks);
+    loadPicks(data.picks, data.ff_pairings);
     renderAll();
     const nameInput = document.getElementById('bracket-name');
     if (nameInput && !nameInput.value) nameInput.value = data.suggested_name || '';
+    importedEspnUrl = url;
     msg.style.color = 'green';
     msg.textContent = '\u2713 Loaded';
   }).catch(e => { msg.style.color = 'red'; msg.textContent = 'Error: ' + e; });
