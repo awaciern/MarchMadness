@@ -42,6 +42,20 @@ python3 Python/app.py
 # Open http://localhost:5050
 ```
 
+### Deploy on Render
+
+The repository includes a `render.yaml` Blueprint. In Render, create a new
+Blueprint instance and connect this repository; Render will install the
+requirements and start the Flask app with Gunicorn. The app uses Render's
+`PORT` environment variable and the same Python interpreter for its worker
+scripts.
+
+The free Render service uses an ephemeral filesystem and may spin down while
+idle. Generated predictions, simulations, brackets, and locked results are
+therefore not durable across restarts or redeploys. The service also runs
+prediction and simulation jobs in-process, so a restart interrupts active jobs.
+Use persistent storage and a paid service if those features need to be reliable.
+
 ---
 
 ## Data Layout

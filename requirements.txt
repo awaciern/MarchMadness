@@ -1,4 +1,7 @@
 requests
+numpy
 pandas
+scipy
 scikit-learn
 flask
+gunicorn

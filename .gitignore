@@ -13,3 +13,4 @@ Data/SimulatedData*
 ModelTourney*
 notes.txt
 SimTourney*
+*__pycache__/

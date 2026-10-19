@@ -28,7 +28,7 @@ from flask import Flask, Response, jsonify, render_template_string, request, sen
 # ---------------------------------------------------------------------------
 
 REPO_ROOT        = Path(__file__).resolve().parents[1]
-PYTHON_EXE       = str(REPO_ROOT / 'env' / 'bin' / 'python3')
+PYTHON_EXE       = sys.executable
 PREDICT_SCRIPT   = str(Path(__file__).resolve().parent / 'predict_brackets.py')
 PREDICT_YEAR_SCRIPT = str(Path(__file__).resolve().parent / 'predict_year.py')
 SIMULATE_SCRIPT  = str(Path(__file__).resolve().parent / 'simulate_bracket.py')
@@ -6428,6 +6428,7 @@ INDEX_HTML = INDEX_HTML.replace('{{ ALL_YEARS_JSON }}', json.dumps(ALL_YEARS))
 # ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    print(f'Starting server at http://localhost:5050')
+    port = int(os.environ.get('PORT', '5050'))
+    print(f'Starting server on port {port}')
     print(f'Repo root: {REPO_ROOT}')
-    app.run(debug=False, host='0.0.0.0', port=5050, threaded=True)
+    app.run(debug=False, host='0.0.0.0', port=port, threaded=True)
